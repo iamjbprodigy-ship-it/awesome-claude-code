@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jarel Bell — Global Marketing Manager</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0d0d;
+      --surface: #141414;
+      --border: #222;
+      --accent: #ff5c35;
+      --accent2: #ffb800;
+      --text: #f0ede8;
+      --muted: #888;
+      --max: 1100px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-weight: 300;
+      line-height: 1.6;
+      overflow-x: hidden;
+    }
+
+    /* ─── NAV ─── */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 2.5rem;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(13,13,13,0.8);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: -0.03em;
+      color: var(--text);
+      text-decoration: none;
+    }
+
+    .nav-logo span { color: var(--accent); }
+
+    nav ul {
+      display: flex;
+      gap: 2.5rem;
+      list-style: none;
+    }
+
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      transition: color 0.2s;
+    }
+
+    nav a:hover { color: var(--text); }
+
+    /* ─── HERO ─── */
+    #hero {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 7rem 2.5rem 4rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .blob {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(90px);
+      opacity: 0.18;
+      animation: drift 12s ease-in-out infinite alternate;
+    }
+
+    .blob-1 { width: 600px; height: 600px; background: var(--accent); top: -150px; right: -100px; animation-delay: 0s; }
+    .blob-2 { width: 400px; height: 400px; background: var(--accent2); bottom: 0; left: -80px; animation-delay: -4s; }
+
+    @keyframes drift {
+      0%   { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(40px, 30px) scale(1.08); }
+    }
+
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      max-width: var(--max);
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .hero-tag {
+      display: inline-block;
+      font-size: 0.75rem;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 0.3rem 0.85rem;
+      border-radius: 999px;
+      margin-bottom: 2rem;
+      animation: fadeUp 0.7s ease both;
+    }
+
+    h1 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(3.5rem, 10vw, 8rem);
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+      animation: fadeUp 0.8s 0.1s ease both;
+    }
+
+    h1 .line2 {
+      display: block;
+      -webkit-text-stroke: 1.5px var(--text);
+      color: transparent;
+    }
+
+    .hero-sub {
+      margin-top: 2rem;
+      max-width: 560px;
+      color: var(--muted);
+      font-size: 1.05rem;
+      animation: fadeUp 0.8s 0.2s ease both;
+    }
+
+    .hero-cta {
+      margin-top: 3rem;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      animation: fadeUp 0.8s 0.3s ease both;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 0.8rem 2rem;
+      border-radius: 999px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .btn:hover { transform: translateY(-2px); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: 0 0 30px rgba(255,92,53,0.35);
+    }
+
+    .btn-primary:hover { box-shadow: 0 0 45px rgba(255,92,53,0.55); }
+
+    .btn-outline {
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+
+    .btn-outline:hover { border-color: var(--text); }
+
+    /* ─── STATS ─── */
+    #stats {
+      border-top: 1px solid var(--border);
+      padding: 4rem 2.5rem;
+    }
+
+    .stats-grid {
+      max-width: var(--max);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 2rem;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .stat-number {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      letter-spacing: -0.04em;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
+
+    /* ─── SECTIONS ─── */
+    section { padding: 6rem 2.5rem; }
+
+    .section-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+    }
+
+    .section-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 0.75rem;
+    }
+
+    h2 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin-bottom: 3.5rem;
+    }
+
+    /* ─── SKILLS ─── */
+    #skills { border-top: 1px solid var(--border); }
+
+    .skills-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.25rem;
+    }
+
+    .skill-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.75rem;
+      transition: border-color 0.25s, transform 0.25s;
+    }
+
+    .skill-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-4px);
+    }
+
+    .skill-icon {
+      font-size: 1.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .skill-card h3 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .skill-card p {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ─── EXPERIENCE ─── */
+    #experience { border-top: 1px solid var(--border); }
+
+    .timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .timeline-item {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 2.5rem;
+      padding: 2.5rem 0;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+
+    .timeline-item:last-child { border-bottom: none; }
+
+    .timeline-date {
+      font-size: 0.8rem;
+      color: var(--muted);
+      padding-top: 0.25rem;
+      letter-spacing: 0.05em;
+    }
+
+    .timeline-content h3 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1.2rem;
+      margin-bottom: 0.25rem;
+    }
+
+    .timeline-company {
+      color: var(--accent);
+      font-size: 0.9rem;
+      margin-bottom: 0.85rem;
+      font-weight: 500;
+    }
+
+    .timeline-content p {
+      color: var(--muted);
+      font-size: 0.92rem;
+      max-width: 560px;
+    }
+
+    .timeline-content ul {
+      margin-top: 0.75rem;
+      padding-left: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .timeline-content ul li {
+      color: var(--muted);
+      font-size: 0.92rem;
+      max-width: 560px;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .tag {
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.8rem;
+      border-radius: 999px;
+      background: rgba(255,92,53,0.1);
+      color: var(--accent);
+      border: 1px solid rgba(255,92,53,0.2);
+    }
+
+    /* ─── CAMPAIGNS ─── */
+    #campaigns { border-top: 1px solid var(--border); }
+
+    .projects-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 1.5rem;
+    }
+
+    .project-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      overflow: hidden;
+      transition: border-color 0.25s, transform 0.25s;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .project-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-6px);
+    }
+
+    .project-thumb {
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2.5rem;
+      font-weight: 800;
+      font-family: 'Syne', sans-serif;
+      letter-spacing: -0.05em;
+      text-align: center;
+      padding: 1rem;
+    }
+
+    .project-body { padding: 1.75rem; flex: 1; }
+
+    .project-body h3 {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1.15rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .project-body p {
+      font-size: 0.88rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .campaign-result {
+      display: inline-block;
+      margin-top: 1.25rem;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.5rem;
+      color: var(--accent);
+      letter-spacing: -0.03em;
+    }
+
+    .campaign-result-label {
+      display: block;
+      font-family: 'Inter', sans-serif;
+      font-weight: 400;
+      font-size: 0.78rem;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-top: 0.1rem;
+    }
+
+    /* ─── FOOTER ─── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 3rem 2.5rem;
+      text-align: center;
+    }
+
+    .footer-inner {
+      max-width: var(--max);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .footer-name {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.5rem;
+      letter-spacing: -0.04em;
+    }
+
+    .social-links {
+      display: flex;
+      gap: 1.5rem;
+    }
+
+    .social-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      transition: color 0.2s;
+    }
+
+    .social-links a:hover { color: var(--accent); }
+
+    .footer-copy {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    /* ─── ANIMATIONS ─── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.65s ease, transform 0.65s ease;
+    }
+
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ─── RESPONSIVE ─── */
+    @media (max-width: 680px) {
+      nav ul { display: none; }
+
+      .timeline-item {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="#hero" class="nav-logo">JB<span>.</span></a>
+  <ul>
+    <li><a href="#skills">Skills</a></li>
+    <li><a href="#experience">Experience</a></li>
+    <li><a href="#campaigns">Work</a></li>
+    <li><a href="https://www.linkedin.com/in/jarelbell" target="_blank" class="btn btn-primary" style="padding:0.5rem 1.25rem;font-size:0.8rem;">Connect</a></li>
+  </ul>
+</nav>
+
+<!-- HERO -->
+<section id="hero">
+  <div class="hero-bg">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+  </div>
+  <div class="hero-inner">
+    <div class="hero-tag">Global Marketing Manager · Gaming &amp; Esports</div>
+    <h1>
+      Jarel
+      <span class="line2">Bell.</span>
+    </h1>
+    <p class="hero-sub">
+      Where strategy meets culture. I build campaigns that move people, launch products that convert, and grow brands at the intersection of gaming, community, and commerce.
+    </p>
+    <div class="hero-cta">
+      <a href="#campaigns" class="btn btn-primary">See My Work</a>
+      <a href="#experience" class="btn btn-outline">My Experience</a>
+    </div>
+  </div>
+</section>
+
+<!-- STATS -->
+<div id="stats">
+  <div class="stats-grid">
+    <div class="stat-item reveal">
+      <span class="stat-number">$4M</span>
+      <span class="stat-label">Revenue driven in 4 months — Embody Gaming Chair color launch</span>
+    </div>
+    <div class="stat-item reveal">
+      <span class="stat-number">+7%</span>
+      <span class="stat-label">Company revenue growth in FY25 — Foundation of Play campaign</span>
+    </div>
+    <div class="stat-item reveal">
+      <span class="stat-number">3K</span>
+      <span class="stat-label">Units sold in 4 months — Embody Gaming Chair new colorways</span>
+    </div>
+    <div class="stat-item reveal">
+      <span class="stat-number">4</span>
+      <span class="stat-label">Regions covered — NA, APMEA, EU, and LAC</span>
+    </div>
+  </div>
+</div>
+
+<!-- SKILLS -->
+<section id="skills">
+  <div class="section-inner">
+    <p class="section-label reveal">What I do</p>
+    <h2 class="reveal">Core Skills</h2>
+    <div class="skills-grid">
+      <div class="skill-card reveal">
+        <div class="skill-icon">🎯</div>
+        <h3>Campaign Strategy</h3>
+        <p>Concepting and executing integrated campaigns — from brief to launch — across paid, owned, and earned channels that drive measurable results.</p>
+      </div>
+      <div class="skill-card reveal">
+        <div class="skill-icon">🤝</div>
+        <h3>Influencer Marketing</h3>
+        <p>Identifying, managing, and scaling influencer programs and creator partnerships that authentically connect brands with gaming and esports audiences.</p>
+      </div>
+      <div class="skill-card reveal">
+        <div class="skill-icon">📡</div>
+        <h3>Channel Marketing</h3>
+        <p>Developing and executing channel strategies across NA, APMEA, EU, and LAC — aligning global brand direction with regional market nuances.</p>
+      </div>
+      <div class="skill-card reveal">
+        <div class="skill-icon">🚀</div>
+        <h3>Go-to-Market Strategy</h3>
+        <p>Building GTM playbooks for product launches that align cross-functional teams and maximize impact from day one.</p>
+      </div>
+      <div class="skill-card reveal">
+        <div class="skill-icon">🎨</div>
+        <h3>Brand Development</h3>
+        <p>Crafting brand narratives, positioning, and campaign identities that resonate deeply within gaming culture and beyond.</p>
+      </div>
+      <div class="skill-card reveal">
+        <div class="skill-icon">🌐</div>
+        <h3>Cross-Functional Leadership</h3>
+        <p>Leading collaboration across product, sales, creative, and regional teams to deliver cohesive, high-impact marketing at scale.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- EXPERIENCE -->
+<section id="experience">
+  <div class="section-inner">
+    <p class="section-label reveal">Where I've been</p>
+    <h2 class="reveal">Experience</h2>
+    <div class="timeline">
+
+      <div class="timeline-item reveal">
+        <div class="timeline-date">Jul 2024 — Present</div>
+        <div class="timeline-content">
+          <h3>Global Marketing Manager</h3>
+          <div class="timeline-company">Herman Miller Gaming · Full-Time</div>
+          <ul>
+            <li>Developed and led the company's first in-house marketing campaign — "Foundation of Play" — an education-first initiative that contributed to +7% company revenue growth in FY25.</li>
+            <li>Led the marketing campaign for the Embody Gaming Chair new colorways launch, driving $4M in revenue and 3,000 units sold within 4 months.</li>
+            <li>Own and lead all NA region marketing channels, strategy, and execution.</li>
+            <li>Support and advise international regions — APMEA, EU, and LAC — on campaigns, partnerships, influencer programs, and channel marketing initiatives.</li>
+          </ul>
+          <div class="tags">
+            <span class="tag">Campaign Strategy</span>
+            <span class="tag">GTM</span>
+            <span class="tag">Influencer</span>
+            <span class="tag">Channel Marketing</span>
+            <span class="tag">Global</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline-item reveal">
+        <div class="timeline-date">TBD</div>
+        <div class="timeline-content">
+          <h3>Atlanta Esports Ventures</h3>
+          <div class="timeline-company">Role · Full-Time</div>
+          <p>Details coming soon.</p>
+          <div class="tags">
+            <span class="tag">Esports</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline-item reveal">
+        <div class="timeline-date">TBD</div>
+        <div class="timeline-content">
+          <h3>NRG Esports</h3>
+          <div class="timeline-company">Role · Full-Time</div>
+          <p>Details coming soon.</p>
+          <div class="tags">
+            <span class="tag">Esports</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- CAMPAIGNS -->
+<section id="campaigns">
+  <div class="section-inner">
+    <p class="section-label reveal">Selected work</p>
+    <h2 class="reveal">Campaign Highlights</h2>
+    <div class="projects-grid">
+
+      <div class="project-card reveal">
+        <div class="project-thumb" style="background: linear-gradient(135deg, #ff5c35, #ff8c00);">
+          Foundation<br>of Play
+        </div>
+        <div class="project-body">
+          <h3>Foundation of Play</h3>
+          <p>Herman Miller Gaming's first ever in-house campaign. An education-first initiative reframing the value of premium gaming setups — built from the ground up and executed across all major channels.</p>
+          <div class="tags">
+            <span class="tag">In-House Campaign</span>
+            <span class="tag">Brand Strategy</span>
+            <span class="tag">Education-First</span>
+          </div>
+          <span class="campaign-result">+7% Revenue Growth
+            <span class="campaign-result-label">FY25 company-wide</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="project-card reveal">
+        <div class="project-thumb" style="background: linear-gradient(135deg, #1a1a2e, #ff5c35);">
+          Embody<br>Gaming
+        </div>
+        <div class="project-body">
+          <h3>Embody Gaming Chair — New Colors Launch</h3>
+          <p>Full go-to-market campaign for the new Embody Gaming Chair colorways — spanning influencer activation, channel marketing, paid media, and regional rollouts across NA and international markets.</p>
+          <div class="tags">
+            <span class="tag">Product Launch</span>
+            <span class="tag">GTM</span>
+            <span class="tag">Influencer</span>
+          </div>
+          <span class="campaign-result">$4M in Sales
+            <span class="campaign-result-label">3,000 units · 4 months</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="project-card reveal">
+        <div class="project-thumb" style="background: linear-gradient(135deg, #0f2027, #ffb800);">
+          Global<br>Reach
+        </div>
+        <div class="project-body">
+          <h3>International Campaign Support</h3>
+          <p>Advising and supporting regional marketing teams across APMEA, EU, and LAC — aligning campaign strategy, influencer programs, and channel marketing to a unified global brand direction.</p>
+          <div class="tags">
+            <span class="tag">APMEA</span>
+            <span class="tag">EU</span>
+            <span class="tag">LAC</span>
+            <span class="tag">Channel Marketing</span>
+          </div>
+          <span class="campaign-result">4 Regions
+            <span class="campaign-result-label">Global brand alignment</span>
+          </span>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-name">Jarel Bell<span style="color:var(--accent)">.</span></div>
+    <div class="social-links">
+      <a href="https://www.linkedin.com/in/jarelbell" target="_blank">LinkedIn</a>
+    </div>
+    <p class="footer-copy">© 2026 Jarel Bell. All rights reserved.</p>
+  </div>
+</footer>
+
+<script>
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
