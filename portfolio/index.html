@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Jarel Bell — Brand Marketer</title>
+  <title>Jarel Bell — Global Marketing Manager</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
   <style>
@@ -146,7 +146,7 @@
 
     .hero-sub {
       margin-top: 2rem;
-      max-width: 520px;
+      max-width: 560px;
       color: var(--muted);
       font-size: 1.05rem;
       animation: fadeUp 0.8s 0.2s ease both;
@@ -186,6 +186,41 @@
     }
 
     .btn-outline:hover { border-color: var(--text); }
+
+    /* ─── STATS ─── */
+    #stats {
+      border-top: 1px solid var(--border);
+      padding: 4rem 2.5rem;
+    }
+
+    .stats-grid {
+      max-width: var(--max);
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 2rem;
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .stat-number {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: clamp(2.5rem, 5vw, 4rem);
+      letter-spacing: -0.04em;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    .stat-label {
+      font-size: 0.85rem;
+      color: var(--muted);
+      letter-spacing: 0.04em;
+    }
 
     /* ─── SECTIONS ─── */
     section { padding: 6rem 2.5rem; }
@@ -299,6 +334,20 @@
       max-width: 560px;
     }
 
+    .timeline-content ul {
+      margin-top: 0.75rem;
+      padding-left: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .timeline-content ul li {
+      color: var(--muted);
+      font-size: 0.92rem;
+      max-width: 560px;
+    }
+
     .tags {
       display: flex;
       flex-wrap: wrap;
@@ -317,8 +366,8 @@
       border: 1px solid rgba(255,92,53,0.2);
     }
 
-    /* ─── PROJECTS ─── */
-    #projects { border-top: 1px solid var(--border); }
+    /* ─── CAMPAIGNS ─── */
+    #campaigns { border-top: 1px solid var(--border); }
 
     .projects-grid {
       display: grid;
@@ -348,10 +397,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 3rem;
+      font-size: 2.5rem;
       font-weight: 800;
       font-family: 'Syne', sans-serif;
       letter-spacing: -0.05em;
+      text-align: center;
+      padding: 1rem;
     }
 
     .project-body { padding: 1.75rem; flex: 1; }
@@ -369,16 +420,25 @@
       line-height: 1.55;
     }
 
-    .project-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.4rem;
+    .campaign-result {
+      display: inline-block;
       margin-top: 1.25rem;
-      font-size: 0.8rem;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.5rem;
       color: var(--accent);
-      font-weight: 500;
+      letter-spacing: -0.03em;
+    }
+
+    .campaign-result-label {
+      display: block;
+      font-family: 'Inter', sans-serif;
+      font-weight: 400;
+      font-size: 0.78rem;
+      color: var(--muted);
       letter-spacing: 0.05em;
       text-transform: uppercase;
+      margin-top: 0.1rem;
     }
 
     /* ─── FOOTER ─── */
@@ -461,8 +521,8 @@
   <ul>
     <li><a href="#skills">Skills</a></li>
     <li><a href="#experience">Experience</a></li>
-    <li><a href="#projects">Projects</a></li>
-    <li><a href="mailto:hello@jarelbell.com" class="btn btn-primary" style="padding:0.5rem 1.25rem;font-size:0.8rem;">Hire Me</a></li>
+    <li><a href="#campaigns">Work</a></li>
+    <li><a href="https://www.linkedin.com/in/jarelbell" target="_blank" class="btn btn-primary" style="padding:0.5rem 1.25rem;font-size:0.8rem;">Connect</a></li>
   </ul>
 </nav>
 
@@ -473,20 +533,42 @@
     <div class="blob blob-2"></div>
   </div>
   <div class="hero-inner">
-    <div class="hero-tag">Available for projects</div>
+    <div class="hero-tag">Global Marketing Manager · Gaming &amp; Esports</div>
     <h1>
       Jarel
       <span class="line2">Bell.</span>
     </h1>
     <p class="hero-sub">
-      Brand Marketer crafting bold identities, compelling campaigns, and strategies that move people — and metrics.
+      Where strategy meets culture. I build campaigns that move people, launch products that convert, and grow brands at the intersection of gaming, community, and commerce.
     </p>
     <div class="hero-cta">
-      <a href="#projects" class="btn btn-primary">See My Work</a>
+      <a href="#campaigns" class="btn btn-primary">See My Work</a>
       <a href="#experience" class="btn btn-outline">My Experience</a>
     </div>
   </div>
 </section>
+
+<!-- STATS -->
+<div id="stats">
+  <div class="stats-grid">
+    <div class="stat-item reveal">
+      <span class="stat-number">$4M</span>
+      <span class="stat-label">Revenue driven in 4 months — Embody Gaming Chair color launch</span>
+    </div>
+    <div class="stat-item reveal">
+      <span class="stat-number">+7%</span>
+      <span class="stat-label">Company revenue growth in FY25 — Foundation of Play campaign</span>
+    </div>
+    <div class="stat-item reveal">
+      <span class="stat-number">3K</span>
+      <span class="stat-label">Units sold in 4 months — Embody Gaming Chair new colorways</span>
+    </div>
+    <div class="stat-item reveal">
+      <span class="stat-number">4</span>
+      <span class="stat-label">Regions covered — NA, APMEA, EU, and LAC</span>
+    </div>
+  </div>
+</div>
 
 <!-- SKILLS -->
 <section id="skills">
@@ -495,34 +577,34 @@
     <h2 class="reveal">Core Skills</h2>
     <div class="skills-grid">
       <div class="skill-card reveal">
-        <div class="skill-icon">🎨</div>
-        <h3>Brand Strategy</h3>
-        <p>Developing brand identities from positioning and messaging to visual systems that resonate with target audiences.</p>
-      </div>
-      <div class="skill-card reveal">
-        <div class="skill-icon">📣</div>
-        <h3>Campaign Marketing</h3>
-        <p>Concepting and executing integrated campaigns across paid, owned, and earned channels from brief to launch.</p>
-      </div>
-      <div class="skill-card reveal">
-        <div class="skill-icon">✍️</div>
-        <h3>Copywriting & Messaging</h3>
-        <p>Crafting sharp, on-brand copy for ads, landing pages, social, and email that converts and connects.</p>
-      </div>
-      <div class="skill-card reveal">
-        <div class="skill-icon">📊</div>
-        <h3>Marketing Analytics</h3>
-        <p>Translating data into decisions — tracking KPIs, analyzing campaign performance, and optimizing for growth.</p>
-      </div>
-      <div class="skill-card reveal">
-        <div class="skill-icon">📱</div>
-        <h3>Social Media & Content</h3>
-        <p>Building content strategies and community-first social presences that grow audiences and drive engagement.</p>
+        <div class="skill-icon">🎯</div>
+        <h3>Campaign Strategy</h3>
+        <p>Concepting and executing integrated campaigns — from brief to launch — across paid, owned, and earned channels that drive measurable results.</p>
       </div>
       <div class="skill-card reveal">
         <div class="skill-icon">🤝</div>
-        <h3>Partnerships & Influencer</h3>
-        <p>Identifying and managing brand collaborations, influencer programs, and co-marketing initiatives.</p>
+        <h3>Influencer Marketing</h3>
+        <p>Identifying, managing, and scaling influencer programs and creator partnerships that authentically connect brands with gaming and esports audiences.</p>
+      </div>
+      <div class="skill-card reveal">
+        <div class="skill-icon">📡</div>
+        <h3>Channel Marketing</h3>
+        <p>Developing and executing channel strategies across NA, APMEA, EU, and LAC — aligning global brand direction with regional market nuances.</p>
+      </div>
+      <div class="skill-card reveal">
+        <div class="skill-icon">🚀</div>
+        <h3>Go-to-Market Strategy</h3>
+        <p>Building GTM playbooks for product launches that align cross-functional teams and maximize impact from day one.</p>
+      </div>
+      <div class="skill-card reveal">
+        <div class="skill-icon">🎨</div>
+        <h3>Brand Development</h3>
+        <p>Crafting brand narratives, positioning, and campaign identities that resonate deeply within gaming culture and beyond.</p>
+      </div>
+      <div class="skill-card reveal">
+        <div class="skill-icon">🌐</div>
+        <h3>Cross-Functional Leadership</h3>
+        <p>Leading collaboration across product, sales, creative, and regional teams to deliver cohesive, high-impact marketing at scale.</p>
       </div>
     </div>
   </div>
@@ -536,43 +618,46 @@
     <div class="timeline">
 
       <div class="timeline-item reveal">
-        <div class="timeline-date">2023 — Present</div>
+        <div class="timeline-date">Jul 2024 — Present</div>
         <div class="timeline-content">
-          <h3>Senior Brand Marketer</h3>
-          <div class="timeline-company">Company Name · Full-Time</div>
-          <p>Led end-to-end brand refresh including messaging, visual identity, and go-to-market strategy. Drove a 40% increase in brand awareness across key demographics through integrated campaign execution.</p>
+          <h3>Global Marketing Manager</h3>
+          <div class="timeline-company">Herman Miller Gaming · Full-Time</div>
+          <ul>
+            <li>Developed and led the company's first in-house marketing campaign — "Foundation of Play" — an education-first initiative that contributed to +7% company revenue growth in FY25.</li>
+            <li>Led the marketing campaign for the Embody Gaming Chair new colorways launch, driving $4M in revenue and 3,000 units sold within 4 months.</li>
+            <li>Own and lead all NA region marketing channels, strategy, and execution.</li>
+            <li>Support and advise international regions — APMEA, EU, and LAC — on campaigns, partnerships, influencer programs, and channel marketing initiatives.</li>
+          </ul>
           <div class="tags">
-            <span class="tag">Brand Strategy</span>
-            <span class="tag">Campaigns</span>
+            <span class="tag">Campaign Strategy</span>
             <span class="tag">GTM</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="timeline-item reveal">
-        <div class="timeline-date">2021 — 2023</div>
-        <div class="timeline-content">
-          <h3>Brand Marketing Manager</h3>
-          <div class="timeline-company">Previous Company · Full-Time</div>
-          <p>Managed a $500K annual marketing budget across digital and experiential channels. Built and scaled a content program from scratch, growing organic reach by 120% in 18 months.</p>
-          <div class="tags">
-            <span class="tag">Content Strategy</span>
-            <span class="tag">Paid Media</span>
-            <span class="tag">Analytics</span>
-          </div>
-        </div>
-      </div>
-
-      <div class="timeline-item reveal">
-        <div class="timeline-date">2019 — 2021</div>
-        <div class="timeline-content">
-          <h3>Marketing Coordinator</h3>
-          <div class="timeline-company">Agency Name · Full-Time</div>
-          <p>Supported multi-client campaign execution for consumer and lifestyle brands. Coordinated influencer partnerships, social calendars, and monthly reporting across 6 active accounts.</p>
-          <div class="tags">
-            <span class="tag">Social Media</span>
             <span class="tag">Influencer</span>
-            <span class="tag">Reporting</span>
+            <span class="tag">Channel Marketing</span>
+            <span class="tag">Global</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline-item reveal">
+        <div class="timeline-date">TBD</div>
+        <div class="timeline-content">
+          <h3>Atlanta Esports Ventures</h3>
+          <div class="timeline-company">Role · Full-Time</div>
+          <p>Details coming soon.</p>
+          <div class="tags">
+            <span class="tag">Esports</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="timeline-item reveal">
+        <div class="timeline-date">TBD</div>
+        <div class="timeline-content">
+          <h3>NRG Esports</h3>
+          <div class="timeline-company">Role · Full-Time</div>
+          <p>Details coming soon.</p>
+          <div class="tags">
+            <span class="tag">Esports</span>
           </div>
         </div>
       </div>
@@ -581,57 +666,67 @@
   </div>
 </section>
 
-<!-- PROJECTS -->
-<section id="projects">
+<!-- CAMPAIGNS -->
+<section id="campaigns">
   <div class="section-inner">
     <p class="section-label reveal">Selected work</p>
-    <h2 class="reveal">Projects</h2>
+    <h2 class="reveal">Campaign Highlights</h2>
     <div class="projects-grid">
 
-      <a href="#" class="project-card reveal">
+      <div class="project-card reveal">
         <div class="project-thumb" style="background: linear-gradient(135deg, #ff5c35, #ff8c00);">
-          Rebrand
+          Foundation<br>of Play
         </div>
         <div class="project-body">
-          <h3>Brand Identity Overhaul</h3>
-          <p>Complete repositioning and visual identity refresh for a DTC consumer brand — new logo, voice, and launch campaign.</p>
+          <h3>Foundation of Play</h3>
+          <p>Herman Miller Gaming's first ever in-house campaign. An education-first initiative reframing the value of premium gaming setups — built from the ground up and executed across all major channels.</p>
           <div class="tags">
-            <span class="tag">Branding</span>
-            <span class="tag">Strategy</span>
+            <span class="tag">In-House Campaign</span>
+            <span class="tag">Brand Strategy</span>
+            <span class="tag">Education-First</span>
           </div>
-          <span class="project-link">View Case Study →</span>
+          <span class="campaign-result">+7% Revenue Growth
+            <span class="campaign-result-label">FY25 company-wide</span>
+          </span>
         </div>
-      </a>
+      </div>
 
-      <a href="#" class="project-card reveal">
-        <div class="project-thumb" style="background: linear-gradient(135deg, #7c3aed, #db2777);">
-          Launch
+      <div class="project-card reveal">
+        <div class="project-thumb" style="background: linear-gradient(135deg, #1a1a2e, #ff5c35);">
+          Embody<br>Gaming
         </div>
         <div class="project-body">
-          <h3>Product Launch Campaign</h3>
-          <p>Multi-channel launch campaign for a new product line. Achieved 2M+ impressions in week one with a $30K budget.</p>
+          <h3>Embody Gaming Chair — New Colors Launch</h3>
+          <p>Full go-to-market campaign for the new Embody Gaming Chair colorways — spanning influencer activation, channel marketing, paid media, and regional rollouts across NA and international markets.</p>
           <div class="tags">
-            <span class="tag">Campaign</span>
-            <span class="tag">Paid Ads</span>
-          </div>
-          <span class="project-link">View Case Study →</span>
-        </div>
-      </a>
-
-      <a href="#" class="project-card reveal">
-        <div class="project-thumb" style="background: linear-gradient(135deg, #059669, #0891b2);">
-          Social
-        </div>
-        <div class="project-body">
-          <h3>Social Growth Strategy</h3>
-          <p>Grew a brand's Instagram and TikTok from 8K to 85K followers in 12 months through organic content and influencer activation.</p>
-          <div class="tags">
-            <span class="tag">Social</span>
+            <span class="tag">Product Launch</span>
+            <span class="tag">GTM</span>
             <span class="tag">Influencer</span>
           </div>
-          <span class="project-link">View Case Study →</span>
+          <span class="campaign-result">$4M in Sales
+            <span class="campaign-result-label">3,000 units · 4 months</span>
+          </span>
         </div>
-      </a>
+      </div>
+
+      <div class="project-card reveal">
+        <div class="project-thumb" style="background: linear-gradient(135deg, #0f2027, #ffb800);">
+          Global<br>Reach
+        </div>
+        <div class="project-body">
+          <h3>International Campaign Support</h3>
+          <p>Advising and supporting regional marketing teams across APMEA, EU, and LAC — aligning campaign strategy, influencer programs, and channel marketing to a unified global brand direction.</p>
+          <div class="tags">
+            <span class="tag">APMEA</span>
+            <span class="tag">EU</span>
+            <span class="tag">LAC</span>
+            <span class="tag">Channel Marketing</span>
+          </div>
+          <span class="campaign-result">4 Regions
+            <span class="campaign-result-label">Global brand alignment</span>
+          </span>
+        </div>
+      </div>
 
     </div>
   </div>
@@ -642,17 +737,13 @@
   <div class="footer-inner">
     <div class="footer-name">Jarel Bell<span style="color:var(--accent)">.</span></div>
     <div class="social-links">
-      <a href="https://linkedin.com/in/jarelbell" target="_blank">LinkedIn</a>
-      <a href="https://twitter.com/jarelbell" target="_blank">Twitter</a>
-      <a href="mailto:hello@jarelbell.com">Email</a>
-      <a href="#">Resume PDF</a>
+      <a href="https://www.linkedin.com/in/jarelbell" target="_blank">LinkedIn</a>
     </div>
     <p class="footer-copy">© 2026 Jarel Bell. All rights reserved.</p>
   </div>
 </footer>
 
 <script>
-  // Scroll reveal
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(e => {
       if (e.isIntersecting) {
