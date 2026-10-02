@@ -306,7 +306,7 @@ html, body {
   border: 7px solid transparent; border-bottom: 0; border-top-color: var(--tail);
 }
 .bark.on { opacity: 1; visibility: visible; animation: barkin 0.22s cubic-bezier(.2, 1.4, .4, 1); }
-@keyframes barkin { from { opacity: 0; margin-top: 0; } }
+@keyframes barkin { from { margin-top: 0; } }  /* opacity stays 1 so a stalled animation never hides a line */
 .bark.small { font-size: 14px; }
 .bark.cheer { box-shadow: 0 0 0 2px var(--sun), 0 3px 14px rgba(0, 0, 0, 0.35); }
 .bark.thanks { box-shadow: 0 0 0 2px var(--ok), 0 3px 14px rgba(0, 0, 0, 0.35); }

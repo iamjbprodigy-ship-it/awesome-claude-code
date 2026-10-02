@@ -321,7 +321,9 @@
       if (!b.on) { if (!slot) slot = b; continue; }
       if (!b.prio && (!oldest || b.t0 < oldest.t0)) oldest = b;
     }
-    if (vis >= B.maxVisible) { if (!prio || !oldest) return false; hideBubble(oldest); slot = oldest; }
+    const own = who ? UI.pool.find(b => b.on && b.p === who) : null;   // a new line replaces their old bubble
+    if (own) { hideBubble(own); slot = own; }
+    else if (vis >= B.maxVisible) { if (!prio || !oldest) return false; hideBubble(oldest); slot = oldest; }
     if (!slot) return false;
     const text = opts.text || chooseLine(cat); if (!text) return false;
     recent.push(text); if (recent.length > B.recent) recent.shift();
