@@ -4220,6 +4220,6 @@ window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, ren
   mapPinHooks, PIN_COL, BEACON_COL, toast, hopeAdd, hopeHit, addSave, SFX, AU, FX, PPL, placePerson, groundY, cars, HOSP, missions: window.SM_MISSIONS || null,
   get heatOn() { return beams[0].visible; }, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
 // incident registry + power hooks for js/metallo.js (and any later module)
-Object.assign(window.__game, { registerIncident, endIncident, hooks: HOOKS, kryptoniteNear, hitStop, addShake, ring, makeBody, removeBody, injurePerson, get cityEnv() { return cityProbe ? cityProbe.env : null; } });
+Object.assign(window.__game, { metallo: window.SM_METALLO || null, registerIncident, endIncident, hooks: HOOKS, kryptoniteNear, hitStop, addShake, ring, makeBody, removeBody, injurePerson, get cityEnv() { return cityProbe ? cityProbe.env : null; } });
 requestAnimationFrame(frame);
 })();
