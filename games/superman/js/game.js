@@ -3467,8 +3467,10 @@ function mapPins() {
   const carrying = P.hold && P.hold.kind === 'person';
   if (carrying || people.some(p => p.mode === 'down')) pins.push([HOSP.x, HOSP.z, 'hosp', 'Hospital']);
   if (MAP.waypoint) pins.push([MAP.waypoint.x, MAP.waypoint.z, 'way', 'Waypoint']);
+  for (const h of mapPinHooks) h(pins); // modules (missions.js) add their own pins
   return pins;
 }
+const mapPinHooks = [];
 const PIN_COL = { inc: '#ffc531', kryp: '#a6ff3d', hurt: '#ff6b6b', trap: '#9be6ff', hosp: '#57e39a', way: '#5aa9ff' };
 function drawPin(ctx, x, y, kind, r, pulse) {
   ctx.save(); ctx.translate(x, y);
@@ -3822,6 +3824,9 @@ function update(dt) {
   updateAtmosphere(dt);
   if (started) updateHUD(dt);
 }
-window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; }, MAP, setMapOpen, drawBigMap, mapPins };
+window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; }, MAP, setMapOpen, drawBigMap, mapPins,
+  // street-level missions + NPC dialogue (js/missions.js)
+  mapPinHooks, PIN_COL, BEACON_COL, toast, hopeAdd, hopeHit, addSave, SFX, AU, FX, PPL, placePerson, groundY, cars, HOSP, missions: window.SM_MISSIONS || null,
+  get heatOn() { return beams[0].visible; }, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
 requestAnimationFrame(frame);
 })();
