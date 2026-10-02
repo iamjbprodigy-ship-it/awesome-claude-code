@@ -30,17 +30,17 @@ window.SM_PLUGINS.push(function atmosphere(ctx) {
 
   // ---------------------------------------------------------------- tuning (linear HDR, metres)
   const P = {
-    density: 0.0009,        // extinction at sea level, 1/m (fogDensity)
-    falloff: 1 / 420,       // height falloff, 1/m: density halves every ~290 m
+    density: 0.0007,        // extinction at sea level, 1/m (fogDensity)
+    falloff: 1 / 380,       // height falloff, 1/m: density halves every ~290 m
     baseY: 0,               // height where density == P.density
-    start: 150,             // no fog nearer than this (street-level blocks stay crisp)
+    start: 250,             // no fog nearer than this (street-level blocks stay crisp)
     maxOpacity: 1.0,
     g: 0.72,                // Henyey-Greenstein anisotropy of the sharp sun lobe
-    awayCol: [0.60, 0.60, 0.68],   // haze with the sun behind you: pale, slightly cool
-    sunCol: [2.0, 1.25, 0.62],     // haze looking into the sun: golden, HDR (feeds bloom)
+    awayCol: [0.95, 0.70, 0.50],   // haze with the sun behind you: pale, slightly cool
+    sunCol: [2.4, 1.45, 0.62],     // haze looking into the sun: golden, HDR (feeds bloom)
     spaceCol: [0.084, 0.25, 0.96], // HOR1 from the engine (pow 2.2, x1.15) for the space transition
     cloudDensity: 0.02,     // in-cloud whiteout (art bible: fog density +0.02 in cloud)
-    skyDist: 60000          // distance at which the sky is fogged (the "horizon")
+    skyDist: 25000          // distance at which the sky is fogged (the "horizon")
   };
 
   // ---------------------------------------------------------------- shared uniforms
