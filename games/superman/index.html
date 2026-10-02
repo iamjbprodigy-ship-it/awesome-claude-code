@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Superman Over Metropolis</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+
+<div id="fx-hit"></div>
+
+<div id="hud" hidden>
+  <div id="tl" class="panel">
+    <div class="speed"><span id="spd">0</span><small>km/h</small></div>
+    <div class="rows">
+      <span>Mach</span><b id="mach">0.00</b>
+      <span>Altitude</span><b id="alt">0 m</b>
+      <span>Air density</span><b id="rho">1.225</b>
+    </div>
+    <div id="mode" class="mode">Flight</div>
+  </div>
+
+  <div id="tr" class="panel">
+    <div class="title-sm">Metropolis</div>
+    <div class="rows">
+      <span>Hope</span><b id="st-hope">50</b>
+      <span>Streak</span><b id="st-streak">0</b>
+      <span>Lives saved</span><b id="st-saved">0</b>
+      <span>Lost</span><b id="st-lost">0</b>
+      <span>Injured now</span><b id="st-inj">0</b>
+      <span>Robbers stopped</span><b id="st-thugs">0</b>
+      <span>Emergencies</span><b id="st-res">0</b>
+      <span>Property damage</span><b id="st-dmg">$0</b>
+    </div>
+  </div>
+
+  <div id="solar" class="panel">
+    <div class="lbl"><span>Solar charge</span><b id="solar-pct">100%</b></div>
+    <div class="bar"><i id="solar-bar"></i></div>
+  </div>
+
+  <div id="powers">
+    <div class="chip" data-p="boost"><kbd>Shift</kbd>Speed</div>
+    <div class="chip" data-p="punch"><kbd>LMB</kbd>Punch</div>
+    <div class="chip" data-p="grab"><kbd>E</kbd>Grab</div>
+    <div class="chip" data-p="heat"><kbd>RMB</kbd>Heat</div>
+    <div class="chip" data-p="freeze"><kbd>Q</kbd>Freeze</div>
+    <div class="chip" data-p="xray"><kbd>X</kbd>X-ray</div>
+    <div class="chip" data-p="hear"><kbd>H</kbd>Hearing</div>
+    <div class="chip" data-p="clap"><kbd>G</kbd>Clap</div>
+    <div class="chip" data-p="slow"><kbd>V</kbd>Time</div>
+    <div class="chip" data-p="fly"><kbd>F</kbd>Fly</div>
+  </div>
+
+  <div id="xh"><i></i><svg id="charge" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16"/></svg></div>
+  <div id="toasts"></div>
+  <div id="markers"></div>
+</div>
+
+<div id="intro">
+  <div class="card">
+    <p class="kicker">Metropolis &middot; Golden hour &middot; 49 city blocks</p>
+    <h1>Superman<span>Over Metropolis</span></h1>
+    <p class="lede">A physics sandbox for the whole power set. Every tower is built from five-metre floor blocks with real mass, so whatever you knock loose falls, breaks apart and piles up on whatever is underneath.</p>
+    <dl class="controls">
+      <dt>Mouse</dt><dd>Look and aim</dd>
+      <dt>W A S D</dt><dd>Fly or walk</dd>
+      <dt>Space / C</dt><dd>Climb / descend &middot; Space on the ground leaps</dd>
+      <dt>Shift</dt><dd>Super speed, past the sound barrier and up to orbit</dd>
+      <dt>Left click</dt><dd>Punch (hold to charge) &middot; throw what you carry</dd>
+      <dt>E</dt><dd>Grab or set down cars, rubble, people, chunks of wall</dd>
+      <dt>Right click / R</dt><dd>Heat vision</dd>
+      <dt>Q</dt><dd>Freeze breath</dd>
+      <dt>X</dt><dd>X-ray vision</dd>
+      <dt>H</dt><dd>Super hearing</dd>
+      <dt>G</dt><dd>Thunder clap</dd>
+      <dt>V</dt><dd>Super-speed time slow</dd>
+      <dt>F</dt><dd>Switch between flying and walking</dd>
+      <dt>P / N</dt><dd>Pause and read the Daily Planet</dd>
+      <dt>M</dt><dd>Mute</dd>
+      <dt>Gamepad</dt><dd>Sticks fly and look &middot; A up, B down, L3 speed &middot; RT heat, LT freeze &middot; RB punch, LB grab &middot; X clap, Y x-ray &middot; R3 hearing &middot; D-pad up time, down fly &middot; Start pause</dd>
+    </dl>
+    <button id="go" type="button">Take flight</button>
+    <p class="fine">Turn sound on. Click the city to capture the mouse; Esc releases it.</p>
+  </div>
+</div>
+
+<div id="paused" hidden><div class="card paper" id="paper"></div></div>
+
+<div id="err" hidden><div class="card small"><h2>WebGL is unavailable</h2><p>This game needs WebGL. Try a current Chrome, Edge, Firefox or Safari with hardware acceleration turned on.</p></div></div>
+
+<script src="vendor/three.min.js"></script>
+<script src="vendor/three-postprocessing.js"></script>
+<script src="js/skyline.js"></script>
+<script src="js/streets.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
