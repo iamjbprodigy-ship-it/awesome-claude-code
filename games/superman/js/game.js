@@ -2993,11 +2993,13 @@ function groundRun(dt, wasGrounded) {
   if (!P.grounded) return;
   const dir = T1.set(P.vel.x, 0, P.vel.z).divideScalar(hs || 1), k = clamp(hs / 180, 0.1, 1);
   // kicked-up dust (or spray) and loose paper, every frame
-  const n = Math.min(8, hs / 22) | 0;
+  // thrown out to both sides, small and low: the chase camera rides his path and must not fly through it
+  const n = Math.min(5, hs / 30) | 0;
   for (let i = 0; i < n; i++) {
-    const x = p.x + R(-0.6, 0.6), z = p.z + R(-0.6, 0.6), sx = R(-1, 1) * hs * 0.06;
-    if (water) FX.water(x, WATER_Y + 0.2, z, -dir.x * hs * 0.05 - dir.z * sx, R(3, 10) * k + 2, -dir.z * hs * 0.05 + dir.x * sx);
-    else FX.dust(x, 0.3, z, -dir.x * hs * 0.04 - dir.z * sx, R(0.5, 3) + 2 * k, -dir.z * hs * 0.04 + dir.x * sx, 0.8 + k);
+    const side = rnd() < 0.5 ? -1 : 1, off = side * R(0.8, 1.6), sx = side * R(0.04, 0.09) * hs;
+    const x = p.x - dir.z * off, z = p.z + dir.x * off;
+    if (water) FX.water(x, WATER_Y + 0.2, z, -dir.z * sx, R(3, 8) * k + 2, dir.x * sx);
+    else SMK.emit(x, 0.2, z, -dir.z * sx + dir.x * hs * 0.05, R(0.3, 1.5) + k, dir.x * sx + dir.z * hs * 0.05, R(0.5, 1.1), 0.5, 1.8 + k, 0.42, 0.37, 0.31, 0.5, 0.5, 0.46, 0.4, 0.02, 2.5); // short-lived dust
   }
   if (!water && rnd() < hs / 300) FX.paper(p.x + R(-3, 3), 0.3, p.z + R(-3, 3), dir.x * hs * 0.2 + R(-4, 4), R(3, 9), dir.z * hs * 0.2 + R(-4, 4));
   // breaking away at top speed: a whip-crack and a ring of dust (the true sonic boom needs 340 m/s)
@@ -3400,7 +3402,7 @@ function updateCamera(dt) {
   const walking = !P.flying && started;
   const run = walking ? P.runK : 0;
   // flight keeps pulling back past Mach 1 (log scale) so Mach 3 and Mach 10 read differently
-  let dist = combat ? 5.2 : walking ? 8.4 + Math.min(4, sp * 0.05) + run * 3 : 6.8 + Math.min(9, sp * 0.025) + Math.min(6, Math.log2(1 + sp / 400) * 2);
+  let dist = combat ? 5.2 : walking ? 8.4 + Math.min(4, sp * 0.05) * (1 - run * 0.6) + run * 1.5 : 6.8 + Math.min(9, sp * 0.025) + Math.min(6, Math.log2(1 + sp / 400) * 2);
   if (P.hold) dist += Math.min(8, Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) * 1.4);
   if (!started) dist = 9;
   // walking frames him low and off-centre, like a third-person street camera; flight keeps him central
