@@ -3,6 +3,7 @@
  *
  *   node tools/playtest-bot.js [--shots] [--out DIR] [--quality low|shot] [--only name,name]
  *   (--only missions,dialogue,mission-shots for the street-level missions; mission-shots writes DIR/missions/*.png)
+ *   (--only power-levels,ground-run,hearing for the power set; powers-shots writes DIR/powers/*.png)
  *   Hang protection: --slow N scales every scenario's watchdog (default 8 min each), --max-minutes N caps the run,
  *   --timeout MS caps page loads; a hung scenario is a FAIL row, the browser is relaunched and the run goes on.
  *
@@ -97,14 +98,93 @@ const SCENARIOS = [
   },
   {
     name: 'flight',
-    run: `(() => { const g = __game; g.begin(); g.P.pos.set(0, 400, 0); g.setYawPitch(0, 0.1);
+    // the subsonic street cap is a level 1-2 rule now (level 3 is allowed Mach 5 low), so test it at level 2
+    run: `(() => { const g = __game; g.begin(); g.setPower(2); g.P.pos.set(0, 400, 0); g.setYawPitch(0, 0.1);
       g.keys.add('KeyW'); g.keys.add('ShiftLeft'); let boomed = false, maxSp = 0;
       for (let i = 0; i < 240; i++) { g.step(1); maxSp = Math.max(maxSp, g.P.vel.length()); boomed = boomed || g.P.boomed; }
       g.keys.clear(); g.P.pos.set(0, 60, 150); g.P.vel.set(0, 0, 0); g.keys.add('ShiftLeft'); g.keys.add('KeyW'); g.setYawPitch(0, 0);
       let lowMax = 0; for (let i = 0; i < 120; i++) { g.step(1); if (g.P.pos.y < 150) lowMax = Math.max(lowMax, g.P.vel.length()); }
       g.keys.clear(); return { maxSp, boomed, lowMax, alt: g.P.pos.y }; })()`,
     check: r => [['boost goes supersonic up high', r.maxSp > 340 && r.boomed, `${r.maxSp.toFixed(0)} m/s`],
-      ['boost capped below 150 m', r.lowMax <= 305, `${r.lowMax.toFixed(0)} m/s`]]
+      ['boost capped below 150 m (level 2)', r.lowMax <= 305, `${r.lowMax.toFixed(0)} m/s`]]
+  },
+  {
+    name: 'power-levels',
+    // boosted flight at 400 m for 5 s at each level, plus the low-altitude cap per level. `v` is the
+    // SUSTAINED speed (mean of the last second), so a momentary spike can't pass for a top speed
+    run: `(() => { const g = __game; g.begin(); const out = { stored: g.POWER };
+      const fly = (lvl, alt) => { g.setPower(lvl); g.P.flying = true; g.P.pos.set(0, alt, 1500); g.P.vel.set(0, 0, 0); g.setYawPitch(0, 0);
+        g.keys.clear(); g.keys.add('KeyW'); g.keys.add('ShiftLeft'); let mx = 0, sum = 0;
+        for (let i = 0; i < 300; i++) { g.step(1); const v = g.P.vel.length(); mx = Math.max(mx, v); if (i >= 240) sum += v; }
+        const v = sum / 60, a = g.P.pos.y; g.keys.clear();
+        return { v: Math.round(v), peak: Math.round(mx), mach: +(v / Math.max(295, 340.3 - 0.0041 * a)).toFixed(2), alt: Math.round(a) }; };
+      for (const l of [1, 2, 3]) { out['high' + l] = fly(l, 400); out['low' + l] = fly(l, 60); }
+      let saved = null; try { saved = localStorage.getItem('sm-power'); } catch (_) {}
+      out.saved = saved; g.setPower(3);
+      // Mach 5 straight through the tallest tower at 30 m: he should come out the far side still fast
+      const b = g.buildings.reduce((a, c) => c.ny > a.ny ? c : a), cx = (b.x0 + b.x1) / 2;
+      g.P.flying = true; g.P.pos.set(cx, 30, b.z1 + 400); g.P.vel.set(0, 0, -1700); g.setYawPitch(0, 0); g.keys.clear(); g.keys.add('KeyW'); g.keys.add('ShiftLeft');
+      let vIn = 0, vOut = 0, smashed = 0;
+      for (let i = 0; i < 120 && !vOut; i++) { const z = g.P.pos.z; g.step(1); if (z > b.z1 + 2 && g.P.pos.z <= b.z1 + 2) vIn = g.P.vel.length(); if (g.P.pos.z < b.z0 - 20) vOut = g.P.vel.length(); }
+      g.keys.clear(); out.smash = { vIn: Math.round(vIn), vOut: Math.round(vOut) }; return out; })()`,
+    check: r => [['starts at level 3 (max)', r.stored === 3, r.stored],
+      ['top speed rises with each level', r.high1.v < r.high2.v && r.high2.v < r.high3.v, `sustained ${r.high1.v} < ${r.high2.v} < ${r.high3.v} m/s`],
+      ['level 1 is about Mach 1', r.high1.mach >= 1.0 && r.high1.mach < 1.3, 'Mach ' + r.high1.mach],
+      ['level 2 reaches Mach 3', r.high2.mach >= 2.95, 'Mach ' + r.high2.mach],
+      ['level 3 reaches Mach 10', r.high3.mach >= 10, 'Mach ' + r.high3.mach],
+      ['levels 1-2 stay subsonic below 150 m', r.low1.v <= 305 && r.low2.v <= 305, `${r.low1.v}, ${r.low2.v} m/s`],
+      ['level 3 goes much faster low down', r.low3.mach >= 4, 'Mach ' + r.low3.mach],
+      ['choice is remembered (sm-power)', r.saved === '1' || r.saved === '2' || r.saved === '3', r.saved],
+      ['smashing through a tower at Mach 5 keeps most of the speed', r.smash.vIn > 1000 && r.smash.vOut > r.smash.vIn * 0.7, `${r.smash.vIn} -> ${r.smash.vOut} m/s`]]
+  },
+  {
+    name: 'ground-run',
+    // Shift + W on foot along an avenue: a planted sprint at each level's speed, never flying
+    run: `(() => { const g = __game; g.begin(); const out = {};
+      for (const l of [1, 2, 3]) {
+        g.setPower(l); g.P.flying = false; g.P.pos.set(-150, 0.97, 200); g.P.vel.set(0, 0, 0); g.setYawPitch(0, 0); g.step(5);
+        g.keys.clear(); g.keys.add('KeyW'); g.keys.add('ShiftLeft'); let mx = 0, dev = 0, flew = false, sum = 0;
+        for (let i = 0; i < 150; i++) { g.step(1); const hs = Math.hypot(g.P.vel.x, g.P.vel.z); if (i >= 120) sum += hs; mx = Math.max(mx, hs); flew = flew || g.P.flying;
+          if (i > 10) dev = Math.max(dev, Math.abs(g.P.pos.y - 0.97 - g.groundY(g.P.pos.x, g.P.pos.z))); }
+        out[l] = { v: +(sum / 30).toFixed(1), peak: +mx.toFixed(1), target: g.PWR.run[l - 1], dev: +dev.toFixed(3), flew, runK: +g.P.runK.toFixed(2), fov: Math.round(g.camera.fov) };
+        g.keys.clear();
+      }
+      return out; })()`,
+    check: r => [1, 2, 3].flatMap(l => [[`level ${l} sprint reaches ${r[l].target} m/s`, r[l].v >= r[l].target * 0.99, r[l].v + ' m/s'],
+      [`level ${l} stays on the ground (within 0.5 m)`, r[l].dev <= 0.5 && !r[l].flew, `max ${r[l].dev} m off, flying ${r[l].flew}`],
+      [`level ${l} run pose and camera engage`, r[l].runK > 0.9 && r[l].fov > 75, `runK ${r[l].runK}, fov ${r[l].fov}`]])
+  },
+  {
+    name: 'hearing',
+    // an injured bystander and an active robbery nearby; holding H must hear them and mark them
+    run: `(() => { const g = __game; g.begin(); g.setPower(3); g.P.flying = true; g.P.pos.set(0, 60, 100); g.P.vel.set(0, 0, 0); g.step(2);
+      const v = g.people.find(p => p.mode === 'free'); v.pos.set(30, 0.9, 120); g.injurePerson(v); v.mode = 'down';
+      g.startIncident('robbery'); g.step(5); g.keys.add('KeyH'); g.step(30);
+      const heard = g.heard(), on = g.hearOn;
+      const marks = [...document.querySelectorAll('#markers .mk')].filter(d => d.style.display !== 'none').map(d => d.textContent);
+      const toasts = [...document.querySelectorAll('#toasts .toast')].map(d => d.textContent);
+      g.keys.clear(); g.step(10); const off = !g.hearOn;
+      // a minor need: listening again after the crime has been heard picks up an ambient call
+      g.HEAR.minorCD = 0; g.keys.add('KeyH'); g.step(5); const minor = g.HEAR.minor.map(n => n.kind); g.keys.clear(); g.step(5);
+      // a missions.js help request is heard too, and listening in a calm moment can bring one forward
+      const M = g.missions; let msn = null, surfaced = null;
+      if (M) { M.spawn('cat'); g.keys.add('KeyH'); g.step(5); msn = g.heard().find(h => h.kind === 'help') || null; g.keys.clear(); g.step(2); M.cancel();
+        for (const p of g.people) if (p.mode === 'thug' || p.mode === 'stuck' || p.mode === 'down') p.mode = 'gone';
+        if (g.currentInc) g.currentInc.age = 1e9; g.step(30); g.HEAR.minor.length = 0; g.HEAR.minorCD = 0; g.HEAR.nextMsn = true; g.deferIncident(300);
+        const was = !!g.currentInc; g.keys.add('KeyH'); g.step(40);
+        surfaced = { state: M.state, heard: g.heard().some(h => h.kind === 'help'), inc: was, toast: [...document.querySelectorAll('#toasts .toast')].map(d => d.textContent).find(t => /crying for help/.test(t)) || '' };
+        g.keys.clear(); g.step(5); }
+      return { heard, on, marks, toasts, off, minor, msn, surfaced }; })()`,
+    check: r => [['holding H listens', r.on, ''],
+      ['hears at least one source', r.heard.length > 0, r.heard.map(h => h.label + ' ' + h.d + ' m').join(', ')],
+      ['hears the injured person', r.heard.some(h => h.kind === 'hurt'), ''],
+      ['hears the robbery', r.heard.some(h => h.kind === 'crime'), ''],
+      ['heard sources get markers', r.marks.some(m => /Heartbeat|Cry for help|shots fired/.test(m)), r.marks.slice(0, 4).join(' | ')],
+      ['fresh crime toast', r.toasts.some(t => /You hear: .*robbery/.test(t)), r.toasts.find(t => /You hear/.test(t)) || ''],
+      ['releasing H stops listening', r.off, ''],
+      ['listening between emergencies can find a minor need', r.minor.length === 1, r.minor.join(',')],
+      ['hears an active missions.js help request', !!r.msn, r.msn ? r.msn.label + ' ' + r.msn.d + ' m' : 'none'],
+      ['listening when calm surfaces a missions.js request', !!r.surfaced && r.surfaced.heard && r.surfaced.state === 'flag', JSON.stringify(r.surfaced)]]
   },
   {
     name: 'punch-and-collapse', minutes: 10, cpuFrames: 1805,
@@ -159,8 +239,9 @@ const SCENARIOS = [
       out.heatSeconds = t / 60; out.exploded = !!car.exploded;
       const car2 = g.bodies.find(b => b.kind === 'car' && b.parked && !b.exploded && b !== car);
       g.P.pos.copy(car2.pos).add(new THREE.Vector3(-3, 1.5, 0)); g.setYawPitch(-Math.PI / 2, -0.2); g.step(2);
-      g.grabOrRelease(); out.grabbed = !!g.P.hold; g.step(10); g.setYawPitch(-Math.PI / 2, 0.3); g.throwHeld(4); g.step(20);
-      out.thrownSpeed = car2.vel.length();
+      g.grabOrRelease(); out.grabbed = !!g.P.hold; g.step(10); g.setYawPitch(-Math.PI / 2, 0.3); g.throwHeld(4);
+      // peak launch speed over the next 20 frames (a level-3 throw is fast enough to reach a wall and stop in that time)
+      let tv = 0; for (let i = 0; i < 20; i++) { g.step(1); tv = Math.max(tv, car2.vel.length()); } out.thrownSpeed = tv;
       g.P.pos.set(0, 80, 0); g.P.vel.set(0, 0, 0); g.clap(); g.step(5); out.clap = true;
       g.keys.add('KeyQ'); g.step(30); g.keys.delete('KeyQ'); out.freeze = true;
       g.P.pos.set(0, 120, 0); g.P.flying = false; let landed = false; for (let i = 0; i < 400 && !landed; i++) { g.step(1); landed = g.P.grounded; }
@@ -368,6 +449,34 @@ SCENARIOS.push(
       ['screenshots written', r.shots.length === 3, r.shots.join(', ')]]
   }
 );
+
+// screenshots of the ground super-speed run at each level, the hearing markers and Mach 10 flight: OUT/powers/*.png
+SCENARIOS.push({
+  name: 'powers-shots', shotsOnly: true,
+  page: async (p) => {
+    const dir = path.join(OUT, 'powers'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [], info = {};
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    await p.evaluate(() => { __game.begin(); __game.step(30); });
+    for (const l of [1, 2, 3]) {
+      info['run' + l] = await p.evaluate((l) => { const g = __game; g.setPower(l); g.P.flying = false; g.P.pos.set(-150, 0.97, 200); g.P.vel.set(0, 0, 0);
+        g.setYawPitch(0, -0.04); g.step(5); g.keys.clear(); g.keys.add('KeyW'); g.keys.add('ShiftLeft'); g.step(100); g.render();
+        return { hs: Math.round(Math.hypot(g.P.vel.x, g.P.vel.z)), y: +(g.P.pos.y - 0.97 - g.groundY(g.P.pos.x, g.P.pos.z)).toFixed(2), fov: Math.round(g.camera.fov) }; }, l);
+      await snap(`ground-run-L${l}.png`);
+      await p.evaluate(() => __game.keys.clear());
+    }
+    info.hear = await p.evaluate(() => { const g = __game; g.setPower(3); g.P.flying = true; g.P.pos.set(0, 60, 100); g.P.vel.set(0, 0, 0); g.setYawPitch(0, -0.15);
+      const v = g.people.find(q => q.mode === 'free'); v.pos.set(20, 0.9, 20); g.injurePerson(v); v.mode = 'down';
+      g.startIncident('robbery'); g.step(5); g.keys.add('KeyH'); g.step(30); g.render(); return g.heard().length; });
+    await snap('hearing-markers.png');
+    info.mach = await p.evaluate(() => { const g = __game; g.keys.clear(); g.step(5); g.P.pos.set(0, 2000, 1500); g.P.vel.set(0, 0, 0); g.setYawPitch(0, -0.05);
+      g.keys.add('KeyW'); g.keys.add('ShiftLeft'); g.step(240); g.render(); return +(g.P.vel.length() / Math.max(295, 340.3 - 0.0041 * g.P.pos.y)).toFixed(1); });
+    await snap('flight-mach10.png');
+    return { info, shots };
+  },
+  check: r => [['ground-run shots at speed', [1, 2, 3].every(l => r.info['run' + l].hs > 30 && Math.abs(r.info['run' + l].y) < 0.5), JSON.stringify(r.info)],
+    ['screenshots written', r.shots.length === 5, r.shots.join(', ')]]
+});
 
 const RIGS = [
   ['title', null],
