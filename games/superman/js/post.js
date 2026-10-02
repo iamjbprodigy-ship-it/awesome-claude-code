@@ -683,9 +683,9 @@ window.SM_PLUGINS.push(function post(ctx) {
     shaftCol: new THREE.Color(1.0, 0.80, 0.55), // warm golden-hour tint on top of the sky colour
     shaftWin: 0.42,             // gaussian window (screen heights) around the sun for shaft sources
     flareAmt: 1.0,
-    keyLog2: -0.9,              // metered log2 luminance that maps to exposure 1.0 (art-directed look)
-    comp: 0.6,                  // fraction of the metered difference the camera compensates (0..1)
-    expMin: 0.55, expMax: 2.3,
+    keyLog2: -0.6,              // metered log2 luminance that maps to exposure 1.0 (art-directed look)
+    comp: 0.5,                  // fraction of the metered difference the camera compensates (0..1)
+    expMin: 0.7, expMax: 1.6,   // narrow on purpose: the grade is art-directed at exposure 1.0
     adaptBright: 2.2,           // 1/s when the scene gets brighter (iris closes fast)
     adaptDark: 0.8,             // 1/s when the scene gets darker (opens slowly)
     blurMax: 0.11,              // speed-blur streak length, fraction of the distance to the focus
@@ -812,9 +812,10 @@ window.SM_PLUGINS.push(function post(ctx) {
   // WebGL2: readPixels into a PIXEL_PACK_BUFFER + fence, polled each frame without blocking
   // (one read in flight; typical latency 1-3 frames). WebGL1: synchronous 1x1 read every 15 frames.
   const px = new Uint8Array(4);
-  let pbo = null, fence = null, frameNo = 0;
+  let pbo = null, fence = null, frameNo = 0, gen = 0, readGen = 0;
   const stats = { avgLog2: null, exposure: 1, target: 1, sunVisible: 0, readbacks: 0, mach: 0 };
   function onMeter() {
+    if (readGen !== gen) return; // measured before a camera cut: stale
     stats.readbacks++;
     stats.avgLog2 = ((px[0] + px[1] / 255) / 255) * 17 - 12;
   }
@@ -826,9 +827,9 @@ window.SM_PLUGINS.push(function post(ctx) {
       else gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
       gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 0);
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-      fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); readGen = gen;
     } else if (frameNo % 15 === 0) {
-      renderer.readRenderTargetPixels(meter1, 0, 0, 1, 1, px); onMeter();
+      readGen = gen; renderer.readRenderTargetPixels(meter1, 0, 0, 1, 1, px); onMeter();
     }
   }
   function pollRead() {
@@ -845,6 +846,7 @@ window.SM_PLUGINS.push(function post(ctx) {
   const enable = { shafts: true, flare: true, adapt: true, speed: true, smaa: true };
   const fwd = new THREE.Vector3(), tmp = new THREE.Vector3(), foe = new THREE.Vector2(0.5, 0.5);
   let expLog = 0, snapped = false, blur = 0, lastT = 0, aspect = 1;
+  const lastPos = new THREE.Vector3(1e9, 0, 0), lastFwd = new THREE.Vector3();
 
   class PostHDRPass extends THREE.Pass {
     constructor() {
@@ -877,6 +879,14 @@ window.SM_PLUGINS.push(function post(ctx) {
       const space = skyU && skyU.uSpace ? skyU.uSpace.value : 0;
       const doShafts = enable.shafts && fade > 0.001 && space < 0.98;
       const doFlare = enable.flare && fade > 0.001;
+
+      // --- camera cut (teleport / respawn / big snap): drop stale reads, go neutral, re-snap
+      const P = ctx.getPlayer();
+      const cutDist = 80 + (P && P.vel ? P.vel.length() : 0) * Math.max(dt, 1 / 30) * 3;
+      if (camera.position.distanceToSquared(lastPos) > cutDist * cutDist || fwd.dot(lastFwd) < 0.25) {
+        gen++; snapped = false; expLog = 0; stats.avgLog2 = null; stats.cuts = (stats.cuts || 0) + 1;
+      }
+      lastPos.copy(camera.position); lastFwd.copy(fwd);
 
       // --- eye adaptation: GPU reduction + async readback, smoothed on the CPU
       if (enable.adapt) {
@@ -915,7 +925,6 @@ window.SM_PLUGINS.push(function post(ctx) {
       }
 
       // --- speed blur focus (projected flight direction) and strength
-      const P = ctx.getPlayer();
       let bt = 0;
       if (enable.speed && P && P.vel) {
         const sp = P.vel.length(), mach = sp / soundSpeed(P.pos.y);
@@ -938,7 +947,7 @@ window.SM_PLUGINS.push(function post(ctx) {
       cu.uSun.value.set(sx, sy); cu.uFoe.value.copy(foe); cu.uAspect.value = aspect; cu.uBlur.value = blur;
       cu.uShaft.value = doShafts ? T.shaftAmt * fade * (1 - space) : 0;
       cu.uFlare.value = doFlare ? T.flareAmt * fade : 0;
-      stats.sunVisible = fade;
+      stats.sunVisible = fade; stats.facing = facing; stats.sun = [sx, sy];
       this.draw(compMat, this.renderToScreen ? null : writeBuffer);
     }
     dispose() {

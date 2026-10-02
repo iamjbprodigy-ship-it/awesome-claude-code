@@ -30,13 +30,13 @@ window.SM_PLUGINS.push(function atmosphere(ctx) {
 
   // ---------------------------------------------------------------- tuning (linear HDR, metres)
   const P = {
-    density: 0.0007,        // extinction at sea level, 1/m (fogDensity)
-    falloff: 1 / 380,       // height falloff, 1/m: density halves every ~290 m
+    density: 0.0005,        // extinction at sea level, 1/m (fogDensity)
+    falloff: 1 / 380,       // height falloff, 1/m: density halves every ~265 m
     baseY: 0,               // height where density == P.density
     start: 250,             // no fog nearer than this (street-level blocks stay crisp)
     maxOpacity: 1.0,
     g: 0.72,                // Henyey-Greenstein anisotropy of the sharp sun lobe
-    awayCol: [0.95, 0.70, 0.50],   // haze with the sun behind you: pale, slightly cool
+    awayCol: [0.95, 0.70, 0.50],   // haze with the sun behind you: warm peach (art bible horizon #ffcc9e)
     sunCol: [2.4, 1.45, 0.62],     // haze looking into the sun: golden, HDR (feeds bloom)
     spaceCol: [0.084, 0.25, 0.96], // HOR1 from the engine (pow 2.2, x1.15) for the space transition
     cloudDensity: 0.02,     // in-cloud whiteout (art bible: fog density +0.02 in cloud)
@@ -148,7 +148,7 @@ ${FOG_FN}
     ' col+=vec3(2.6,1.3,0.5)*mie*0.45*(1.0-0.6*uSpace);',
     ' col+=mix(vec3(40.0,32.0,22.0),vec3(40.0,38.0,34.0),uSpace)*smoothstep(0.9993,0.9997,c);',
     ' vec4 f=smHeightFog(d*uSkyDist);',
-    ' col=mix(col,f.rgb,f.a);',
+    ' col=mix(col,f.rgb,f.a*(1.0-smoothstep(0.03,0.45,y)));', // haze hugs the horizon; the zenith stays clear blue
     ' gl_FragColor=vec4(col,1.0);', '#include <encodings_fragment>', '}'
   ].join('\n');
   const skyFogDensity = { value: P.density };
