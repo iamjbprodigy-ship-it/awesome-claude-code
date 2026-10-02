@@ -320,6 +320,16 @@
       L('lois', 'I heard about the trouble on the street. You cannot be everywhere. Still hurts, I know.'),
       L('perry', 'You let one slip. Shake it off and get back out there.')
     ],
+    // ---------------- landings (from the feel pass's __game.events log)
+    landHero: [
+      L('jimmy', 'That landing! One knee, fist down, dust everywhere! Tell me you will do that again where I can see it!'),
+      L('lois', 'Nice entrance. The pigeons on Fifth will be talking about it for weeks.')
+    ],
+    landCrater: [
+      L('perry', 'You just put a crater in a city street. Public Works has my number now, and they are not happy.'),
+      L('lois', 'You know there are stairs, right? That street will take a month to repave.'),
+      L('jimmy', 'The whole block shook! I got the shot, but the asphalt did not make it.')
+    ],
     // ---------------- first call of the session
     hello: [
       L('lois', 'Lois. Perry finally gave me the city beat, so I guess we will be talking. I will call if anything breaks.'),
@@ -387,7 +397,7 @@
   const W = {                    // watchers
     inc: null, incHalf: false, incTrapped: -1, medals: 0, resolved: 0, lost: 0,
     dmg: 0, dmgT: 0, dmgBase: 0, band: -1, hopeT: 0, used: {}, mach: 0, machT: 0, machMark: 0,
-    fall: 0, ms: 0, mf: 0, hello: false, sp: new Set(), started: false, planet: null
+    fall: 0, ms: 0, mf: 0, evT: -1, hello: false, sp: new Set(), started: false, planet: null
   };
   const opts0 = {};
   const S = { voice: true, tts: false };
@@ -544,8 +554,9 @@
     cur.rec = rec;
     // test-hook contract: __game.events gets a `line` entry per call
     try {
-      if (!Array.isArray(g.events)) g.events = [];
-      g.events.push({ t: g.simT, type: 'line', who: it.who, speaker: spk.name, text: it.text, trigger: it.trigger, incidentType: it.incidentType });
+      const ev = { who: it.who, speaker: spk.name, text: it.text, trigger: it.trigger, incidentType: it.incidentType, prio: it.prio };
+      if (typeof g.emit === 'function') g.emit('line', ev);
+      else { if (!Array.isArray(g.events)) g.events = []; ev.t = g.simT; ev.type = 'line'; g.events.push(ev); }
     } catch (_) { /* events may be a frozen getter */ }
     showCard(cur);
     if (S.tts) speakTTS(cur); else if (S.voice) cur.audio = voiceCall(cur, g);
@@ -943,6 +954,7 @@
       const b = (g.buildings || []).find(bb => bb.lot && bb.lot.i === 3 && bb.lot.j === 3);
       if (b) W.planet = { x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2 };
       const M = window.SM_MISSIONS; if (M && M.stats) { W.ms = M.stats.success; W.mf = M.stats.fail; }
+      if (Array.isArray(g.events) && g.events.length) W.evT = g.events[g.events.length - 1].t;
     }
     // ---- emergencies
     if (inc !== W.inc) {
@@ -1017,6 +1029,17 @@
         W.sp.add(s);
         if (!inc || s.type !== inc.type) onIncStart(g, { type: s.type || s.kind || 'other', where: s.where || s.name, title: s.title || '' }, true);
       }
+    }
+    // ---- landings, read from the shared event log (feel.js emits land {tier})
+    const E = g.events;
+    if (Array.isArray(E) && E.length) {
+      for (let i = E.length - 1; i >= 0; i--) {
+        const e = E[i]; if (e.t <= W.evT) break;
+        if (e.type !== 'land') continue;
+        if (e.tier === 'hero' && !W.used.landHero) { W.used.landHero = true; trig('landHero', { prio: 1, ttl: 30, reaction: true, incidentType: inc ? inc.type : null, inc }); }
+        else if (e.tier === 'crater') trig('landCrater', { prio: 1, cd: 90, ttl: 30, reaction: true, incidentType: inc ? inc.type : null, inc });
+      }
+      W.evT = E[E.length - 1].t;
     }
     // ---- quiet city: hello, then flavour
     if (!W.hello && clock > CFG.hello && !inc) { W.hello = true; trig('hello', { prio: 1, ttl: 60 }); }
