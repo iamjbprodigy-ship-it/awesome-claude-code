@@ -495,11 +495,12 @@ SCENARIOS.push({
     await p.evaluate(() => { __game.begin(); __game.setPower(3); __game.step(30); });
     info.hero = await p.evaluate(() => { const g = __game; g.keys.clear(); g.P.flying = false; g.P.pos.set(-150, 6, 200); g.P.vel.set(0, -32, 0); g.setYawPitch(0.5, -0.12);
       let ev = null; const i0 = g.events.length; for (let i = 0; i < 60 && !ev; i++) { g.step(1); ev = g.events.slice(i0).find(e => e.type === 'land'); }
-      g.step(10); g.render(); return ev; });
+      g.step(10); g.P.landT = 99; g.render(); return ev; }); // hold the pose while the live loop renders the shot
     await snap('hero-landing.png');
-    await p.evaluate(() => { const g = __game, P = g.P, f = new g.camera.position.constructor(-Math.sin(0.5), 0, -Math.cos(0.5)), r = new g.camera.position.constructor(Math.cos(0.5), 0, -Math.sin(0.5));
+    await p.evaluate(() => { const g = __game, P = g.P; g.camState.hold = true; const f = new g.camera.position.constructor(-Math.sin(0.5), 0, -Math.cos(0.5)), r = new g.camera.position.constructor(Math.cos(0.5), 0, -Math.sin(0.5));
       g.camera.position.copy(P.pos).addScaledVector(f, 3.4).addScaledVector(r, 2.2).setY(1.1); g.camera.lookAt(P.pos.x, 0.55, P.pos.z); g.camera.fov = 55; g.camera.updateProjectionMatrix(); g.render(); });
     await snap('hero-landing-side.png');
+    await p.evaluate(() => { __game.camState.hold = false; });
     info.crouch = await p.evaluate(() => { const g = __game; g.P.landT = 0; g.step(30); g.keys.add('Space'); g.step(34); g.render(); return +g.P.jumpCharge.toFixed(2); });
     await snap('takeoff-crouch.png');
     info.mach = await p.evaluate(() => { const g = __game; g.keys.clear(); g.step(5); g.P.flying = true; g.P.pos.set(0, 2000, 1500); g.P.vel.set(0, 0, 0); g.setYawPitch(0, -0.05);

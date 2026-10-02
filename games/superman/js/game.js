@@ -2952,7 +2952,7 @@ const FEEL = window.SM_FEEL;
 const camState = {
   off: new V3(0, 2, 8), fov: 70, roll: 0, init: false,
   rel: new V3(), relV: new V3(), lastVel: new V3(), dist: { x: 6.8, v: 0 }, up: { x: 1.5, v: 0 }, side: { x: 0.95, v: 0 },
-  la: new V3(), laV: new V3(), boostT: 0, fovKick: { x: 0, v: 0 }, heroFrac: 0, maxDist: 0, minDist: 0
+  la: new V3(), laV: new V3(), boostT: 0, fovKick: { x: 0, v: 0 }, heroFrac: 0, heroH: 1.95, maxDist: 0, minDist: 0, hold: false
 };
 // add screen-shake trauma (0..1); shakeAt falls off with distance from the camera
 function addShake(a) { FEEL.add(a); }
@@ -3359,8 +3359,8 @@ function updateHeroPose(dt, fwd) {
   const crouch = !P.flying && P.jumpCharging ? clamp(0.3 + P.jumpCharge * 0.7, 0, 1) : 0;
   const landW = P.landT > 0 ? clamp(P.landT / 0.18, 0, 1) : 0, kneel = landW > 0 && (P.landTier === 'hero' || P.landTier === 'crater');
   const softW = landW > 0 && P.landTier === 'soft' ? landW : 0;
-  P.poseDrop = lerp(P.poseDrop, kneel ? 0.5 * landW : softW ? 0.14 * softW : crouch * 0.4, 1 - Math.exp(-20 * dt));
-  P.poseLean = lerp(P.poseLean, kneel ? 0.42 * landW : crouch * 0.38, 1 - Math.exp(-20 * dt));
+  P.poseDrop = lerp(P.poseDrop, kneel ? 0.56 * landW : softW ? 0.14 * softW : crouch * 0.4, 1 - Math.exp(-20 * dt));
+  P.poseLean = lerp(P.poseLean, kneel ? 0.55 * landW : crouch * 0.38, 1 - Math.exp(-20 * dt));
   if (P.poseLean > 0.005) hero.g.quaternion.multiply(TQ2.setFromAxisAngle(T1.set(1, 0, 0), -P.poseLean));
   hero.g.position.y -= P.poseDrop;
   if (run) hero.g.position.y += (Math.abs(Math.cos(P.walkPhase)) * 0.09 - 0.07) * run; // stride bob, sunk into the lean
@@ -3378,7 +3378,7 @@ function updateHeroPose(dt, fwd) {
   else if (P.idleT > 1.5) { aL = -0.3; aR = -0.3; aLz = -0.55; aRz = 0.55; lL = 0.06; lR = -0.06; }
   else if (P.flying) { aL = 0.25 + Math.sin(t * 2) * 0.05; aR = 0.25 + Math.cos(t * 2) * 0.05; aLz = -0.22; aRz = 0.22; lL = 0.12 + Math.sin(t * 1.6) * 0.06; lR = -0.05; }
   else if (P.grounded) { const s = Math.sin(P.walkPhase); lL = s * 0.7; lR = -s * 0.7; aL = -s * 0.5; aR = s * 0.5; }
-  if (kneel) { lL = -0.15; lR = 1.55; aL = -0.55; aLz = -0.55; aR = 0.55; aRz = 0.08; }
+  if (kneel) { lL = -0.05; lR = 1.65; aL = -0.6; aLz = -0.6; aR = 0.62; aRz = 0.12; }
   else if (softW) { lL = lR = 0.35 * softW; aLz = -0.3; aRz = 0.3; }
   else if (crouch) { lL = lR = 1.05 * crouch; aL = aR = -0.6 * crouch; aLz = -0.25; aRz = 0.25; }
   if (P.hold) {
@@ -3397,7 +3397,7 @@ function updateHeroPose(dt, fwd) {
   else if (P.idleT > 1.5) { eLx = eRx = -0.1; eLz = 1.45; eRz = -1.45; }
   else if (P.flying) { eLx = eRx = 0.3; kL = -0.25 - Math.sin(t * 1.6) * 0.08; kR = -0.12; }
   else if (P.grounded) { const s = P.walkPhase; kL = -Math.max(0, Math.sin(s + 1.6)) * 0.9; kR = -Math.max(0, Math.sin(s + 1.6 + Math.PI)) * 0.9; eLx = eRx = 0.35; }
-  if (kneel) { kL = -1.75; kR = -1.6; eLx = 0.4; eRx = 0.05; }
+  if (kneel) { kL = -1.8; kR = -1.75; eLx = 0.4; eRx = 0; }
   else if (softW) { kL = kR = -0.7 * softW; }
   else if (crouch) { kL = kR = -1.9 * crouch; eLx = eRx = 0.35; }
   if (P.hold) { const big = Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) > 1; eLx = eRx = big ? 0.25 : 0.9; }
@@ -3548,7 +3548,7 @@ function springV(x, v, g, half, dt) {
   j0 = x.y - g.y; j1 = v.y + j0 * y; x.y = e * (j0 + j1 * dt) + g.y; v.y = e * (v.y - j1 * y * dt);
   j0 = x.z - g.z; j1 = v.z + j0 * y; x.z = e * (j0 + j1 * dt) + g.z; v.z = e * (v.z - j1 * y * dt);
 }
-const HERO_H = 1.95, FRAC_MIN = 0.12, FRAC_MAX = 0.18, CAM_LAG_MAX = 1.5;
+const HERO_H = 1.95, HERO_H_FLY = 0.9, FRAC_MIN = 0.12, FRAC_MAX = 0.18, CAM_LAG_MAX = 1.5;
 const CAM_WANT = new V3();
 function updateCamera(dt) {
   const C = camState;
@@ -3563,6 +3563,7 @@ function updateCamera(dt) {
     return;
   }
   FEEL.shake(dt);
+  if (C.hold) return; // a scripted or photo camera owns the lens
   const fwd = aimDir(T1), right = T2.set(Math.cos(yaw), 0, -Math.sin(yaw));
   const sp = P.vel.length();
   const combat = currentInc && currentInc.type === 'robbery' && currentInc.marker().distanceTo(P.pos) < 70;
@@ -3594,7 +3595,9 @@ function updateCamera(dt) {
   const want = CAM_WANT.copy(fwd).multiplyScalar(-C.dist.x).addScaledVector(UP, C.up.x).addScaledVector(right, C.side.x);
   // screen-space readability: in flight he stays 12-18% of screen height (as a standing figure) at any
   // speed, so Mach 10 no longer shrinks him to a speck; the near limit only engages at speed
-  C.maxDist = HERO_H / (2 * tanH * FRAC_MIN); C.minDist = HERO_H / (2 * tanH * FRAC_MAX);
+  // his on-screen height shrinks from 1.95 m standing to ~0.9 m seen from behind in a full flight stretch
+  const heroH = lerp(HERO_H, HERO_H_FLY, P.flying ? clamp((sp - 12) / 25, 0, 1) : 0); C.heroH = heroH;
+  C.maxDist = heroH / (2 * tanH * FRAC_MIN); C.minDist = heroH / (2 * tanH * FRAC_MAX);
   if (P.flying && !P.hold) {
     const L = want.length(), lo = C.minDist * clamp((sp - 75) / 75, 0, 1);
     if (L > C.maxDist) want.multiplyScalar(C.maxDist / L); else if (L < lo) want.multiplyScalar(lo / L);
@@ -3630,7 +3633,7 @@ function updateCamera(dt) {
   C.roll = lerp(C.roll, -P.bank * 0.35, 1 - Math.exp(-5 * dt));
   camera.rotateY(FEEL.yaw); camera.rotateX(FEEL.pitch); camera.rotateZ(C.roll + FEEL.roll);
   camera.fov = fov; camera.updateProjectionMatrix();
-  C.heroFrac = HERO_H / (2 * Math.max(0.5, cp.distanceTo(P.pos)) * tanH);
+  C.heroFrac = heroH / (2 * Math.max(0.5, cp.distanceTo(P.pos)) * tanH);
   updateSpeedLines(dt, sp, mach, run);
 }
 // speed lines: streaks of air rushing past the camera, from the sprint and from Mach 0.8 up
