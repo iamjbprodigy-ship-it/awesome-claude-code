@@ -82,14 +82,73 @@ const SCENARIOS = [
   },
   {
     name: 'flight',
-    run: `(() => { const g = __game; g.begin(); g.P.pos.set(0, 400, 0); g.setYawPitch(0, 0.1);
+    // the subsonic street cap is a level 1-2 rule now (level 3 is allowed Mach 5 low), so test it at level 2
+    run: `(() => { const g = __game; g.begin(); g.setPower(2); g.P.pos.set(0, 400, 0); g.setYawPitch(0, 0.1);
       g.keys.add('KeyW'); g.keys.add('ShiftLeft'); let boomed = false, maxSp = 0;
       for (let i = 0; i < 240; i++) { g.step(1); maxSp = Math.max(maxSp, g.P.vel.length()); boomed = boomed || g.P.boomed; }
       g.keys.clear(); g.P.pos.set(0, 60, 150); g.P.vel.set(0, 0, 0); g.keys.add('ShiftLeft'); g.keys.add('KeyW'); g.setYawPitch(0, 0);
       let lowMax = 0; for (let i = 0; i < 120; i++) { g.step(1); if (g.P.pos.y < 150) lowMax = Math.max(lowMax, g.P.vel.length()); }
       g.keys.clear(); return { maxSp, boomed, lowMax, alt: g.P.pos.y }; })()`,
     check: r => [['boost goes supersonic up high', r.maxSp > 340 && r.boomed, `${r.maxSp.toFixed(0)} m/s`],
-      ['boost capped below 150 m', r.lowMax <= 305, `${r.lowMax.toFixed(0)} m/s`]]
+      ['boost capped below 150 m (level 2)', r.lowMax <= 305, `${r.lowMax.toFixed(0)} m/s`]]
+  },
+  {
+    name: 'power-levels',
+    // sustained boosted flight at 400 m for 5 s at each level, plus the low-altitude cap per level
+    run: `(() => { const g = __game; g.begin(); const out = { stored: g.POWER };
+      const fly = (lvl, alt) => { g.setPower(lvl); g.P.flying = true; g.P.pos.set(0, alt, 1500); g.P.vel.set(0, 0, 0); g.setYawPitch(0, 0);
+        g.keys.clear(); g.keys.add('KeyW'); g.keys.add('ShiftLeft'); let mx = 0; for (let i = 0; i < 300; i++) { g.step(1); mx = Math.max(mx, g.P.vel.length()); }
+        g.keys.clear(); return { v: Math.round(mx), mach: +(mx / Math.max(295, 340.3 - 0.0041 * alt)).toFixed(2) }; };
+      for (const l of [1, 2, 3]) { out['high' + l] = fly(l, 400); out['low' + l] = fly(l, 60); }
+      let saved = null; try { saved = localStorage.getItem('sm-power'); } catch (_) {}
+      out.saved = saved; g.setPower(3); return out; })()`,
+    check: r => [['starts at level 3 (max)', r.stored === 3, r.stored],
+      ['top speed rises with each level', r.high1.v < r.high2.v && r.high2.v < r.high3.v, `${r.high1.v} < ${r.high2.v} < ${r.high3.v} m/s`],
+      ['level 1 is about Mach 1', r.high1.mach >= 1.0 && r.high1.mach < 1.3, 'Mach ' + r.high1.mach],
+      ['level 2 reaches Mach 3', r.high2.mach >= 2.95, 'Mach ' + r.high2.mach],
+      ['level 3 reaches Mach 10', r.high3.mach >= 10, 'Mach ' + r.high3.mach],
+      ['levels 1-2 stay subsonic below 150 m', r.low1.v <= 305 && r.low2.v <= 305, `${r.low1.v}, ${r.low2.v} m/s`],
+      ['level 3 goes much faster low down', r.low3.mach >= 4, 'Mach ' + r.low3.mach],
+      ['choice is remembered (sm-power)', r.saved === '1' || r.saved === '2' || r.saved === '3', r.saved]]
+  },
+  {
+    name: 'ground-run',
+    // Shift + W on foot along an avenue: a planted sprint at each level's speed, never flying
+    run: `(() => { const g = __game; g.begin(); const out = {};
+      for (const l of [1, 2, 3]) {
+        g.setPower(l); g.P.flying = false; g.P.pos.set(-150, 0.97, 200); g.P.vel.set(0, 0, 0); g.setYawPitch(0, 0); g.step(5);
+        g.keys.clear(); g.keys.add('KeyW'); g.keys.add('ShiftLeft'); let mx = 0, dev = 0, flew = false;
+        for (let i = 0; i < 150; i++) { g.step(1); mx = Math.max(mx, Math.hypot(g.P.vel.x, g.P.vel.z)); flew = flew || g.P.flying;
+          if (i > 10) dev = Math.max(dev, Math.abs(g.P.pos.y - 0.97 - g.groundY(g.P.pos.x, g.P.pos.z))); }
+        out[l] = { v: +mx.toFixed(1), target: g.PWR.run[l - 1], dev: +dev.toFixed(3), flew, runK: +g.P.runK.toFixed(2), fov: Math.round(g.camera.fov) };
+        g.keys.clear();
+      }
+      return out; })()`,
+    check: r => [1, 2, 3].flatMap(l => [[`level ${l} sprint reaches ${r[l].target} m/s`, r[l].v >= r[l].target * 0.99, r[l].v + ' m/s'],
+      [`level ${l} stays on the ground (within 0.5 m)`, r[l].dev <= 0.5 && !r[l].flew, `max ${r[l].dev} m off, flying ${r[l].flew}`],
+      [`level ${l} run pose and camera engage`, r[l].runK > 0.9 && r[l].fov > 75, `runK ${r[l].runK}, fov ${r[l].fov}`]])
+  },
+  {
+    name: 'hearing',
+    // an injured bystander and an active robbery nearby; holding H must hear them and mark them
+    run: `(() => { const g = __game; g.begin(); g.setPower(3); g.P.flying = true; g.P.pos.set(0, 60, 100); g.P.vel.set(0, 0, 0); g.step(2);
+      const v = g.people.find(p => p.mode === 'free'); v.pos.set(30, 0.9, 120); g.injurePerson(v); v.mode = 'down';
+      g.startIncident('robbery'); g.step(5); g.keys.add('KeyH'); g.step(30);
+      const heard = g.heard(), on = g.hearOn;
+      const marks = [...document.querySelectorAll('#markers .mk')].filter(d => d.style.display !== 'none').map(d => d.textContent);
+      const toasts = [...document.querySelectorAll('#toasts .toast')].map(d => d.textContent);
+      g.keys.clear(); g.step(10); const off = !g.hearOn;
+      // a minor need: listening again after the crime has been heard picks up an ambient call
+      g.HEAR.minorCD = 0; g.keys.add('KeyH'); g.step(5); const minor = g.HEAR.minor.map(n => n.kind); g.keys.clear(); g.step(5);
+      return { heard, on, marks, toasts, off, minor }; })()`,
+    check: r => [['holding H listens', r.on, ''],
+      ['hears at least one source', r.heard.length > 0, r.heard.map(h => h.label + ' ' + h.d + ' m').join(', ')],
+      ['hears the injured person', r.heard.some(h => h.kind === 'hurt'), ''],
+      ['hears the robbery', r.heard.some(h => h.kind === 'crime'), ''],
+      ['heard sources get markers', r.marks.some(m => /Heartbeat|Cry for help|shots fired/.test(m)), r.marks.slice(0, 4).join(' | ')],
+      ['fresh crime toast', r.toasts.some(t => /You hear: .*robbery/.test(t)), r.toasts.find(t => /You hear/.test(t)) || ''],
+      ['releasing H stops listening', r.off, ''],
+      ['listening between emergencies can find a minor need', r.minor.length === 1, r.minor.join(',')]]
   },
   {
     name: 'punch-and-collapse',
