@@ -2320,11 +2320,18 @@ function updateBullets(dt) {
 // ============================================================ emergencies (one at a time)
 let currentInc = null, nextIncT = 25, incCount = 0;
 const INC_TYPES = ['heli', 'meteor', 'fire', 'robbery'];
+// modules add incident types that only start when forced (never in the random rotation): registerIncident('metallo', () => inc)
+const INC_REG = {};
+function registerIncident(type, start) { INC_REG[type] = start; }
+// power hooks for modules: kryp(pos) -> extra exposure 0..1; punch(o, d, power) / grab() return true to consume the input;
+// clap(o, d, reach, k), heat(o, d, hit, dt, power), freeze(o, d, range, cos, dt)
+const HOOKS = { kryp: [], punch: [], grab: [], clap: [], heat: [], freeze: [] };
 function startIncident(forced) {
   if (currentInc) endIncident(false, 'Emergency abandoned.');
   const type = forced ? String(forced).replace('kryptonite', 'meteor') : INC_TYPES[incCount % INC_TYPES.length]; incCount++;
   let inc = null;
-  if (type === 'fire') inc = startFire();
+  if (INC_REG[type]) inc = INC_REG[type]();
+  else if (type === 'fire') inc = startFire();
   else if (type === 'heli') inc = startHeli();
   else if (type === 'robbery') inc = startRobbery();
   else inc = startMeteor(forced === 'kryptonite' || (!forced && incCount > 4 && rnd() < 0.6));
@@ -2340,9 +2347,9 @@ function endIncident(success, msg) {
   ledger.resolved++;
   // gold means clean first; speed is a loose gate
   const lost = inc.lost || 0, fast = inc.age < inc.limit * 0.6;
-  const medal = lost === 0 && inc.injuries === 0 && !inc.miss && inc.damage <= 7.5e5 && fast ? 'gold'
-    : lost === 0 && inc.injuries <= 1 && inc.damage <= 3e6 ? 'silver' : 'bronze';
-  ledger.medals[medal]++;
+  const medal = inc.medal || (lost === 0 && inc.injuries === 0 && !inc.miss && inc.damage <= 7.5e5 && fast ? 'gold'
+    : lost === 0 && inc.injuries <= 1 && inc.damage <= 3e6 ? 'silver' : 'bronze');
+  inc.medal = medal; ledger.medals[medal]++;
   ledger.streak++; ledger.best = Math.max(ledger.best, ledger.streak);
   hopeAdd(medal === 'gold' ? 10 : medal === 'silver' ? 5 : 1);
   toast(`${msg || 'Emergency handled'} — ${medal.toUpperCase()}${ledger.streak > 1 ? ` · streak ×${ledger.streak}` : ''}`, 'good');
@@ -2660,6 +2667,7 @@ function kryptoniteNear() {
   let k = 0;
   for (const m of meteors) if (!m.dead && m.kryp) { const d = m.pos.distanceTo(P.pos); k = Math.max(k, clamp(1 - (d - 15) / 70, 0, 1)); }
   for (const r of bodies) if (r.kind === 'debris' && r.kryp && !r.dead) { const d = r.pos.distanceTo(P.pos); k = Math.max(k, clamp(1 - d / 30, 0, 1)); }
+  for (const f of HOOKS.kryp) k = Math.max(k, f(P.pos)); // extra Kryptonite sources (js/metallo.js)
   return k;
 }
 function findTarget(range, cone) {
@@ -2681,6 +2689,7 @@ function punch(power) {
   P.punchT = 0.3;
   const d = aimDir(new V3()), o = T5.copy(P.pos).add(T6.set(0, 0.35, 0)).clone();
   const E = 2.5e7 * power * pw('punch') * (1 - kryptoniteNear() * 0.8);
+  for (const h of HOOKS.punch) if (h(o, d, power)) return; // a module took the hit (js/metallo.js)
   let t = findTarget(5.5 + power, 1.4);
   if (t && t.kind === 'rubble') t = reviveRubble(t, null) || null;
   if (t) {
@@ -2745,6 +2754,7 @@ function clap() {
   ring(T1.copy(o).addScaledVector(d, 2), d, 0.5, 30 * reach, 0.6, new THREE.Color(2.2, 2.3, 2.6), 0.7);
   for (let k = 0; k < 60; k++) { const v = T1.copy(d).multiplyScalar(R(30, 60)).add(T2.set(R(-12, 12), R(-12, 12), R(-12, 12))); FX.vapor(o.x, o.y, o.z, v.x, v.y, v.z); }
   coneImpulse(o, d, 70 * reach, 0.6, 45 * k);
+  for (const h of HOOKS.clap) h(o, d, reach, k);
   const cos = Math.cos(0.6), pr = 60 * reach;
   for (const p of people) {
     if (p.mode === 'gone' || p.mode === 'held' || p.mode === 'safe' || p.mode === 'trapped') continue;
@@ -2762,6 +2772,7 @@ function clap() {
   });
 }
 function grabOrRelease() {
+  for (const h of HOOKS.grab) if (h()) return; // a module took the E press (js/metallo.js)
   if (P.hold) { releaseHeld(); return; }
   let t = findTarget(7, 1.8);
   if (t && t.kind === 'rubble') t = reviveRubble(t, null);
@@ -2850,6 +2861,7 @@ function heatVision(dt, on) {
   const o = camera.position, d = aimDir(new V3());
   const camD = o.distanceTo(P.pos);
   const hit = raycast(T1.copy(o).addScaledVector(d, camD + 0.8).clone(), d, pw('heatRange'), { rubble: true });
+  for (const h of HOOKS.heat) h(o, d, hit, dt, power); // a module may shorten the beam onto itself (hit.type = its own)
   const end = hit.point;
   for (let i = 0; i < 2; i++) {
     const e = heroPoint(i ? EYE_R : EYE_L, T2), len = e.distanceTo(end);
@@ -2908,6 +2920,7 @@ function freezeBreath(dt, on) {
   }
   const range = 45 * pw('freeze') * weak * (unlocked.has('beam') ? 1.2 : 1), cos = Math.cos(0.26);
   const inCone = (p) => { const rel = T3.copy(p).sub(o), dist = rel.length(); if (dist > range || dist < 0.01) return -1; return rel.dot(d) / dist >= cos ? dist : -1; };
+  for (const h of HOOKS.freeze) h(o, d, range, cos, dt);
   for (const b of bodies) {
     if (b.dead) continue; const dist = inCone(b.pos); if (dist < 0) continue;
     const k = dt * (1.2 - dist / range);
@@ -3717,7 +3730,7 @@ function updateHUD(dt) {
     chips.clap.classList.toggle('on', P.clapCD > 0.6); chips.fly.classList.toggle('on', P.flying);
   }
   const list = [];
-  if (currentInc) list.push({ pos: currentInc.marker(), cls: currentInc.m && currentInc.m.kryp ? 'kryp' : 'inc', label: currentInc.type === 'robbery' ? 'Robbery' : currentInc.type === 'fire' ? 'Fire' : currentInc.type === 'heli' ? 'Falling helicopter' : (currentInc.m && currentInc.m.kryp ? 'Kryptonite meteor' : 'Meteor'), sub: Math.round(currentInc.marker().distanceTo(P.pos) / 5) * 5 + ' m' });
+  if (currentInc) list.push({ pos: currentInc.marker(), cls: currentInc.m && currentInc.m.kryp ? 'kryp' : 'inc', label: currentInc.label || (currentInc.type === 'robbery' ? 'Robbery' : currentInc.type === 'fire' ? 'Fire' : currentInc.type === 'heli' ? 'Falling helicopter' : (currentInc.m && currentInc.m.kryp ? 'Kryptonite meteor' : 'Meteor')), sub: Math.round(currentInc.marker().distanceTo(P.pos) / 5) * 5 + ' m' });
   if (currentInc && currentInc.type === 'robbery') for (const p of currentInc.crew) if (p.tele > 0 && !p.cuffed) list.push({ pos: T1.copy(p.pos).setY(p.pos.y + 1.6).clone(), cls: 'hurt', label: '!', sub: 'shot coming' });
   // super hearing: one marker per heard source ("Cry for help · 240 m"); otherwise the old proximity/x-ray markers
   for (const s of HEAR.list) list.push({ pos: T1.copy(s.pos).setY(s.pos.y + 1.4).clone(), cls: HEAR_CLS[s.kind] + (s.look > 0.5 ? ' near' : ''), label: s.label, sub: Math.round(s.d / 5) * 5 + ' m' });
@@ -4206,5 +4219,7 @@ window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, ren
   // street-level missions + NPC dialogue (js/missions.js)
   mapPinHooks, PIN_COL, BEACON_COL, toast, hopeAdd, hopeHit, addSave, SFX, AU, FX, PPL, placePerson, groundY, cars, HOSP, missions: window.SM_MISSIONS || null,
   get heatOn() { return beams[0].visible; }, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
+// incident registry + power hooks for js/metallo.js (and any later module)
+Object.assign(window.__game, { registerIncident, endIncident, hooks: HOOKS, kryptoniteNear, hitStop, addShake, ring, makeBody, removeBody, injurePerson, get cityEnv() { return cityProbe ? cityProbe.env : null; } });
 requestAnimationFrame(frame);
 })();
