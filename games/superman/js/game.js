@@ -267,6 +267,7 @@ const FX = {
   beam(x, y, z) { ADD.emit(x, y, z, R(-4, 4), R(1, 6), R(-4, 4), R(0.2, 0.5), 0.9, 0.2, 8, 2.5, 0.6, 1, 4, 0.6, 0.1, 0.3, 0.5); },
   flash(x, y, z) { ADD.emit(x, y, z, 0, 0, 0, 0.12, 0.9, 0.5, 12, 12, 12, 1, 6, 6, 6, 0, 0); },
   sparkle(x, y, z) { ADD.emit(x, y, z, R(-1, 1), R(1, 3), R(-1, 1), R(0.6, 1.2), 0.4, 0.1, 4, 3.2, 1.2, 1, 2, 1.5, 0.4, -0.05, 0.5); },
+  paper(x, y, z, vx, vy, vz) { SMK.emit(x, y, z, vx, vy, vz, R(2, 4), 0.32, 0.26, 0.95, 0.93, 0.86, 0.95, 0.9, 0.88, 0.8, 0.12, 1.1); },
   kryp(x, y, z) { ADD.emit(x + R(-2, 2), y + R(-2, 2), z + R(-2, 2), R(-2, 2), R(-2, 2), R(-2, 2), R(0.4, 0.9), 1.8, 0.4, 0.6, 5, 1, 0.9, 0.2, 2, 0.4, 0, 0.6); }
 };
 
@@ -278,7 +279,12 @@ function initAudio() {
   const c = new AC(); AU.ctx = c;
   const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
   AU.master = c.createGain(); AU.master.gain.value = 0.75;
-  AU.master.connect(comp); comp.connect(c.destination);
+  // the world bus runs through a duck (low-pass + gain) so super hearing can muffle the city;
+  // heard voices go to their own bus that bypasses it
+  AU.duckF = c.createBiquadFilter(); AU.duckF.type = 'lowpass'; AU.duckF.frequency.value = 20000; AU.duckF.Q.value = 0.5;
+  AU.duckG = c.createGain(); AU.duckG.gain.value = 1;
+  AU.master.connect(AU.duckF); AU.duckF.connect(AU.duckG); AU.duckG.connect(comp); comp.connect(c.destination);
+  AU.hearBus = c.createGain(); AU.hearBus.gain.value = 0; AU.hearBus.connect(comp);
   const len = c.sampleRate * 2, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
   for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
   AU.noise = buf;
@@ -304,20 +310,20 @@ function sfxOK(name, gap) {
   const t = AU.ctx.currentTime; if (AU.last[name] && t - AU.last[name] < gap) return false; AU.last[name] = t; return true;
 }
 function distVol(p) { return p ? 1 / (1 + camera.position.distanceTo(p) / 70) : 1; }
-function sfxNoise(vol, dur, type, freq, freqEnd, q) {
+function sfxNoise(vol, dur, type, freq, freqEnd, q, dest) {
   const c = AU.ctx, t = c.currentTime;
   const s = c.createBufferSource(); s.buffer = AU.noise;
   const f = c.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t); f.Q.value = q || 0.7;
   if (freqEnd) f.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
   const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  s.connect(f); f.connect(g); g.connect(AU.master); s.start(t, Math.random()); s.stop(t + dur + 0.05);
+  s.connect(f); f.connect(g); g.connect(dest || AU.master); s.start(t, Math.random()); s.stop(t + dur + 0.05);
 }
-function sfxTone(vol, dur, type, f0, f1) {
+function sfxTone(vol, dur, type, f0, f1, dest) {
   const c = AU.ctx, t = c.currentTime;
   const o = c.createOscillator(); o.type = type; o.frequency.setValueAtTime(f0, t);
   if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + dur);
   const g = c.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(g); g.connect(AU.master); o.start(t); o.stop(t + dur + 0.05);
+  o.connect(g); g.connect(dest || AU.master); o.start(t); o.stop(t + dur + 0.05);
 }
 const SFX = {
   punch(p, k) { if (!sfxOK('punch', 0.05)) return; const v = distVol(p) * (k || 1); sfxTone(0.9 * v, 0.35, 'sine', 120, 38); sfxNoise(0.6 * v, 0.25, 'lowpass', 2200, 200); },
@@ -334,8 +340,31 @@ const SFX = {
   good() { if (!sfxOK('good', 0.3)) return; sfxTone(0.2, 0.25, 'triangle', 660); setTimeout(() => AU.ctx && sfxTone(0.2, 0.4, 'triangle', 990), 140); },
   cheer(p) { if (!sfxOK('cheer', 1)) return; const v = distVol(p); for (let i = 0; i < 6; i++) setTimeout(() => AU.ctx && sfxNoise(0.25 * v, 0.6, 'bandpass', R(900, 1800), null, 3), i * 60); },
   freezeHit() { if (!sfxOK('frz', 0.15)) return; sfxTone(0.15, 0.3, 'triangle', 2600, 1200); },
-  heartbeat() { if (!sfxOK('hb', 0.9)) return; sfxTone(0.35, 0.12, 'sine', 60, 40); setTimeout(() => AU.ctx && sfxTone(0.28, 0.12, 'sine', 55, 38), 180); }
+  heartbeat() { if (!sfxOK('hb', 0.9)) return; sfxTone(0.35, 0.12, 'sine', 60, 40); setTimeout(() => AU.ctx && sfxTone(0.28, 0.12, 'sine', 55, 38), 180); },
+  // ground super speed hits top speed: a whip-crack of displaced air (no shock wave, no glass)
+  crack(k) { if (!sfxOK('crack', 0.6)) return; sfxNoise(1.2 * k, 0.04, 'highpass', 1800); sfxNoise(0.7 * k, 0.6, 'lowpass', 1400, 80); sfxTone(0.5 * k, 0.5, 'sine', 90, 30); }
 };
+// procedural voices for super hearing (no audio files): a buzzy glottal source through three
+// formant band-passes, gliding between vowels; `dest` is the per-source panner chain
+function sfxVoice(dest, vol, f0, vowels, dur, breath) {
+  const c = AU.ctx, t = c.currentTime;
+  const o = c.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(f0 * 0.92, t); o.frequency.linearRampToValueAtTime(f0 * 1.12, t + dur * 0.35); o.frequency.linearRampToValueAtTime(f0 * 0.8, t + dur);
+  const vib = c.createOscillator(), vg = c.createGain(); vib.frequency.value = 6.5; vg.gain.value = f0 * 0.03; vib.connect(vg); vg.connect(o.frequency);
+  const n = c.createBufferSource(); n.buffer = AU.noise; const ng = c.createGain(); ng.gain.value = breath || 0.25; n.connect(ng);
+  const env = c.createGain();
+  env.gain.setValueAtTime(0.0001, t); env.gain.exponentialRampToValueAtTime(vol, t + 0.03);
+  env.gain.setValueAtTime(vol, t + dur * 0.8); env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  for (let i = 0; i < 3; i++) {
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = [7, 11, 13][i];
+    vowels.forEach((v, k) => f.frequency[k ? 'linearRampToValueAtTime' : 'setValueAtTime'](v[i], t + dur * k / Math.max(1, vowels.length - 1)));
+    const fg = c.createGain(); fg.gain.value = [1, 0.6, 0.3][i];
+    o.connect(f); ng.connect(f); f.connect(fg); fg.connect(env);
+  }
+  env.connect(dest);
+  o.start(t); vib.start(t); n.start(t, Math.random()); o.stop(t + dur + 0.05); vib.stop(t + dur + 0.05); n.stop(t + dur + 0.05);
+}
+const VOW = { e: [530, 1840, 2480], l: [400, 1100, 2600], u: [320, 870, 2250], a: [800, 1250, 2600], o: [500, 900, 2400], ey: [440, 2100, 2700] };
 
 // ============================================================ shared textures
 function cnv(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return [c, c.getContext('2d')]; }
@@ -867,7 +896,8 @@ if (aMask > 0.0) {
   const city = new THREE.Mesh(new THREE.PlaneGeometry(480, 480, 96, 96), cityMat);
   city.rotation.x = -Math.PI / 2; city.position.y = 0.02; city.receiveShadow = true; scene.add(city);
   const land = new THREE.Mesh(new THREE.PlaneGeometry(800000, 400000), new THREE.MeshStandardMaterial({ color: lin(0x5f604c), roughness: 1 }));
-  land.rotation.x = -Math.PI / 2; land.position.z = WATER_Z - 200000; land.position.y = -0.4; // well below the streets: depth across an 800 km triangle is only good to a few cm land.receiveShadow = true; scene.add(land);
+  land.rotation.x = -Math.PI / 2; land.position.z = WATER_Z - 200000; land.position.y = -0.4; // well below the streets: depth across an 800 km triangle is only good to a few cm
+  land.receiveShadow = true; scene.add(land);
   const waterN = (() => {
     const S = 256, [c, x] = cnv(S, S), img = x.createImageData(S, S), H = new Float32Array(S * S);
     const waves = [[3, 1, 0.5, 0.2], [1, 4, 0.35, 1.3], [5, -2, 0.25, 2.1], [-2, 7, 0.18, 0.7], [9, 3, 0.1, 3.3], [-6, -11, 0.07, 4.1]];
@@ -1362,12 +1392,41 @@ function celebrate(pos, radius) {
   if (n) SFX.cheer(pos);
 }
 
+// ============================================================ power level
+// One dial (1-3) for the whole power set, picked with keys 1/2/3 and remembered. It starts at
+// full strength; earned unlocks (UNLOCKS) still stack on top of whichever level is chosen.
+let POWER = 3;
+try { const s = +localStorage.getItem('sm-power'); if (s >= 1 && s <= 3) POWER = s; } catch (_) { /* storage blocked */ }
+const PWR = {                       // [level 1, level 2, level 3]
+  fly: [350, 1020, 3500],           // boosted top speed at sea-level air, m/s (~Mach 1 / 3 / 10); thin air raises it
+  flyLow: [300, 300, 1750],         // cap below 150 m: subsonic at 1-2 so a low boom is never an accident; Mach 5 at 3
+  flyAcc: [0.7, 1, 1.5],            // boost acceleration
+  flyMax: [9000, 9000, 12000],      // orbital ceiling
+  run: [40, 90, 180],               // ground super-speed sprint, m/s
+  punch: [0.4, 1, 1.8],             // punch and throw energy
+  heat: [0.6, 1, 1.6],              // heat vision damage rate
+  heatRange: [600, 1200, 2500],     // m
+  freeze: [0.7, 1, 1.35],           // freeze breath range (45 m at 1.0)
+  clap: [0.55, 1, 1.6],             // thunder clap force and reach
+  grab: [25000, 120000, Infinity],  // heaviest thing he can lift, kg
+  hear: [300, 600, 1200]            // super hearing range, m
+};
+const pw = k => PWR[k][POWER - 1];
+const POWER_DESC = ['Level 1: Mach 1, a 40 m/s sprint, everyday strength', 'Level 2: Mach 3, a 90 m/s sprint', 'Level 3: maximum power, Mach 10+'];
+function setPower(n) {
+  n = clamp(Math.round(n), 1, 3); if (n === POWER) return POWER;
+  POWER = n;
+  try { localStorage.setItem('sm-power', String(n)); } catch (_) { /* storage blocked: lasts this session */ }
+  toast('Power ' + POWER_DESC[n - 1], n === 3 ? 'good' : '');
+  return POWER;
+}
+
 // ============================================================ Superman
 const P = {
   pos: new V3(-90, 45, 150), vel: new V3(), flying: true, grounded: false, quat: new Q4(),
   hold: null, holdRel: new Q4(), charge: 0, charging: false, punchT: 0, heat: false, freeze: false,
   xray: false, hear: false, slow: false, solar: 1, boomed: false, clapCD: 0, walkPhase: 0, hitT: 0,
-  landT: 0, bank: 0, lastYaw: 0, combatT: 0, kryp: 0
+  landT: 0, bank: 0, lastYaw: 0, combatT: 0, kryp: 0, runK: 0, runTopT: 0
 };
 let yaw = -0.54, pitch = -0.08;
 const hero = (() => {
@@ -1627,7 +1686,7 @@ function addSave(n, pos, why) {
 const UNLOCKS = [
   { id: 'boom', name: 'Glass-safe sonic boom', test: () => ledger.saves >= 10, desc: 'Save 10 people' },
   { id: 'land', name: 'Shockwave landing', test: () => ledger.hope >= 70, desc: 'Reach 70 Hope' },
-  { id: 'speed', name: 'Top speed raised to Mach 3 at sea level', test: () => ledger.resolved >= 4, desc: 'Resolve 4 emergencies' },
+  { id: 'speed', name: 'Mach 3 allowed at sea level (power 2+)', test: () => ledger.resolved >= 4, desc: 'Resolve 4 emergencies' },
   { id: 'beam', name: 'Overcharged heat vision', test: () => ledger.medals.gold >= 3, desc: 'Earn 3 gold medals' }
 ];
 const unlocked = new Set();
@@ -2329,7 +2388,7 @@ function startFire() {
     const p = placePerson('trapped', pos, { trapCell: g, danger: true }); if (p) trapped.push(p);
   }
   const inc = {
-    type: 'fire', b, trapped, limit: 150, title: `Fire at ${b.name}, people trapped on floor ${y + 1}. Hold Q: freeze breath.`,
+    type: 'fire', b, trapped, limit: 150, where: b.name, title: `Fire at ${b.name}, people trapped on floor ${y + 1}. Hold Q: freeze breath.`,
     marker() {
       let n = 0; T1.set(0, 0, 0);
       for (const g of fires) if (blkB[g] === b.id) { T1.add(blockCenter(g, T2)); n++; }
@@ -2362,7 +2421,7 @@ function startHeli() {
   h.mesh = makeHeliMesh(); h.noGrav = true; h.phase = 'trouble'; h.t = 0; h.cd = 1.2; h.landed = false; h.crashed = false; h.rotorW = 30;
   helis.push(h);
   return {
-    type: 'heli', h, limit: 70, title: 'News chopper losing power over ' + L.name + '!',
+    type: 'heli', h, limit: 70, where: L.name, title: 'News chopper losing power over ' + L.name + '!',
     marker() { return h.pos.clone().add(T1.set(0, 3, 0)); },
     update(dt) {
       h.t += dt;
@@ -2401,7 +2460,7 @@ function startMeteor(kryp) {
   m.vel.copy(target).sub(start).normalize().multiplyScalar(150); m.angVel.set(R(-1, 1), R(-1, 1), R(-1, 1));
   meteors.push(m);
   return {
-    type: 'meteor', m, limit: 40,
+    type: 'meteor', m, limit: 40, where: L.name,
     title: kryp ? 'A green meteor is falling on ' + L.name + '. Kryptonite! Deal with it from range.' : 'Meteor inbound on ' + L.name + '. Impact in about 25 seconds.',
     marker() { return m.pos.clone(); },
     update(dt) {
@@ -2458,7 +2517,7 @@ function startRobbery() {
   }
   scare(corner, 50, 12);
   return {
-    type: 'robbery', crew, limit: 120, title: `Armed robbery at ${L.name}. Shots fired.`,
+    type: 'robbery', crew, limit: 120, where: L.name, corner, title: `Armed robbery at ${L.name}. Shots fired.`,
     marker() { return corner.clone().setY(3); },
     update(dt) {
       for (const p of crew) updateThug(p, dt);
@@ -2507,7 +2566,12 @@ addEventListener('keydown', e => {
   if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.repeat) return; keys.add(e.code); onKey(e.code);
 });
-addEventListener('keyup', e => { keys.delete(e.code); });
+let hearDownT = 0;
+addEventListener('keyup', e => {
+  keys.delete(e.code);
+  // H: a tap latches hearing on/off; holding it listens only while held
+  if (e.code === 'KeyH' && P.hear && performance.now() - hearDownT > 350) P.hear = false;
+});
 addEventListener('blur', () => { keys.clear(); mouseL = mouseR = false; P.charging = false; });
 canvas.addEventListener('mousedown', e => {
   if (!started) return;
@@ -2540,7 +2604,10 @@ function onKey(code) {
   if (code === 'KeyF') { P.flying = !P.flying; if (P.flying) P.vel.y = Math.max(P.vel.y, 6); toast(P.flying ? 'Flying' : 'Walking'); }
   if (code === 'Space' && !P.flying) { if (P.grounded) { P.vel.y = 38; P.grounded = false; FX.dust(P.pos.x, P.pos.y - 0.9, P.pos.z, 0, 1, 0, 2); SFX.whoosh(); } else P.flying = true; }
   if (code === 'KeyX') { P.xray = !P.xray; setXray(P.xray); }
-  if (code === 'KeyH') { P.hear = !P.hear; toast(P.hear ? 'Listening… heartbeats and cries are marked' : 'Hearing off'); }
+  if (code === 'KeyH') { P.hear = !P.hear; hearDownT = performance.now(); if (!P.hear) toast('Hearing off'); }
+  if (code === 'Digit1' || code === 'Numpad1') setPower(1);
+  if (code === 'Digit2' || code === 'Numpad2') setPower(2);
+  if (code === 'Digit3' || code === 'Numpad3') setPower(3);
   if (code === 'KeyV') { P.slow = !P.slow; toast(P.slow ? 'The world slows to a crawl' : 'Normal time'); }
   if (code === 'KeyG') clap();
   if (code === 'KeyN') { setPaused(true); }
@@ -2613,7 +2680,7 @@ function findTarget(range, cone) {
 function punch(power) {
   P.punchT = 0.3;
   const d = aimDir(new V3()), o = T5.copy(P.pos).add(T6.set(0, 0.35, 0)).clone();
-  const E = 2.5e7 * power * (1 - kryptoniteNear() * 0.8);
+  const E = 2.5e7 * power * pw('punch') * (1 - kryptoniteNear() * 0.8);
   let t = findTarget(5.5 + power, 1.4);
   if (t && t.kind === 'rubble') t = reviveRubble(t, null) || null;
   if (t) {
@@ -2628,7 +2695,7 @@ function punch(power) {
     }
     if (t.kind === 'meteor') { if (t.kryp && kryptoniteNear() > 0.6) { toast('Kryptonite — you’re too weak up close. Use heat vision or throw debris.', 'alert'); return; } shatterMeteor(t, d); SFX.punch(at, 1.5); return; }
     if (t.frost > 0.75 && (t.kind === 'car' || t.kind === 'debris')) { if (t.kind === 'car') shatterCar(t); else shatter(t, true); return; }
-    const v = Math.min(140, Math.sqrt(2 * E / t.mass));
+    const v = Math.min(140 * Math.sqrt(pw('punch')), Math.sqrt(2 * E / t.mass));
     t.vel.addScaledVector(d, v); t.vel.y += v * 0.1; wake(t);
     t.angVel.add(T2.set(R(-1, 1), R(-1, 1), R(-1, 1)).multiplyScalar(Math.min(12, v / 8)));
     if (t.kind === 'car') { disturbCar(t); damageCar(t, v * 0.8); scare(t.pos, 40, 6); }
@@ -2673,21 +2740,22 @@ function coneImpulse(o, d, range, cosA, dv) {
 function clap() {
   if (P.clapCD > 0) return; P.clapCD = 1.0; P.punchT = 0.25; P.clapT = 0.25;
   const o = T5.copy(P.pos).add(T6.set(0, 0.3, 0)).clone(), d = aimDir(new V3());
-  SFX.clap(); addShake(0.5); hitStop(0.04);
-  ring(T1.copy(o).addScaledVector(d, 2), d, 0.5, 30, 0.6, new THREE.Color(2.2, 2.3, 2.6), 0.7);
+  const k = pw('clap'), reach = 0.6 + 0.4 * k; // force scales fully, reach more gently
+  SFX.clap(); addShake(0.5 * k); hitStop(0.04);
+  ring(T1.copy(o).addScaledVector(d, 2), d, 0.5, 30 * reach, 0.6, new THREE.Color(2.2, 2.3, 2.6), 0.7);
   for (let k = 0; k < 60; k++) { const v = T1.copy(d).multiplyScalar(R(30, 60)).add(T2.set(R(-12, 12), R(-12, 12), R(-12, 12))); FX.vapor(o.x, o.y, o.z, v.x, v.y, v.z); }
-  coneImpulse(o, d, 70, 0.6, 45);
-  const cos = Math.cos(0.6);
+  coneImpulse(o, d, 70 * reach, 0.6, 45 * k);
+  const cos = Math.cos(0.6), pr = 60 * reach;
   for (const p of people) {
     if (p.mode === 'gone' || p.mode === 'held' || p.mode === 'safe' || p.mode === 'trapped') continue;
-    const rel = T1.copy(p.pos).sub(o), dist = rel.length(); if (dist > 60 || rel.dot(d) / dist < cos) continue;
-    if (p.thug && !p.cuffed) { knock(p, T2.copy(d).multiplyScalar(10 * (1 - dist / 60) + 3).setY(3), false); p.mode = 'phys'; apprehend(p, 'Thunder clap'); }
+    const rel = T1.copy(p.pos).sub(o), dist = rel.length(); if (dist > pr || rel.dot(d) / dist < cos) continue;
+    if (p.thug && !p.cuffed) { knock(p, T2.copy(d).multiplyScalar(10 * (1 - dist / pr) + 3).setY(3), false); p.mode = 'phys'; apprehend(p, 'Thunder clap'); }
     else if (!p.thug && dist < 25) knock(p, T2.copy(d).multiplyScalar(6 * (1 - dist / 25)).setY(1.5), false);
   }
   // shots in the air get swatted
-  for (const b of bullets) { const rel = T1.copy(b.p).sub(o); if (rel.length() < 60 && rel.normalize().dot(d) > cos) { b.v.copy(d).multiplyScalar(-60).add(T2.set(R(-30, 30), R(-30, 30), R(-30, 30))); b.life = 0.3; } }
-  for (const g of fires) { const c = blockCenter(g, T1), rel = c.sub(o), dist = rel.length(); if (dist < 55 && rel.normalize().dot(d) > cos) fireI[g] -= 0.6 * (1 - dist / 55); }
-  forBlocksInSphere(o, 45, (g, dist) => {
+  for (const b of bullets) { const rel = T1.copy(b.p).sub(o); if (rel.length() < pr && rel.normalize().dot(d) > cos) { b.v.copy(d).multiplyScalar(-60).add(T2.set(R(-30, 30), R(-30, 30), R(-30, 30))); b.life = 0.3; } }
+  for (const g of fires) { const c = blockCenter(g, T1), rel = c.sub(o), dist = rel.length(); if (dist < 55 * reach && rel.normalize().dot(d) > cos) fireI[g] -= 0.6 * k * (1 - dist / (55 * reach)); }
+  forBlocksInSphere(o, 45 * reach, (g, dist) => {
     if (blkT[g] !== T_GLASS || rnd() > 0.35) return;
     const c = blockCenter(g, T1).sub(o); if (c.normalize().dot(d) < cos) return;
     breakBlock(g, T2.copy(d).multiplyScalar(10), 1, 'boom');
@@ -2704,6 +2772,7 @@ function grabOrRelease() {
     if (hit.type === 'block') {
       // rip a plate out of the wall
       const g = hit.g;
+      if (MASS_T[blkT[g]] > pw('grab')) { tooHeavy(MASS_T[blkT[g]]); return; }
       if (liveDebrisCount >= LIVE_CAP) { toast('Too much falling already. Wait a moment.', ''); return; }
       const before = liveDebrisCount; breakBlock(g, T1.set(0, 0, 0), 1, 'rip');
       if (liveDebrisCount > before) t = bodies[bodies.length - 1];
@@ -2714,6 +2783,7 @@ function grabOrRelease() {
     if (people.some(p => p.mode === 'trapped' && p.pos.distanceToSquared(P.pos) < 144)) toast('Put out the fire to free them, or break the wall open.', '');
     return;
   }
+  if (t.mass > pw('grab')) { tooHeavy(t.mass); return; }
   if (t.kind === 'person') {
     if (t.mode === 'trapped') return;
     if (t.thug && !t.cuffed) apprehend(t, 'Disarmed');
@@ -2727,6 +2797,7 @@ function grabOrRelease() {
   P.hold = t; SFX.whoosh();
   if (t.mass > 20000) toast(`${Math.round(t.mass / 1000)} tonnes. Easy.`, '');
 }
+function tooHeavy(kg) { toast(`${Math.round(kg / 1000)} tonnes is too heavy at power ${POWER}. Press 3 for full strength.`, ''); }
 function heldPos(h, o) {
   const big = Math.max(h.half.x, h.half.y, h.half.z) > 1.0;
   const up = T1.set(0, 1, 0).applyQuaternion(P.quat), fr = T2.set(0, 0, -1).applyQuaternion(P.quat);
@@ -2753,7 +2824,7 @@ function throwHeld(power) {
   const h = P.hold; if (!h) return;
   if (h.kind === 'person' && !h.thug) { releaseHeld(); toast('You set them down gently.', ''); return; }
   const d = aimDir(new V3());
-  const v = Math.min(170, Math.sqrt(2 * 3e7 * power * (1 - kryptoniteNear() * 0.8) / h.mass));
+  const v = Math.min(170 * Math.sqrt(pw('punch')), Math.sqrt(2 * 3e7 * power * pw('punch') * (1 - kryptoniteNear() * 0.8) / h.mass));
   releaseHeld(T1.copy(P.vel).addScaledVector(d, v));
   h.angVel.set(R(-1, 1), R(-1, 1), R(-1, 1)).multiplyScalar(2); h.thrown = true;
   P.punchT = 0.3; SFX.whoosh(); addShake(0.2 * power);
@@ -2774,11 +2845,11 @@ function heatVision(dt, on) {
   if (AU.ctx) AU.heat.g.gain.setTargetAtTime(can && !AU.muted ? 0.12 : 0, AU.ctx.currentTime, 0.03);
   if (!can) { if (on && P.solar <= 0.01) toast('Solar charge empty. Fly high into the sun to recharge.', 'alert'); return; }
   const weak = kryptoniteNear();
-  const power = (unlocked.has('beam') ? 1.6 : 1) * (1 - weak * 0.85);
+  const power = (unlocked.has('beam') ? 1.6 : 1) * pw('heat') * (1 - weak * 0.85);
   P.solar = Math.max(0, P.solar - dt * 0.05);
   const o = camera.position, d = aimDir(new V3());
   const camD = o.distanceTo(P.pos);
-  const hit = raycast(T1.copy(o).addScaledVector(d, camD + 0.8).clone(), d, 2500, { rubble: true });
+  const hit = raycast(T1.copy(o).addScaledVector(d, camD + 0.8).clone(), d, pw('heatRange'), { rubble: true });
   const end = hit.point;
   for (let i = 0; i < 2; i++) {
     const e = heroPoint(i ? EYE_R : EYE_L, T2), len = e.distanceTo(end);
@@ -2832,10 +2903,10 @@ function freezeBreath(dt, on) {
   const weak = 1 - kryptoniteNear() * 0.85;
   const o = heroPoint(MOUTH, new V3()), d = aimDir(new V3());
   for (let k = 0; k < 14; k++) {
-    const v = T1.copy(d).multiplyScalar(R(30, 48) * weak).add(T2.set(R(-5, 5), R(-5, 5), R(-5, 5)));
+    const v = T1.copy(d).multiplyScalar(R(30, 48) * pw('freeze') * weak).add(T2.set(R(-5, 5), R(-5, 5), R(-5, 5)));
     FX.ice(o.x, o.y, o.z, v.x + P.vel.x, v.y + P.vel.y, v.z + P.vel.z);
   }
-  const range = 45 * weak * (unlocked.has('beam') ? 1.2 : 1), cos = Math.cos(0.26);
+  const range = 45 * pw('freeze') * weak * (unlocked.has('beam') ? 1.2 : 1), cos = Math.cos(0.26);
   const inCone = (p) => { const rel = T3.copy(p).sub(o), dist = rel.length(); if (dist > range || dist < 0.01) return -1; return rel.dot(d) / dist >= cos ? dist : -1; };
   for (const b of bodies) {
     if (b.dead) continue; const dist = inCone(b.pos); if (dist < 0) continue;
@@ -2896,7 +2967,9 @@ function playerCollide(prevSpeed) {
       // superpowered flight: plough through glass, floors and columns alike; he barely slows
       if ((P.flying && sp > 12) || sp > 30 || (P.charging && P.charge > 0.8)) {
         breakBlock(g, T1.copy(P.vel).multiplyScalar(0.6).add(T2.set(R(-4, 4), R(-2, 5), R(-4, 4))), sp > 70 ? 8 : 4, 'smash');
-        P.vel.multiplyScalar(t === T_COL ? 0.97 : 0.99); smashedThisStep = true;
+        // each block costs a sliver of speed; at Mach 3-10 it is a sliver of a sliver, or a city block
+        // of sub-steps (up to 80 a frame) would grind him down to subsonic in one pass
+        P.vel.multiplyScalar(1 - (t === T_COL ? 0.03 : 0.01) * clamp(150 / Math.max(sp, 1), 0.08, 1)); smashedThisStep = true;
         continue;
       }
       const cx = ax0 + CELL / 2, cy = (ay0 + ay1) / 2, cz = az0 + CELL / 2;
@@ -2934,7 +3007,7 @@ function playerCollide(prevSpeed) {
     const n = T1.copy(p).sub(r.pos).normalize(); p.addScaledVector(n, rs2 - d);
     const vn = P.vel.dot(n); if (vn < 0) P.vel.addScaledVector(n, -vn); if (n.y > 0.5) P.grounded = true;
   });
-  if (P.flying && P.vel.length() > 40) {
+  if ((P.flying || P.runK > 0.5) && P.vel.length() > 40) {
     const list = collidersNear(p.x, p.z);
     if (list) for (const c of list) if (p.x > c.x0 && p.x < c.x1 && p.z > c.z0 && p.z < c.z1 && p.y > c.y0 && p.y < c.y1 && rnd() < 0.5) {
       FX.dust(p.x, p.y, p.z, P.vel.x * 0.3 + R(-6, 6), R(-3, 6), P.vel.z * 0.3 + R(-6, 6), 1.4); FX.glass(p.x, p.y, p.z, R(-8, 8), R(-2, 8), R(-8, 8)); break;
@@ -2965,6 +3038,63 @@ function superLanding(v) {
   for (const pp of people) { if (pp.mode !== 'free' && pp.mode !== 'cheer') continue; const d = pp.pos.distanceTo(p); if (d < r * 2.5) knock(pp, T1.copy(pp.pos).sub(p).setY(0).normalize().multiplyScalar(4).setY(2), d < r * 0.6); }
   scare(p, 60, 6);
 }
+// ground super speed: keep him planted on his feet, then let the street feel the wake
+let runFxT = 0;
+const RUN_O = new V3(), RUN_D = new V3();
+function groundRun(dt, wasGrounded) {
+  const p = P.pos, hs = Math.hypot(P.vel.x, P.vel.z), top = pw('run');
+  if (hs < top * 0.6) P.runTopT = 0;
+  if (P.runK < 0.05) return;
+  // snap to the street (or skim across the bay when fast) rather than skipping off kerbs and rubble;
+  // a leap (vel.y > 5) or a real drop (roof edge) still leaves the ground
+  const gy = groundY(p.x, p.z), water = gy < 0 && hs > 25, floor = water ? WATER_Y : gy, above = p.y - 0.97 - floor;
+  if ((wasGrounded || P.runK > 0.5) && P.vel.y < 5 && above > -1 && above < (water ? 2 : 1.2)) {
+    p.y = floor + 0.97; if (P.vel.y < 0) P.vel.y = 0; P.grounded = true;
+  }
+  if (!P.grounded) return;
+  const dir = T1.set(P.vel.x, 0, P.vel.z).divideScalar(hs || 1), k = clamp(hs / 180, 0.1, 1);
+  // kicked-up dust (or spray) and loose paper, every frame
+  // thrown out to both sides, small and low: the chase camera rides his path and must not fly through it
+  const n = Math.min(5, hs / 30) | 0;
+  for (let i = 0; i < n; i++) {
+    const side = rnd() < 0.5 ? -1 : 1, off = side * R(0.8, 1.6), sx = side * R(0.04, 0.09) * hs;
+    const x = p.x - dir.z * off, z = p.z + dir.x * off;
+    if (water) FX.water(x, WATER_Y + 0.2, z, -dir.z * sx, R(3, 8) * k + 2, dir.x * sx);
+    else SMK.emit(x, 0.2, z, -dir.z * sx + dir.x * hs * 0.05, R(0.3, 1.5) + k, dir.x * sx + dir.z * hs * 0.05, R(0.5, 1.1), 0.5, 1.8 + k, 0.42, 0.37, 0.31, 0.5, 0.5, 0.46, 0.4, 0.02, 2.5); // short-lived dust
+  }
+  if (!water && rnd() < hs / 300) FX.paper(p.x + R(-3, 3), 0.3, p.z + R(-3, 3), dir.x * hs * 0.2 + R(-4, 4), R(3, 9), dir.z * hs * 0.2 + R(-4, 4));
+  // breaking away at top speed: a whip-crack and a ring of dust (the true sonic boom needs 340 m/s)
+  if (hs > top * 0.92 && !P.runTopT) {
+    P.runTopT = 1; SFX.crack(0.4 + 0.25 * POWER); addShake(0.25 * POWER);
+    ring(T2.set(p.x, 0.3, p.z), UP, 1, 6 + 6 * POWER, 0.45, new THREE.Color(1.5, 1.45, 1.35), 0.5);
+    for (let i = 0; i < 18 * POWER; i++) { const a = R(0, 6.28), s = R(6, 14) * k + 4; FX.dust(p.x, 0.3, p.z, Math.cos(a) * s, R(0, 2), Math.sin(a) * s, 1.2); }
+  }
+  // the bow wave shoves cars, loose chunks and bystanders out of his path
+  runFxT += dt; if (runFxT < 0.08) return; runFxT = 0;
+  const reach = 5 + 9 * k;
+  // the pressure front ahead of him: loose rubble and debris kick forward (own vectors: coneImpulse uses T1/T2)
+  if (hs > 30) coneImpulse(RUN_O.set(p.x, 0.6, p.z), RUN_D.copy(dir), reach * 1.3, 0.55, Math.min(16, hs * 0.07));
+  for (const b of bodies) {
+    if (b.dead || b.held) continue;
+    const rel = T2.copy(b.pos).sub(p), along = rel.dot(dir); if (along < -4 || along > reach * 1.5) continue;
+    rel.addScaledVector(dir, -along).y = 0; const ld = rel.length(); if (ld > reach) continue;
+    const f = Math.min(12, (1 - ld / reach) * Math.min(1, Math.sqrt(8000 / b.mass)) * hs * 0.1);
+    if (f < 1) continue;
+    if (ld < 0.05) rel.set(-dir.z, 0, dir.x);
+    b.vel.addScaledVector(rel.normalize(), f).addScaledVector(dir, f * 0.3).y += f * 0.3; wake(b);
+    if (b.kind === 'car') disturbCar(b);
+  }
+  for (const pp of people) {
+    if ((pp.mode !== 'free' && pp.mode !== 'cheer' && pp.mode !== 'thug') || (pp.thug && pp.cuffed)) continue;
+    const rel = T2.copy(pp.pos).sub(p), along = rel.dot(dir); if (along < -3 || along > reach) continue;
+    rel.addScaledVector(dir, -along).y = 0; const ld = rel.length(); if (ld > reach * 0.6) continue;
+    if (ld < 0.05) rel.set(-dir.z, 0, dir.x);
+    // gentle enough to land on their feet (impacts over 10.5 m/s injure)
+    knock(pp, rel.normalize().multiplyScalar(lerp(6, 3, ld / (reach * 0.6))).setY(2.5), false);
+    if (pp.thug) apprehend(pp, 'Bowled over');
+  }
+  scare(p, 25 + 25 * k, 4);
+}
 function updatePlayer(dt) {
   const fwd = aimDir(new V3());
   const right = new V3(Math.cos(yaw), 0, -Math.sin(yaw));
@@ -2984,9 +3114,11 @@ function updatePlayer(dt) {
     const sp = P.vel.length();
     let allowed = 75;
     if (wish.lengthSq() > 0.01) {
-      const vmaxBase = unlocked.has('speed') ? 1020 : 480;
-      const vmax = (boost ? (alt < 150 ? 300 : Math.min(9000, vmaxBase * Math.sqrt(1.225 / rho))) : 75) * weak;
-      const acc = (boost ? 140 + sp * 1.3 : 55) * weak;
+      // top speed comes from the power level; below 150 m a lower cap keeps booms off the streets
+      // (the 'speed' unlock lifts it to Mach 3, never past the level's own top speed)
+      const top = pw('fly'), low = Math.min(top, Math.max(pw('flyLow'), POWER >= 2 && unlocked.has('speed') ? 1020 : 0));
+      const vmax = (boost ? (alt < 150 ? low : Math.min(pw('flyMax'), top * Math.sqrt(1.225 / rho))) : 75) * weak;
+      const acc = (boost ? (140 + sp * 1.3) * pw('flyAcc') : 55) * weak;
       P.vel.addScaledVector(wish, acc * dt);
       const along = P.vel.dot(wish);
       if (along > 0) { // carve turns: bleed sideways velocity so flight follows the aim
@@ -2994,7 +3126,7 @@ function updatePlayer(dt) {
         P.vel.addScaledVector(side, -Math.min(1, dt * (boost ? 2.6 : 3.5)));
         P.vel.addScaledVector(wish, side.length() * Math.min(1, dt * (boost ? 2.6 : 3.5)) * 0.85);
       }
-      allowed = Math.max(vmax, sp - 400 * dt);
+      allowed = Math.max(vmax, sp - Math.max(400, sp * 0.8) * dt); // bleed off quickly, not instantly
       const s2 = P.vel.length(); if (s2 > allowed) P.vel.multiplyScalar(allowed / s2);
     } else P.vel.multiplyScalar(Math.exp(-2.4 * dt));
     if (P.kryp > 0.2) P.vel.y -= G * P.kryp * dt * 2;
@@ -3002,15 +3134,20 @@ function updatePlayer(dt) {
     P.vel.y -= G * dt;
     const fH = T1.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     const wish = T2.copy(fH).multiplyScalar(mz).addScaledVector(right, mx); if (wish.lengthSq() > 1) wish.normalize();
-    const target = (boost ? 70 : 8) * weak, acc = P.grounded ? (boost ? 160 : 60) : 12;
+    // Shift on foot is a real sprint (PWR.run), with traction to match; airborne control stays weak
+    const runTop = pw('run') * weak, onFoot = P.grounded || P.runK > 0.3;
+    const target = boost ? runTop : 8 * weak, acc = onFoot ? (boost ? 60 + runTop * 1.6 : 60) : 12;
     const vh = T3.set(P.vel.x, 0, P.vel.z), want = T4.copy(wish).multiplyScalar(target), dv = want.sub(vh);
     const dl = dv.length(), step = acc * dt; if (dl > step) dv.multiplyScalar(step / dl);
     P.vel.x += dv.x; P.vel.z += dv.z;
-    P.walkPhase += vh.length() * dt * 1.7;
-    if (boost && P.grounded && vh.length() > 20 && rnd() < 0.8) FX.dust(P.pos.x, 0.2, P.pos.z, -P.vel.x * 0.1, 1, -P.vel.z * 0.1, 1);
+    const hs = Math.hypot(P.vel.x, P.vel.z);
+    // stride rate grows with speed but stays readable at 60 fps (it used to alias into a glide)
+    P.walkPhase += dt * Math.min(hs * 1.7, 12 + hs * 0.1);
+    P.runK = lerp(P.runK, boost && wish.lengthSq() > 0.01 ? clamp((hs - 10) / (runTop * 0.5), 0, 1) : 0, 1 - Math.exp(-6 * dt));
   }
+  if (P.flying) P.runK = 0;
   // integrate with sub-steps so fast flight sweeps through blocks instead of tunnelling
-  const prevSpeed = P.vel.length();
+  const prevSpeed = P.vel.length(), wasGrounded = P.grounded;
   P.grounded = false;
   const disp = P.vel.length() * dt, steps = Math.min(80, Math.max(1, Math.ceil(disp / 1.2)));
   for (let s = 0; s < steps; s++) {
@@ -3018,6 +3155,7 @@ function updatePlayer(dt) {
     if (P.pos.y < MAXH + 3 || P.pos.y < 3) playerCollide(prevSpeed);
   }
   P.pos.y = Math.min(P.pos.y, 160000);
+  if (!P.flying) groundRun(dt, wasGrounded);
   // body collisions: he is effectively immovable; things bounce off him
   const ps = P.vel.length();
   for (const b of bodies) {
@@ -3036,6 +3174,9 @@ function updatePlayer(dt) {
   }
   if (mach >= 1 && !P.boomed) { P.boomed = true; sonicBoom(); }
   if (mach < 0.9) P.boomed = false;
+  // power 3, low and supersonic: the shock wave keeps raking the street behind him (that's the point)
+  P.shockT = (P.shockT || 0) - dt;
+  if (POWER === 3 && mach > 1.2 && alt < 80 && !unlocked.has('boom') && P.shockT <= 0) { P.shockT = 0.2; shockGlass(P.pos, clamp(12 + ps * 0.008, 12, 30), 0.35); }
   if (ps > 1100 && rho > 0.002) for (let k = 0; k < 8; k++) { const v = T1.copy(P.vel).multiplyScalar(0.92); FX.plasma(P.pos.x + R(-1, 1), P.pos.y + R(-1, 1), P.pos.z + R(-1, 1), v.x, v.y, v.z); }
   // wakes: dust over land, spray over water
   if (P.flying && ps > 35) {
@@ -3090,11 +3231,7 @@ function sonicBoom() {
   const rad = 50 * clamp(airRho(p.y) / 1.225, 0, 1);
   if (rad < 5) return;
   if (unlocked.has('boom')) { toast('Mach 1 \u2014 controlled boom, no glass broken', ''); return; }
-  let shattered = 0;
-  forBlocksInSphere(p, rad, (g, d) => {
-    if (blkT[g] !== T_GLASS || rnd() > 0.55 * (1 - d / rad)) return;
-    breakBlock(g, T2.copy(blockCenter(g, T3)).sub(p).normalize().multiplyScalar(12), 1, 'boom'); shattered++;
-  });
+  const shattered = shockGlass(p, rad, 0.55);
   for (const pp of people) {
     if (pp.mode !== 'free' && pp.mode !== 'cheer') continue; const d = pp.pos.distanceTo(p);
     if (d < rad * 1.5) knock(pp, T2.copy(pp.pos).sub(p).setY(0).normalize().multiplyScalar(3).setY(1), false);
@@ -3102,6 +3239,14 @@ function sonicBoom() {
   for (const c of cars) if (!c.dead && c.pos.distanceTo(p) < rad * 1.5) c.alarm = 8;
   if (shattered > 8) { toast(`Sonic boom shattered ${shattered} windows. Fly higher before going supersonic.`, 'alert'); hopeHit(Math.min(4, shattered / 8)); }
   else toast('Mach 1', '');
+}
+function shockGlass(p, rad, prob) {
+  let n = 0;
+  forBlocksInSphere(p, rad, (g, d) => {
+    if (blkT[g] !== T_GLASS || rnd() > prob * (1 - d / rad)) return;
+    breakBlock(g, T2.copy(blockCenter(g, T3)).sub(p).normalize().multiplyScalar(12), 1, 'boom'); n++;
+  });
+  return n;
 }
 function updateHeroPose(dt, fwd) {
   const sp = P.vel.length();
@@ -3121,8 +3266,16 @@ function updateHeroPose(dt, fwd) {
   const yawRate = (yaw - P.lastYaw) / Math.max(dt, 1e-3); P.lastYaw = yaw;
   P.bank = lerp(P.bank, clamp(yawRate * 0.25 * f, -0.8, 0.8), 1 - Math.exp(-6 * dt));
   TQ2.setFromAxisAngle(T1.set(0, 1, 0), P.bank); TQ.multiply(TQ2);
+  // sprinting: face the run direction and pitch forward about his own right axis
+  const run = !P.flying && P.runK > 0.15 ? P.runK : 0;
+  if (run) {
+    const hs = Math.hypot(P.vel.x, P.vel.z);
+    if (hs > 2) TQ.setFromAxisAngle(UP, Math.atan2(-P.vel.x, -P.vel.z));
+    TQ.multiply(TQ2.setFromAxisAngle(T1.set(1, 0, 0), -0.55 * run));
+  }
   P.quat.slerp(TQ, 1 - Math.exp(-10 * dt));
   hero.g.position.copy(P.pos); hero.g.quaternion.copy(P.quat);
+  if (run) hero.g.position.y += (Math.abs(Math.cos(P.walkPhase)) * 0.09 - 0.07) * run; // stride bob, sunk into the lean
   // limbs
   const t = simT;
   // arm z: negative swings the left arm outward, positive the right (mirror image)
@@ -3131,6 +3284,9 @@ function updateHeroPose(dt, fwd) {
   P.idleT = sp2 < 2 && !P.hold && !P.charging && P.punchT <= 0 ? (P.idleT || 0) + dt : 0;
   if (P.flying && sp2 > 80) { aR = Math.PI * 0.96; aRz = 0.05; aL = 0.15; lL = 0.05; lR = -0.02; }
   else if (P.flying && f > 0.5) { aR = 0.35; aL = 0.35; aLz = -0.2; aRz = 0.2; lL = 0.05; lR = -0.02; }
+  else if (run) { // sprint: big stride biased forward under the lean, arms pumping against the legs
+    const s = Math.sin(P.walkPhase); lL = 0.45 * run + s * 1.15; lR = 0.45 * run - s * 1.15; aL = 0.15 - s * 1.25; aR = 0.15 + s * 1.25; aLz = -0.12; aRz = 0.12;
+  }
   else if (P.idleT > 1.5) { aL = -0.3; aR = -0.3; aLz = -0.55; aRz = 0.55; lL = 0.06; lR = -0.06; }
   else if (P.flying) { aL = 0.25 + Math.sin(t * 2) * 0.05; aR = 0.25 + Math.cos(t * 2) * 0.05; aLz = -0.22; aRz = 0.22; lL = 0.12 + Math.sin(t * 1.6) * 0.06; lR = -0.05; }
   else if (P.grounded) { const s = Math.sin(P.walkPhase); lL = s * 0.7; lR = -s * 0.7; aL = -s * 0.5; aR = s * 0.5; }
@@ -3147,6 +3303,7 @@ function updateHeroPose(dt, fwd) {
   let eLx = 0.15, eRx = 0.15, eLz = 0, eRz = 0, kL = -0.05, kR = -0.05;
   if (P.flying && sp2 > 80) { eRx = 0; eLx = 0.1; kL = -0.05; kR = -0.35; }
   else if (P.flying && f > 0.5) { eLx = eRx = 0.35; kL = -0.15; kR = -0.4; }
+  else if (run) { const s = P.walkPhase; kL = -0.3 - Math.max(0, Math.sin(s + 1.6)) * 1.9; kR = -0.3 - Math.max(0, Math.sin(s + 1.6 + Math.PI)) * 1.9; eLx = eRx = 1.55; }
   else if (P.idleT > 1.5) { eLx = eRx = -0.1; eLz = 1.45; eRz = -1.45; }
   else if (P.flying) { eLx = eRx = 0.3; kL = -0.25 - Math.sin(t * 1.6) * 0.08; kR = -0.12; }
   else if (P.grounded) { const s = P.walkPhase; kL = -Math.max(0, Math.sin(s + 1.6)) * 0.9; kR = -Math.max(0, Math.sin(s + 1.6 + Math.PI)) * 0.9; eLx = eRx = 0.35; }
@@ -3155,7 +3312,7 @@ function updateHeroPose(dt, fwd) {
   if (P.punchT > 0) { eRx = 0; if (P.clapT > 0) eLx = eRx = 0.15; }
   if (P.charging) { eRx = 1.9; }
   if (P.kryp > 0.3) { eLx = 1.5; eLz = 0.6; }
-  const k = 1 - Math.exp(-14 * dt);
+  const k = 1 - Math.exp(-(run ? 45 : 14) * dt); // a ~5 Hz stride would be smoothed flat at the walking rate
   hero.elbowL.rotation.x = lerp(hero.elbowL.rotation.x, eLx, k); hero.elbowR.rotation.x = lerp(hero.elbowR.rotation.x, eRx, k);
   hero.elbowL.rotation.z = lerp(hero.elbowL.rotation.z, eLz, k); hero.elbowR.rotation.z = lerp(hero.elbowR.rotation.z, eRz, k);
   hero.kneeL.rotation.x = lerp(hero.kneeL.rotation.x, kL, k); hero.kneeR.rotation.x = lerp(hero.kneeR.rotation.x, kR, k);
@@ -3254,7 +3411,7 @@ function updatePeople(dt) {
       T2.y += Math.abs(Math.sin(p.anim * 7)) * 0.12;
     } else if (p.mode === 'phys' || p.mode === 'held') {
       legA = Math.sin(p.anim * 13) * 0.6; armL = 1.2 + Math.sin(p.anim * 11) * 0.8; armR = 1.2 + Math.cos(p.anim * 12) * 0.8;
-    } else if (p.mode === 'trapped') {
+    } else if (p.mode === 'trapped' || p.mode === 'stuck') {
       armL = Math.PI * 0.9 + Math.sin(p.anim * 6) * 0.3; armR = Math.PI * 0.9 - Math.sin(p.anim * 6) * 0.3;
     } else if (p.mode === 'thug') {
       if (p.cuffed) { kneel = true; armL = armR = -0.5; }
@@ -3306,11 +3463,14 @@ function updateCamera(dt) {
   const sp = P.vel.length();
   const combat = currentInc && currentInc.type === 'robbery' && currentInc.marker().distanceTo(P.pos) < 70;
   const walking = !P.flying && started;
-  let dist = combat ? 5.2 : walking ? 8.4 + Math.min(4, sp * 0.05) : 6.8 + Math.min(9, sp * 0.025);
+  const run = walking ? P.runK : 0;
+  // flight keeps pulling back past Mach 1 (log scale) so Mach 3 and Mach 10 read differently
+  let dist = combat ? 5.2 : walking ? 8.4 + Math.min(4, sp * 0.05) * (1 - run * 0.6) + run * 1.5 : 6.8 + Math.min(9, sp * 0.025) + Math.min(6, Math.log2(1 + sp / 400) * 2);
   if (P.hold) dist += Math.min(8, Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) * 1.4);
   if (!started) dist = 9;
   // walking frames him low and off-centre, like a third-person street camera; flight keeps him central
-  const want = T3.copy(fwd).multiplyScalar(-dist).addScaledVector(UP, combat ? 1.1 : walking ? 2.4 : 1.5).addScaledVector(right, combat ? 1.2 : walking ? 0.85 : 0.95);
+  // the sprint camera drops low behind him so the street rushes past
+  const want = T3.copy(fwd).multiplyScalar(-dist).addScaledVector(UP, combat ? 1.1 : walking ? 2.4 - run * 1.3 : 1.5).addScaledVector(right, combat ? 1.2 : walking ? 0.85 : 0.95);
   camState.off.lerp(want, 1 - Math.exp(-(combat ? 6 : 9) * dt));
   const cp = T4.copy(P.pos).add(camState.off);
   // keep the camera out of walls
@@ -3329,14 +3489,202 @@ function updateCamera(dt) {
   camState.roll = lerp(camState.roll, -P.bank * 0.35, 1 - Math.exp(-5 * dt));
   camera.rotateZ(camState.roll);
   const mach = sp / soundSpeed(P.pos.y);
-  const fovT = (combat ? 62 : 68) + Math.min(24, mach * 14 + sp * 0.03) + (P.charging ? -Math.min(6, P.charge * 5) : 0);
+  // speed FOV: the old kick saturated at ~Mach 1; this keeps growing (log) up to Mach 10+, and the sprint gets its own kick
+  const fovT = (combat ? 62 : 68) + Math.min(18, mach * 10 + sp * 0.02) + Math.min(14, Math.log2(1 + Math.max(0, mach - 1)) * 4.5) + run * 10 + (P.charging ? -Math.min(6, P.charge * 5) : 0);
   camState.fov = lerp(camState.fov, fovT, 1 - Math.exp(-4 * dt));
   camera.fov = camState.fov; camera.updateProjectionMatrix();
+  updateSpeedLines(dt, sp, mach, run);
+}
+// speed lines: streaks of air rushing past the camera, from the sprint and from Mach 0.8 up
+const SPL_N = 70, splPos = new Float32Array(SPL_N * 6), splSeed = [];
+for (let i = 0; i < SPL_N; i++) splSeed.push({ a: R(0, 6.28), r: R(2.5, 9), z: R(-10, 60) });
+const splGeo = new THREE.BufferGeometry(); splGeo.setAttribute('position', new THREE.BufferAttribute(splPos, 3).setUsage(THREE.DynamicDrawUsage));
+const splMat = new THREE.LineBasicMaterial({ color: new THREE.Color(1.6, 1.7, 1.9), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
+const speedLines = new THREE.LineSegments(splGeo, splMat); speedLines.frustumCulled = false; speedLines.visible = false; scene.add(speedLines);
+function updateSpeedLines(dt, sp, mach, run) {
+  const amt = Math.max(run * 0.8, clamp((mach - 0.8) / 2.5, 0, 1));
+  splMat.opacity = lerp(splMat.opacity, amt * 0.35, 1 - Math.exp(-5 * dt));
+  speedLines.visible = splMat.opacity > 0.01; if (!speedLines.visible || sp < 1) return;
+  const vd = T1.copy(P.vel).divideScalar(sp), a1 = T2.set(0, 1, 0).cross(vd); if (a1.lengthSq() < 1e-3) a1.set(1, 0, 0); a1.normalize();
+  const a2 = T3.copy(vd).cross(a1), c = camera.position, len = Math.min(26, 2 + sp * 0.012), flow = Math.min(sp, 900) * 0.25;
+  for (let i = 0; i < SPL_N; i++) {
+    const s = splSeed[i]; s.z -= flow * dt;
+    if (s.z < -10) { s.z = R(40, 70); s.a = R(0, 6.28); s.r = R(2.5, 9); }
+    const p = T4.copy(c).addScaledVector(vd, s.z).addScaledVector(a1, Math.cos(s.a) * s.r).addScaledVector(a2, Math.sin(s.a) * s.r), o = i * 6;
+    splPos[o] = p.x; splPos[o + 1] = p.y; splPos[o + 2] = p.z;
+    splPos[o + 3] = p.x - vd.x * len; splPos[o + 4] = p.y - vd.y * len; splPos[o + 5] = p.z - vd.z * len;
+  }
+  splGeo.attributes.position.needsUpdate = true;
+}
+
+// ============================================================ super hearing
+// While H is on (tap) or held, the city ducks under a low-pass and every need within range plays a
+// procedural, stereo-panned sound: louder when near and when looked at. Heard sources get markers.
+const HEAR = { on: false, t: 0, scanT: 0, list: [], voices: new Map(), minor: [], minorCD: 0, waitMsn: 0, nextMsn: true };
+const HEAR_CLS = { hurt: 'hurt', trap: 'trap', stuck: 'trap', crime: 'call', mug: 'call', fire: 'call', help: 'call' };
+// missions.js owns the street-level help requests; hearing only listens to them (and may nudge its
+// scheduler to open one that is due), it never runs a second mission system
+function hearMission() {
+  const A = window.SM_MISSIONS, m = A && A.current ? A.current() : null;
+  if (!m || (m.state !== 'flag' && m.state !== 'talk' && m.state !== 'active')) return null;
+  const v = m.state === 'active' && m.victim && m.victim.mode !== 'gone' ? m.victim : m.giver;
+  const pos = v && v.pos ? v.pos : m.pinPos; if (!pos) return null;
+  return { m, pos, label: (m.lines && m.lines.label) || 'a call for help' };
+}
+const hearingActive = () => started && (P.hear || keys.has('KeyH'));
+function incDesc(inc) {
+  return inc.type === 'robbery' ? `a robbery at ${inc.where}: gunshots, an alarm, shouting` : inc.type === 'fire' ? `screams and crackling flames at ${inc.where}`
+    : inc.type === 'heli' ? `a rotor failing over ${inc.where}` : `a roar high above ${inc.where}`;
+}
+function scanHearing() {
+  const range = pw('hear'), out = [], c = camera.position, aim = aimDir(T5), cone = Math.cos(0.6);
+  const add = (id, kind, pos, label) => {
+    const d = pos.distanceTo(P.pos); if (d > range) return;
+    const rel = T6.copy(pos).sub(c), rl = rel.length() || 1;
+    const look = clamp((rel.dot(aim) / rl - cone) / (1 - cone), 0, 1);
+    out.push({ id, kind, pos: pos.clone(), label, d, gain: Math.pow(1 - d / range, 1.3) * (0.3 + 0.7 * look), look });
+  };
+  for (const p of people) {
+    if (p.mode === 'down') add('p' + p.slot, 'hurt', T1.copy(p.pos), 'Heartbeat, injured');
+    else if (p.mode === 'trapped') add('p' + p.slot, 'trap', T1.copy(p.pos), 'Cry for help');
+    else if (p.mode === 'stuck') add('p' + p.slot, 'stuck', T1.copy(p.pos), 'Cry for help');
+  }
+  const inc = currentInc;
+  if (inc && inc.type === 'robbery' && inc.crew.some(p => !p.cuffed && !p.injured && p.mode !== 'gone')) add('rob', 'crime', inc.corner, 'Robbery, shots fired');
+  for (const n of HEAR.minor) if (n.kind === 'mug' && !n.done) add('mug' + n.p.slot, 'mug', n.p.pos, 'Mugging');
+  const ms = hearMission(); if (ms) add('msn', 'help', ms.pos, 'Cry for help: ' + ms.label);
+  // one source per burning building, at its fires' centre
+  const fb = new Map();
+  for (const g of fires) { const id = blkB[g]; let e = fb.get(id); if (!e) fb.set(id, e = { n: 0, p: new V3() }); if (e.n < 24) { e.p.add(blockCenter(g, T2)); e.n++; } }
+  for (const [id, e] of fb) add('f' + id, 'fire', e.p.divideScalar(e.n), people.some(p => p.mode === 'trapped' && blkB[p.trapCell] === id) ? 'Fire, people screaming' : 'Fire crackling');
+  out.sort((a, b) => b.gain - a.gain);
+  return out.slice(0, 8);
+}
+// per-source audio chain: low-pass (duller from behind) -> gain -> stereo pan -> hearing bus
+function hearVoice(id) {
+  let v = HEAR.voices.get(id); if (v) return v;
+  const c = AU.ctx, lp = c.createBiquadFilter(), g = c.createGain(), pan = c.createStereoPanner ? c.createStereoPanner() : null;
+  lp.type = 'lowpass'; lp.frequency.value = 4000; g.gain.value = 0;
+  lp.connect(g); if (pan) { g.connect(pan); pan.connect(AU.hearBus); } else g.connect(AU.hearBus);
+  v = { lp, g, pan, input: lp, a: 0, b: R(0.3, 1.5), c: R(1, 3) };
+  HEAR.voices.set(id, v); return v;
+}
+function dropVoice(id) { const v = HEAR.voices.get(id); if (!v) return; v.g.gain.setTargetAtTime(0, AU.ctx.currentTime, 0.05); setTimeout(() => { try { v.lp.disconnect(); v.g.disconnect(); if (v.pan) v.pan.disconnect(); } catch (_) { } }, 400); HEAR.voices.delete(id); }
+const HELP = [VOW.e, VOW.e, VOW.l, VOW.u];
+function playHeard(s, v, dt) {
+  const t = HEAR.t, x = v.input;
+  if (s.kind === 'hurt') {
+    if (t >= v.a) { v.a = t + 0.85; sfxTone(0.9, 0.13, 'sine', 64, 40, x); setTimeout(() => AU.ctx && sfxTone(0.7, 0.13, 'sine', 58, 38, x), 170); }
+    if (t >= v.c) { v.c = t + R(3, 6); sfxVoice(x, 0.22, R(120, 150), [VOW.o, VOW.u], 0.9, 0.6); } // a weak moan
+  } else if (s.kind === 'trap' || s.kind === 'stuck' || s.kind === 'help') {
+    if (t >= v.a) {
+      v.a = t + R(1.4, 2.6); const f0 = R(240, 330);
+      sfxVoice(x, 0.7, f0, HELP, 0.42, 0.35); setTimeout(() => AU.ctx && sfxNoise(0.25, 0.03, 'bandpass', 1500, null, 1, x), 400); // "help!" + the p
+      if (rnd() < 0.4) setTimeout(() => AU.ctx && sfxVoice(x, 0.6, f0 * 1.06, HELP, 0.4, 0.35), 620);
+    }
+  } else if (s.kind === 'crime' || s.kind === 'mug') {
+    if (s.kind === 'crime' && t >= v.a) { v.a = t + 0.6; for (let i = 0; i < 5; i++) setTimeout(() => AU.ctx && (sfxTone(0.22, 0.1, 'square', 2350, null, x), sfxTone(0.12, 0.25, 'triangle', 3150, null, x)), i * 95); } // alarm bell
+    if (t >= v.b) { v.b = t + R(1.5, 4) * (s.kind === 'mug' ? 2.5 : 1); const n = s.kind === 'mug' ? 1 : 1 + (rnd() * 3 | 0);
+      for (let i = 0; i < n; i++) setTimeout(() => AU.ctx && (sfxNoise(1.1, 0.2, 'lowpass', 1300, 180, 0.7, x), sfxTone(0.7, 0.16, 'sine', 120, 40, x)), i * 110); } // muffled gunshots
+    if (t >= v.c) { v.c = t + R(1.2, 3); if (s.kind === 'mug' && rnd() < 0.6) sfxVoice(x, 0.65, R(260, 340), HELP, 0.42, 0.35); else sfxVoice(x, 0.55, R(140, 190), [VOW.ey, VOW.ey, VOW.e], 0.3, 0.5); } // shouts
+  } else if (s.kind === 'fire') {
+    if (t >= v.a) { v.a = t + R(0.04, 0.16); sfxNoise(R(0.15, 0.5), 0.03, 'highpass', R(1800, 3500), null, 0.7, x); } // crackle
+    if (t >= v.b) { v.b = t + R(0.6, 1.4); sfxNoise(0.35, 1.2, 'lowpass', 300, 120, 0.7, x); }                    // the roar under it
+    if (s.label !== 'Fire crackling' && t >= v.c) { v.c = t + R(1.8, 3.5); sfxVoice(x, 0.55, R(300, 380), [VOW.a, VOW.a, VOW.o], 0.7, 0.4); } // cries
+  }
+}
+// ambient calls for help: a minor need (someone stranded on a roof, or a lone mugger) appears the
+// first time you listen after a cool-down. Independent of the emergency cadence in startIncident.
+function spawnMinorNeed(kind) {
+  const range = pw('hear');
+  const lots = lotInfo.filter(l => l.type === 'bld' && l.b && !(currentInc && currentInc.b === l.b));
+  const near = lots.filter(l => { const d = Math.hypot(l.lx + 20 - P.pos.x, l.lz + 20 - P.pos.z); return d > 70 && d < range * 0.8; });
+  const L = pick(near.length ? near : lots); if (!L) return null;
+  kind = kind || (rnd() < 0.5 ? 'stuck' : 'mug');
+  let p;
+  if (kind === 'stuck') {
+    const b = L.b, ins = insetAt(b, b.ny - 1);
+    p = placePerson('stuck', new V3(b.x0 + (ins + 0.5) * CELL, b.h + 0.9, (b.z0 + b.z1) / 2), { danger: true });
+  } else {
+    p = placePerson('thug', new V3(L.lx + 1.6, 0.9, L.lz + R(8, 32)), { thug: true, aimT: R(4, 6), tele: 0, burst: 0, cuffed: false });
+    if (p) scare(p.pos, 25, 8);
+  }
+  if (!p) return null;
+  const n = { kind, p, t: 0, where: L.name, done: false };
+  HEAR.minor.push(n); HEAR.minorCD = R(45, 75);
+  toast(kind === 'stuck' ? `You hear: someone stranded on the roof at ${L.name}` : `You hear: a mugging at ${L.name}`, 'alert');
+  return n;
+}
+// listening in a quiet moment surfaces someone in need: alternately a missions.js help request
+// (brought forward if the city is calm) and one of hearing's own small calls (rooftop, mugging)
+function surfaceNeed() {
+  const A = window.SM_MISSIONS;
+  const useMsn = HEAR.nextMsn && !currentInc && A && A.setSpawnTimer && A.state === 'idle';
+  HEAR.nextMsn = !HEAR.nextMsn;
+  if (!useMsn) return !!spawnMinorNeed();
+  A.setSpawnTimer(0); HEAR.waitMsn = 1.5; HEAR.minorCD = R(45, 75);
+  return true;
+}
+function updateMinorNeeds(dt) {
+  if (HEAR.minorCD > 0) HEAR.minorCD -= dt;
+  for (let i = HEAR.minor.length - 1; i >= 0; i--) {
+    const n = HEAR.minor[i], p = n.p; n.t += dt;
+    if (n.done) { if (n.t > n.doneT) { if (n.kind === 'mug' && p.mode === 'thug') p.mode = 'gone'; HEAR.minor.splice(i, 1); } continue; }
+    const finish = (after) => { n.done = true; n.doneT = n.t + after; };
+    if (n.kind === 'mug') {
+      updateThug(p, dt);
+      if (p.cuffed) { ledger.thugs++; addSave(1, p.pos, 'Mugging stopped'); finish(15); }   // police collect him later
+      else if (p.mode === 'gone' || p.injured) finish(0);
+      else if (n.t > 75) { p.mode = 'gone'; toast('The mugger got away.', ''); finish(0); }
+    } else if (p.mode !== 'stuck') finish(0);                     // carried down (the save is counted on set-down)
+    else if (n.t > 90) { p.mode = 'free'; p.danger = false; p.pos.set(p.pos.x - 6, 0.9, p.pos.z); toast(`Firefighters reached the roof at ${n.where}.`, ''); finish(0); }
+  }
+}
+function updateHearing(dt) {
+  const on = hearingActive();
+  HEAR.t += dt;
+  if (on && !HEAR.on) { // just started listening
+    HEAR.list = scanHearing(); HEAR.scanT = 0.25;
+    const inc = currentInc, ms = hearMission();
+    if (inc && !inc.heard) { inc.heard = true; toast('You hear: ' + incDesc(inc), 'alert'); }
+    else if (ms && !ms.m.heard) { ms.m.heard = true; toast(`You hear: someone crying for help, ${ms.label}, ${Math.round(ms.pos.distanceTo(P.pos) / 5) * 5} m away`, 'alert'); }
+    else if (!HEAR.minor.length && HEAR.minorCD <= 0 && surfaceNeed()) HEAR.list = scanHearing();
+    else toast(HEAR.list.length ? `Listening: ${HEAR.list.length} sound${HEAR.list.length > 1 ? 's' : ''} within ${pw('hear')} m` : `Listening: nothing within ${pw('hear')} m`, '');
+  }
+  HEAR.on = on;
+  // a request nudged out of missions.js opens on its next update: announce it once it is there,
+  // or fall back to an ambient call if the scheduler declined (an emergency due, nowhere to stand)
+  if (HEAR.waitMsn > 0) {
+    HEAR.waitMsn -= dt; const ms = hearMission();
+    if (ms && !ms.m.heard) { ms.m.heard = true; HEAR.waitMsn = 0; HEAR.scanT = 0; toast(`You hear: someone crying for help, ${ms.label}, ${Math.round(ms.pos.distanceTo(P.pos) / 5) * 5} m away`, 'alert'); }
+    else if (HEAR.waitMsn <= 0 && on && !HEAR.minor.length && spawnMinorNeed()) HEAR.scanT = 0;
+  }
+  if (on && (HEAR.scanT -= dt) <= 0) { HEAR.scanT = 0.25; HEAR.list = scanHearing(); }
+  if (!on) HEAR.list.length = 0;
+  if (!AU.ctx || !AU.hearBus) return;
+  const now = AU.ctx.currentTime, live = on && !AU.muted && !paused;
+  AU.hearBus.gain.setTargetAtTime(live ? 1 : 0, now, 0.08);
+  AU.duckF.frequency.setTargetAtTime(live ? 650 : 20000, now, 0.12);
+  AU.duckG.gain.setTargetAtTime(live ? 0.35 : 1, now, 0.12);
+  const seen = new Set();
+  if (live) {
+    // pan by bearing relative to the camera's right; behind sounds are duller
+    const cx = Math.cos(yaw), cz = -Math.sin(yaw), fx = -Math.sin(yaw), fz = -Math.cos(yaw), c = camera.position;
+    for (const s of HEAR.list) {
+      seen.add(s.id);
+      const v = hearVoice(s.id), dx = s.pos.x - c.x, dz = s.pos.z - c.z, dl = Math.hypot(dx, dz) || 1;
+      if (v.pan) v.pan.pan.setTargetAtTime(clamp((dx * cx + dz * cz) / dl, -1, 1) * 0.9, now, 0.06);
+      v.lp.frequency.setTargetAtTime(1200 + 5500 * clamp((dx * fx + dz * fz) / dl * 0.5 + 0.5, 0, 1), now, 0.08);
+      v.g.gain.setTargetAtTime(s.gain * 0.9, now, 0.08);
+      playHeard(s, v, dt);
+    }
+  }
+  for (const id of [...HEAR.voices.keys()]) if (!seen.has(id)) dropVoice(id);
 }
 
 // ============================================================ HUD + atmosphere
 let hudT = 0;
-const spdEl = $('spd'), machEl = $('mach'), altEl = $('alt'), rhoEl = $('rho'), modeEl = $('mode');
+const spdEl = $('spd'), machEl = $('mach'), altEl = $('alt'), rhoEl = $('rho'), modeEl = $('mode'), pwrEl = $('pwr');
 const solarBar = $('solar-bar'), solarPct = $('solar-pct'), chargeC = document.querySelector('#charge circle');
 function updateHUD(dt) {
   const sp = P.vel.length(), alt = P.pos.y;
@@ -3351,7 +3699,8 @@ function updateHUD(dt) {
     altEl.textContent = alt > 10000 ? (alt / 1000).toFixed(1) + ' km' : Math.round(alt) + ' m';
     rhoEl.textContent = airRho(alt) < 0.001 ? airRho(alt).toExponential(1) : airRho(alt).toFixed(3);
     const inc = currentInc;
-    modeEl.textContent = (P.kryp > 0.2 ? 'Kryptonite! · ' : '') + (P.flying ? (alt > 100000 ? 'Orbit' : 'Flight') : 'Walking') + (P.slow ? ' · slow time' : '') + (inc ? ` · ${Math.max(0, Math.ceil(inc.limit - inc.age))}s` : '');
+    if (pwrEl) { const t = 'Power ' + '\u25AE'.repeat(POWER) + '\u25AF'.repeat(3 - POWER) + ' ' + POWER; if (pwrEl.textContent !== t) pwrEl.textContent = t; }
+    modeEl.textContent = (P.kryp > 0.2 ? 'Kryptonite! · ' : '') + (P.flying ? (alt > 100000 ? 'Orbit' : 'Flight') : P.runK > 0.3 ? 'Super speed' : 'Walking') + (HEAR.on ? ' · listening' : '') + (P.slow ? ' · slow time' : '') + (inc ? ` · ${Math.max(0, Math.ceil(inc.limit - inc.age))}s` : '');
     $('st-saved').textContent = ledger.saves; $('st-lost').textContent = ledger.lost; $('st-inj').textContent = ledger.injuries;
     $('st-thugs').textContent = ledger.thugs + (ledger.combo > 1 ? ` (×${ledger.combo})` : '');
     $('st-res').textContent = `${ledger.resolved} · \u{1F947}${ledger.medals.gold} \u{1F948}${ledger.medals.silver} \u{1F949}${ledger.medals.bronze}`;
@@ -3364,22 +3713,23 @@ function updateHUD(dt) {
     chips.grab.classList.toggle('on', !!P.hold);
     chips.heat.classList.toggle('on', beams[0].visible);
     chips.freeze.classList.toggle('on', !!P.freeze);
-    chips.xray.classList.toggle('on', P.xray); chips.hear.classList.toggle('on', P.hear); chips.slow.classList.toggle('on', P.slow);
+    chips.xray.classList.toggle('on', P.xray); chips.hear.classList.toggle('on', HEAR.on); chips.slow.classList.toggle('on', P.slow);
     chips.clap.classList.toggle('on', P.clapCD > 0.6); chips.fly.classList.toggle('on', P.flying);
   }
   const list = [];
   if (currentInc) list.push({ pos: currentInc.marker(), cls: currentInc.m && currentInc.m.kryp ? 'kryp' : 'inc', label: currentInc.type === 'robbery' ? 'Robbery' : currentInc.type === 'fire' ? 'Fire' : currentInc.type === 'heli' ? 'Falling helicopter' : (currentInc.m && currentInc.m.kryp ? 'Kryptonite meteor' : 'Meteor'), sub: Math.round(currentInc.marker().distanceTo(P.pos) / 5) * 5 + ' m' });
   if (currentInc && currentInc.type === 'robbery') for (const p of currentInc.crew) if (p.tele > 0 && !p.cuffed) list.push({ pos: T1.copy(p.pos).setY(p.pos.y + 1.6).clone(), cls: 'hurt', label: '!', sub: 'shot coming' });
-  let hearN = 0;
+  // super hearing: one marker per heard source ("Cry for help · 240 m"); otherwise the old proximity/x-ray markers
+  for (const s of HEAR.list) list.push({ pos: T1.copy(s.pos).setY(s.pos.y + 1.4).clone(), cls: HEAR_CLS[s.kind] + (s.look > 0.5 ? ' near' : ''), label: s.label, sub: Math.round(s.d / 5) * 5 + ' m' });
   for (const p of people) {
-    if (p.mode === 'down' && (P.hear || p.pos.distanceTo(P.pos) < 70)) list.push({ pos: T1.copy(p.pos).setY(p.pos.y + 1).clone(), cls: 'hurt', label: 'Injured', sub: Math.round(p.pos.distanceTo(P.pos)) + ' m' });
-    if (p.mode === 'trapped' && (P.hear || P.xray)) { list.push({ pos: T1.copy(p.pos).setY(p.pos.y + 1).clone(), cls: 'trap', label: 'Trapped', sub: 'floor ' + (Math.floor(p.pos.y / STORY) + 1) }); hearN++; }
+    if (p.mode === 'down' && !HEAR.on && p.pos.distanceTo(P.pos) < 70) list.push({ pos: T1.copy(p.pos).setY(p.pos.y + 1).clone(), cls: 'hurt', label: 'Injured', sub: Math.round(p.pos.distanceTo(P.pos)) + ' m' });
+    if (p.mode === 'trapped' && P.xray && !HEAR.on) list.push({ pos: T1.copy(p.pos).setY(p.pos.y + 1).clone(), cls: 'trap', label: 'Trapped', sub: 'floor ' + (Math.floor(p.pos.y / STORY) + 1) });
   }
   const anyHurt = people.some(p => p.mode === 'down' || (p.mode === 'held' && p.injured));
   if (anyHurt || (P.hold && P.hold.kind === 'person') || ledger.time - onboard.hospT < 8) list.push({ pos: T1.copy(HOSP).setY(3).clone(), cls: 'hosp', label: 'Hospital', sub: Math.round(HOSP.distanceTo(P.pos)) + ' m' });
-  if (P.hear && hearN) SFX.heartbeat();
   markers(list.slice(0, 40));
 }
+let postBase = null;
 function updateAtmosphere(dt) {
   const alt = camera.position.y;
   const space = clamp(Math.log10(Math.max(1, alt / 2000)) / 1.7, 0, 1);
@@ -3395,7 +3745,11 @@ function updateAtmosphere(dt) {
   const mach = P.vel.length() / soundSpeed(P.pos.y);
   const gu = grade.uniforms;
   gu.uTime.value = simT % 100;
-  gu.uAberr.value = lerp(gu.uAberr.value, clamp((mach - 0.6) * 0.012, 0, 0.02) + (P.hitT > 0 ? 0.01 : 0), 1 - Math.exp(-5 * dt));
+  const run = P.flying ? 0 : P.runK;
+  gu.uAberr.value = lerp(gu.uAberr.value, clamp((mach - 0.6) * 0.012, 0, 0.02) + clamp((mach - 3) * 0.0015, 0, 0.01) + run * 0.01 + (P.hitT > 0 ? 0.01 : 0), 1 - Math.exp(-5 * dt));
+  // post.js blurs from Mach 0.5; a 180 m/s sprint is Mach 0.53, so slide its window down while running
+  const PT = window.__post && window.__post.tuning;
+  if (PT) { if (!postBase) postBase = [PT.machLo, PT.machHi]; PT.machLo = lerp(postBase[0], 0.04, run); PT.machHi = lerp(postBase[1], 0.75, run); }
   gu.uSat.value = lerp(gu.uSat.value, P.slow ? 0.35 : 1.08, 1 - Math.exp(-5 * dt));
   const under = camera.position.y < WATER_Y && inBay(camera.position.z);
   let tint = 0;
@@ -3485,12 +3839,15 @@ function mapPins() {
     if (p.mode === 'down') pins.push([p.pos.x, p.pos.z, 'hurt', 'Injured']);
     else if (p.mode === 'trapped') pins.push([p.pos.x, p.pos.z, 'trap', 'Trapped']);
   }
+  for (const n of HEAR.minor) if (!n.done) pins.push([n.p.pos.x, n.p.pos.z, 'call', n.kind === 'mug' ? 'Mugging' : 'Stranded']);
   const carrying = P.hold && P.hold.kind === 'person';
   if (carrying || people.some(p => p.mode === 'down')) pins.push([HOSP.x, HOSP.z, 'hosp', 'Hospital']);
   if (MAP.waypoint) pins.push([MAP.waypoint.x, MAP.waypoint.z, 'way', 'Waypoint']);
+  for (const h of mapPinHooks) h(pins); // modules (missions.js) add their own pins
   return pins;
 }
-const PIN_COL = { inc: '#ffc531', kryp: '#a6ff3d', hurt: '#ff6b6b', trap: '#9be6ff', hosp: '#57e39a', way: '#5aa9ff' };
+const mapPinHooks = [];
+const PIN_COL = { call: '#d6b4ff', inc: '#ffc531', kryp: '#a6ff3d', hurt: '#ff6b6b', trap: '#9be6ff', hosp: '#57e39a', way: '#5aa9ff' };
 function drawPin(ctx, x, y, kind, r, pulse) {
   ctx.save(); ctx.translate(x, y);
   const col = PIN_COL[kind] || '#fff';
@@ -3605,10 +3962,10 @@ $('bigmap-close').addEventListener('click', () => setMapOpen(false));
 
 // beacons: tall additive light columns rising from each alert, readable from kilometres away
 const beaconGeo = new THREE.CylinderGeometry(1, 1, 1, 20, 1, true); beaconGeo.translate(0, 0.5, 0);
-const BEACON_COL = { inc: new THREE.Color(2.6, 1.7, 0.35), kryp: new THREE.Color(0.9, 3, 0.4), hurt: new THREE.Color(2.4, 0.45, 0.45), trap: new THREE.Color(0.8, 2, 2.6), hosp: new THREE.Color(0.5, 2.4, 1.2), way: new THREE.Color(0.6, 1.4, 3) };
+const BEACON_COL = { call: new THREE.Color(1.8, 1.1, 2.8), inc: new THREE.Color(2.6, 1.7, 0.35), kryp: new THREE.Color(0.9, 3, 0.4), hurt: new THREE.Color(2.4, 0.45, 0.45), trap: new THREE.Color(0.8, 2, 2.6), hosp: new THREE.Color(0.5, 2.4, 1.2), way: new THREE.Color(0.6, 1.4, 3) };
 const beacons = [];
 function updateBeacons() {
-  const pins = mapPins().filter(p => p[2] !== 'trap' || P.xray || P.hear);
+  const pins = mapPins().filter(p => p[2] !== 'trap' || P.xray || HEAR.on);
   while (beacons.length < pins.length && beacons.length < 12) {
     const core = new THREE.Mesh(beaconGeo, new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0.55 }));
     const glow = new THREE.Mesh(beaconGeo, new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, opacity: 0.12, side: THREE.DoubleSide }));
@@ -3808,7 +4165,7 @@ function update(dt) {
     yaw = Math.atan2(-Math.sin(ta), -Math.cos(ta)); pitch = 0;
     updateHeroPose(dt, aimDir(T1));
   }
-  PROF.t('-'); updateCars(wdt); PROF.t('cars'); updatePeople(wdt); PROF.t('people'); updateIncident(wdt); updateFires(wdt); PROF.t('fires'); updateBullets(wdt);
+  PROF.t('-'); updateCars(wdt); PROF.t('cars'); updatePeople(wdt); PROF.t('people'); updateIncident(wdt); if (started) updateMinorNeeds(wdt); updateFires(wdt); PROF.t('fires'); updateBullets(wdt);
   physAcc += wdt; let n = 0;
   PROF.t('-'); while (physAcc >= 1 / 60 && n < 3) { physStep(1 / 60); physAcc -= 1 / 60; n++; } PROF.t('physics');
   if (n === 3) physAcc = 0;
@@ -3841,8 +4198,13 @@ function update(dt) {
   updateCape(dt, simT);
   updateCamera(dt);
   updateAtmosphere(dt);
-  if (started) updateHUD(dt);
+  if (started) { updateHearing(dt); updateHUD(dt); }
 }
-window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; }, MAP, setMapOpen, drawBigMap, mapPins };
+window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; }, MAP, setMapOpen, drawBigMap, mapPins,
+  // power levels + super hearing
+  get POWER() { return POWER; }, setPower, PWR, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson,
+  // street-level missions + NPC dialogue (js/missions.js)
+  mapPinHooks, PIN_COL, BEACON_COL, toast, hopeAdd, hopeHit, addSave, SFX, AU, FX, PPL, placePerson, groundY, cars, HOSP, missions: window.SM_MISSIONS || null,
+  get heatOn() { return beams[0].visible; }, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
 requestAnimationFrame(frame);
 })();
