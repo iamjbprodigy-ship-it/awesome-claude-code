@@ -181,10 +181,10 @@
       [0.46, 0.252, 0.094, 0.1, 0.0, 3.0],
       [0.5, 0.222, 0.08, 0.09, 0.004, 2.8],
       [0.535, 0.172, 0.072, 0.082, 0.006, 2.4],
-      [0.565, 0.112, 0.068, 0.074, 0.008, 2.2],
-      [0.59, 0.078, 0.066, 0.07, 0.006, 2.1],
-      [0.64, 0.07, 0.062, 0.066, 0.004, 2.0],
-      [0.69, 0.066, 0.058, 0.062, 0.002, 2.0]
+      [0.565, 0.118, 0.066, 0.076, 0.01, 2.2],
+      [0.59, 0.072, 0.062, 0.07, 0.008, 2.1],
+      [0.64, 0.061, 0.056, 0.064, 0.006, 2.0],
+      [0.69, 0.058, 0.052, 0.06, 0.004, 2.0]
     ]);
     const p = sweep({ n: 72, m: 56, s0: -0.335, s1: 0.69, cap0: 0.035, cap1: 0.03, part: 0, ring: y => {
       const [x, f, b, cz, e] = T(y); return { c: [0, y, cz], up: x, un: x, wp: f, wn: b, e };
@@ -221,10 +221,10 @@
     const H = profile([
       // y, half-width, front z, back z, exponent
       [0.618, 0.02, -0.088, -0.07, 2.6],
-      [0.628, 0.026, -0.091, -0.052, 2.6],
-      [0.645, 0.046, -0.094, -0.006, 2.5],
-      [0.665, 0.058, -0.097, 0.038, 2.4],
-      [0.69, 0.064, -0.099, 0.068, 2.3],
+      [0.628, 0.03, -0.091, -0.052, 3.0],
+      [0.645, 0.05, -0.094, -0.006, 3.0],
+      [0.665, 0.061, -0.097, 0.038, 2.8],
+      [0.69, 0.065, -0.099, 0.068, 2.5],
       [0.715, 0.068, -0.1, 0.084, 2.3],
       [0.74, 0.072, -0.099, 0.094, 2.25],
       [0.77, 0.074, -0.1, 0.1, 2.2],
@@ -246,19 +246,20 @@
       { c: [0, 0.716, -0.1], r: [0.0095, 0.014, 0.03], a: 0.012 },                         // dorsum
       { c: [0, 0.703, -0.1], r: [0.011, 0.009, 0.03], a: 0.019, p: 1.2 },                   // tip
       ...sym({ c: [0.0135, 0.7, -0.095], r: [0.0075, 0.0065, 0.02], a: 0.008 }),          // alae
-      { c: [0, 0.693, -0.1], r: [0.012, 0.004, 0.03], a: -0.004 },                         // under the nose
+      { c: [0, 0.693, -0.1], r: [0.012, 0.004, 0.03], a: -0.0025 },                        // under the nose
       { c: [0, 0.684, -0.1], r: [0.004, 0.006, 0.03], a: 0.0015 },                         // philtrum
-      { c: [0, 0.6755, -0.1], r: [0.021, 0.0045, 0.03], a: 0.0055, p: 1.3 },               // upper lip
-      { c: [0, 0.6635, -0.1], r: [0.019, 0.0045, 0.03], a: 0.005, p: 1.3 },                // lower lip
+      { c: [0, 0.6755, -0.1], r: [0.021, 0.0045, 0.03], a: 0.0065, p: 1.4 },               // upper lip
+      { c: [0, 0.6635, -0.1], r: [0.018, 0.005, 0.03], a: 0.0065, p: 1.4 },                // lower lip
       { c: [0, 0.6695, -0.1], r: [0.023, 0.0013, 0.03], a: -0.003 },                       // mouth line
       ...sym({ c: [0.023, 0.669, -0.09], r: [0.004, 0.004, 0.02], a: -0.002 }),           // corners
       { c: [0, 0.655, -0.1], r: [0.016, 0.004, 0.03], a: -0.0025 },                        // under-lip groove
       ...sym({ c: [0.011, 0.638, -0.095], r: [0.014, 0.013, 0.03], a: 0.009 }),           // square chin
-      { c: [0, 0.638, -0.1], r: [0.0028, 0.008, 0.03], a: -0.0025 },                       // cleft
+      { c: [0, 0.638, -0.1], r: [0.0026, 0.009, 0.03], a: -0.0035 },                       // cleft
       ...sym({ c: [0.05, 0.722, -0.085], r: [0.02, 0.011, 0.03], a: 0.006 }),             // cheekbones
       ...sym({ c: [0.052, 0.69, -0.085], r: [0.016, 0.014, 0.03], a: -0.003 }),           // cheek hollows
       ...sym({ c: [0.024, 0.688, -0.1], r: [0.004, 0.012, 0.03], a: -0.0018 }),           // nasolabial folds
-      ...sym({ c: [0.058, 0.652, 0.0], r: [0.014, 0.012, 0.03], a: 0.005 }),              // jaw angles
+      ...sym({ c: [0.06, 0.652, 0.0], r: [0.014, 0.012, 0.03], a: 0.006 }),              // jaw angles
+      ...sym({ c: [0.045, 0.642, -0.06], r: [0.02, 0.006, 0.03], a: 0.003 }),             // jawline
       ...sym({ c: [0.07, 0.76, -0.05], r: [0.012, 0.018, 0.02], a: -0.003 })              // temples
     ];
     // hair: a mask from the hairline, raised into volume with a side part and a front lift
@@ -268,8 +269,9 @@
       p.mask[i] = sstep(-0.004, 0.004, y - hl(Math.abs(Math.atan2(x, -z))));
     }
     const lift = [
-      { c: [0.012, 0.826, -0.07], r: [0.05, 0.022, 0.035], a: 0.007 },
-      { c: [-0.036, 0.84, 0.0], r: [0.0035, 0.035, 0.09], a: -0.0045 }
+      { c: [0.018, 0.826, -0.065], r: [0.05, 0.024, 0.04], a: 0.009 },
+      { c: [0.04, 0.82, 0.0], r: [0.03, 0.03, 0.07], a: 0.005 },
+      { c: [-0.036, 0.84, 0.0], r: [0.004, 0.035, 0.09], a: -0.006 }
     ];
     displace(p, F, (x, y, z, i) => {
       const m = p.mask[i]; if (!m) return 0;
@@ -301,9 +303,9 @@
   // right upper arm, pivot frame (shoulder joint at the origin)
   function upperArmPiece() {
     const A = profile([
-      [0.065, 0.048, 0.04, 0.054, 0.054, 2.3],
-      [0.035, 0.07, 0.05, 0.068, 0.068, 2.3],
-      [0.0, 0.076, 0.054, 0.07, 0.07, 2.3],
+      [0.065, 0.05, 0.05, 0.054, 0.054, 2.3],
+      [0.035, 0.072, 0.064, 0.068, 0.068, 2.3],
+      [0.0, 0.077, 0.064, 0.07, 0.07, 2.3],
       [-0.06, 0.066, 0.052, 0.062, 0.06, 2.3],
       [-0.13, 0.053, 0.049, 0.056, 0.054, 2.3],
       [-0.2, 0.048, 0.045, 0.052, 0.05, 2.3],
@@ -556,14 +558,14 @@ float smWeave(vec3 p, float aa) {
 SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
   SmSurf s;
   vec3 SUIT = ${C(0x1d3c9e)}, RED = ${C(0xb5121b)}, YEL = ${C(0xf6c414)}, GOLD = ${C(0xe8a90c)}, BOOT = ${C(0xa30e17)};
-  vec3 SKIN = ${C(0xbf8668)}, LIP = ${C(0xb4685c)}, HAIR = ${C(0x0c0d11)};
+  vec3 SKIN = ${C(0xbb8a72)}, LIP = ${C(0xa8625a)}, HAIR = ${C(0x0c0d11)};
   float e = max(aa * 0.75, 0.0004);
   float fab = 1.0;      // fabric weave amount
   s.col = SUIT; s.rough = 0.56; s.metal = 0.0; s.h = 0.0; s.skin = 0.0; s.sheen = 1.0;
   if (part > 0.5 && part < 3.5) { p = vec3(p.x, p.y - ${HC.toFixed(3)}, p.z) / ${HS.toFixed(3)} + vec3(0.0, ${HC.toFixed(3)}, 0.0); aa /= ${HS.toFixed(3)}; }
   if (part < 0.5) {
     // torso: crew collar, shield, belt with buckle, trunks
-    float collarY = 0.548 + 0.03 * smoothstep(-0.05, 0.06, p.z);
+    float collarY = 0.562 + 0.026 * smoothstep(-0.05, 0.06, p.z);
     float neck = smoothstep(collarY - e, collarY + e, p.y);
     float bc = -0.113;
     float belt = smR(0.023 + e, 0.023 - e, abs(p.y - bc));
@@ -592,7 +594,9 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
     float fz = smR(-0.06, -0.085, p.z);
     vec2 lq = vec2(p.x / 0.021, (p.y - 0.6695) / 0.0088);
     float lips = smR(1.0, 0.65, length(lq)) * fz;
-    sk = mix(sk, LIP, lips * 0.55);
+    sk = mix(sk, LIP, lips * 0.7);
+    float mline = smR(0.0016, 0.0004, abs(p.y - 0.6695 + 0.002 * smSq(p.x / 0.022))) * smR(0.024, 0.018, abs(p.x)) * fz;
+    sk = mix(sk, sk * vec3(0.32, 0.22, 0.2), mline);
     float beard = smR(0.7, 0.672, p.y) * (1.0 - lips) * smR(-0.02, -0.06, p.z + 0.02 * abs(p.x) / 0.06);
     sk *= mix(vec3(1.0), vec3(0.8, 0.82, 0.88), beard * 0.42);
     float ax = abs(p.x);
@@ -602,10 +606,13 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
     float lash = smR(0.25, 0.0, abs(length(lw) - 1.0)) * step(0.0, lw.y + 0.3) * fz;
     sk = mix(sk, sk * 0.35, lash * 0.75);
     s.col = mix(sk, HAIR, max(hair, brow * 0.9));
+    s.col = mix(s.col, SKIN * 0.55, smR(0.0022, 0.0006, abs(p.x + 0.036)) * step(0.815, p.y) * smoothstep(-0.07, -0.02, p.z) * hair);
     s.skin = 1.0 - max(hair, brow); s.rough = mix(0.6, 0.42, hair) - lips * 0.15; fab = 0.0;
     s.sheen = hair * 0.35;
     float th = atan(p.x, -p.z);
-    s.h += hair * 0.00025 * (smNoise(vec3(th * 40.0, p.y * 60.0, 0.0) + 3.0 * smNoise(p * 40.0)) - 0.5) * (1.0 - smoothstep(0.3, 0.7, aa * 60.0));
+    float strand = smNoise(vec3(p.x * 520.0, p.y * 520.0, p.z * 45.0) + 2.0 * smNoise(p * 35.0));
+    s.h += hair * 0.0003 * (strand - 0.5) * (1.0 - smoothstep(0.3, 0.7, aa * 520.0 / 6.0));
+    s.rough += hair * 0.22 * (smNoise(vec3(p.x * 160.0, p.y * 160.0, p.z * 14.0)) - 0.4);
     s.h += (1.0 - hair) * 0.00007 * (smNoise(p * 1400.0) - 0.5) * (1.0 - smoothstep(0.1, 0.4, aa * 1400.0 / 6.0));
   } else if (part < 2.5) {
     s.col = HAIR; s.rough = 0.4; s.sheen = 0.3; fab = 0.0;
@@ -630,7 +637,7 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
   } else if (part < 7.5) {
     // thigh: suit with the trunks' leg cut, high on the outside
     float a = atan(p.x * side, -p.z);
-    float hem = -0.098 + 0.078 * pow(0.5 + 0.5 * sin(a), 1.6);
+    float hem = -0.09 + 0.1 * pow(0.5 + 0.5 * sin(a), 1.4);
     float tr = smoothstep(hem - e, hem + e, p.y);
     s.col = mix(SUIT, RED, tr);
     s.h += tr * 0.0006 + 0.0012 * exp(-smSq((p.y - hem - 0.003) / 0.0025));
@@ -688,7 +695,7 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
       float ndl = dot(geometry.normal, L);
       // skin: light wraps past the terminator with a warm subsurface tint
       float wrap = max(0.0, (ndl + 0.5) / 1.5) - max(0.0, ndl);
-      reflectedLight.directDiffuse += smS.skin * diffuseColor.rgb * directionalLights[0].color * wrap * vec3(1.0, 0.5, 0.4) * 0.55;
+      reflectedLight.directDiffuse += smS.skin * diffuseColor.rgb * directionalLights[0].color * wrap * vec3(1.0, 0.62, 0.52) * 0.28;
       // grazing sheen picks up the sun from behind
       reflectedLight.directSpecular += smS.sheen * 0.2 * rim * sheenCol * directionalLights[0].color * saturate(dot(-geometry.viewDir, L) * 0.6 + 0.4) * saturate(ndl + 0.35);
     #endif
@@ -711,8 +718,8 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
   vec2 cuv = vCapeUv;
   float hem = 1.0 - smoothstep(0.012, 0.05, cuv.y);
   float sideHem = 1.0 - smoothstep(0.008, 0.03, min(cuv.x, 1.0 - cuv.x));
-  vec4 cS = texture2D(smCapeS, vec2((cuv.x - 0.5) / 0.34 + 0.5, (cuv.y - 0.64) / 0.135 + 0.5));
-  float cY = cS.r * cOut * step(abs(cuv.x - 0.5), 0.17) * step(abs(cuv.y - 0.64), 0.0675);
+  vec4 cS = texture2D(smCapeS, vec2((cuv.x - 0.5) / 0.36 + 0.5, (cuv.y - 0.77) / 0.12 + 0.5));
+  float cY = cS.r * cOut * step(abs(cuv.x - 0.5), 0.18) * step(abs(cuv.y - 0.77), 0.06);
   vec3 cCol = diffuseColor.rgb * mix(1.0, 0.62, max(hem, sideHem * 0.7)) * mix(0.66, 1.0, cOut);
   vec2 cFw = fwidth(cuv * vec2(600.0, 1300.0));
   float cWeave = sin(cuv.x * 3770.0) * sin(cuv.y * 8170.0) * (1.0 - smoothstep(0.15, 0.45, max(cFw.x, cFw.y) / 6.28));

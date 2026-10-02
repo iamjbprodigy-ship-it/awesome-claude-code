@@ -1461,7 +1461,7 @@ const hero = (() => {
   const pts = [], prev = [], rest = [], cons = [];
   for (let r = 0; r < CH; r++) for (let c = 0; c < CW; c++) {
     const t = r / (CH - 1), w = 0.4 + 0.3 * t;
-    const v = new V3((c / (CW - 1) - 0.5) * w, 0.48 - r * 0.112 * 11 / (CH - 1), (detailed ? 0.15 : 0.17) + t * 0.03);
+    const v = new V3((c / (CW - 1) - 0.5) * w, 0.48 - r * 0.112 * 11 / (CH - 1), (detailed ? 0.15 + 0.022 * t * Math.cos(c / (CW - 1) * Math.PI * 4) : 0.17) + t * 0.03); // soft pleats
     pts.push(v.clone()); prev.push(v.clone()); rest.push(v.clone());
   }
   const idx = (r, c) => r * CW + c;
