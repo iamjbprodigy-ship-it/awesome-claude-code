@@ -578,6 +578,125 @@ SCENARIOS.push({
     ['screenshots written', r.shots.length === 3, r.shots.join(', ')]]
 });
 
+// Set pieces (js/setpieces.js): the runaway bus and the falling airliner, demo steps 7 and 8.
+// SP_DRIVE runs in the page: helpers that drive each outcome with real inputs (positioning,
+// E through setpieces.press/release, Q held in keys, an analog push like a gamepad stick).
+const SP_DRIVE = `(() => {
+  const g = __game, S = g.setpieces || window.SM_SETPIECES, P = g.P, V = THREE.Vector3, D2R = Math.PI / 180;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const aimAt = (v) => { const d = new V().copy(v).sub(P.pos); d.y -= 0.66; d.normalize(); g.setYawPitch(Math.atan2(-d.x, -d.z), Math.asin(d.y)); };
+  const reset = () => { g.keys.clear(); S.push(null); if (P.hold) g.grabOrRelease(); if (g.currentInc) g.endIncident(false, 'test reset'); g.deferIncident(1e9); P.vel.set(0, 0, 0); };
+  function bus(mode) {
+    reset(); P.flying = true; P.pos.set(-90, 60, 0); g.step(2);
+    const h0 = g.ledger.hope, r0 = g.ledger.resolved; S.start('bus'); const inc = g.currentInc; const lane = S.cfg.bus.x;
+    let t = 0, ms = 0, frames = 0, dist = 0, attached = false, inside = false, nan = false;
+    const step = () => { const a = performance.now(); g.step(1); ms += performance.now() - a; frames++; t++; const b = S.bus; if (b) { inside = inside || b.insideBlock; nan = nan || b.nan || !isFinite(b.s); } };
+    if (mode === 'gentle') {
+      while (S.bus.v < 20 && t < 1800) step();
+      const b = S.bus; dist = S.cfg.bus.stopZ - b.s;
+      P.flying = true; P.pos.set(lane, 1.7, b.s + 2); P.vel.set(0, 0, b.v); g.setYawPitch(0, 0);
+      S.press('KeyE'); attached = S.bus.attached;   // grab and keep holding E
+    } else if (mode === 'hard') {
+      while (S.bus.v < 24.5 && t < 2400) step();
+      const b = S.bus; dist = S.cfg.bus.stopZ - b.s;
+      P.flying = true; P.pos.set(lane, 1.7, b.s + 3); P.vel.set(0, 0, 0);
+    }
+    while (g.currentInc === inc && t < 60 * 70) { if (mode === 'hard') P.vel.set(0, 0, 0); step(); }
+    S.release('KeyE');
+    return Object.assign({ mode, seconds: +(t / 60).toFixed(1), dist: Math.round(dist), attached, ended: g.currentInc !== inc, resolved: g.ledger.resolved - r0,
+      simMs: +(ms / frames).toFixed(2), insideAny: inside, nanAny: nan, hope: +(g.ledger.hope - h0).toFixed(1) }, S.last || {});
+  }
+  function plane(mode) {
+    reset(); P.flying = true; P.pos.set(-1400, 300, 900); g.step(2);
+    const h0 = g.ledger.hope, med0 = Object.assign({}, g.ledger.medals); S.start('airliner'); const inc = g.currentInc;
+    let t = 0, ms = 0, frames = 0, fireOut = null;
+    const step = () => { const a = performance.now(); g.step(1); ms += performance.now() - a; frames++; t++; };
+    const eng = new V(), hp = new V();
+    if (mode !== 'none') {
+      // fly alongside the burning engine and hold freeze breath on it
+      g.keys.add('KeyQ');
+      while (S.plane && S.plane.fire > 0 && t < 60 * 15) {
+        const pl = S.plane; S.hardpoint('engine', eng);
+        P.flying = true; P.pos.copy(eng).addScaledVector(pl.vel, -10 / pl.vel.length()).add(new V(0, -4, 0)); P.vel.copy(pl.vel); aimAt(eng); step();
+      }
+      g.keys.delete('KeyQ'); fireOut = S.plane ? { out: S.plane.fire <= 0, breath: +S.plane.breath.toFixed(2), age: +S.plane.age.toFixed(1) } : null;
+    }
+    if (mode === 'guide') {
+      S.hardpoint('nose', hp); P.pos.copy(hp); P.vel.copy(S.plane.vel); S.press('KeyE'); S.release('KeyE');
+      while (g.currentInc === inc && t < 60 * 90) {
+        const pl = S.plane; const alt = pl.pos.y - 2, vsT = clamp(alt * 0.08, 3, 14);
+        const thDes = clamp(0.025 * (pl.vs - vsT) + 0.05, -0.15, 0.3);
+        S.push(clamp(4 * (thDes - pl.pitch * D2R) - 3 * pl.pitchRate, -1, 1), 0); step();
+      }
+      S.push(null);
+    } else while (g.currentInc === inc && t < 60 * 90) step();
+    const res = Object.assign({ mode, seconds: +(t / 60).toFixed(1), ended: g.currentInc !== inc, fireOut, simMs: +(ms / frames).toFixed(2) }, S.last || {});
+    const medal = ['gold', 'silver', 'bronze'].find(k => g.ledger.medals[k] > med0[k]) || null;
+    res.medal = medal; res.hopeGain = +(g.ledger.hope - h0).toFixed(1);
+    g.step(360); const pl = S.plane; res.after = pl ? { phase: pl.phase, y: +pl.pos.y.toFixed(2), standers: pl.standers, speed: +Math.hypot(pl.vel.x, pl.vel.z).toFixed(1) } : null;
+    return res;
+  }
+  return { bus, plane };
+})()`;
+SCENARIOS.push(
+  {
+    name: 'setpieces',
+    run: `(() => { const g = __game; g.begin(); g.step(30); const D = ${SP_DRIVE}; const out = {};
+      out.gentle = D.bus('gentle'); out.hard = D.bus('hard'); out.alone = D.bus('none');
+      out.guide = D.plane('guide'); out.wild = D.plane('none');
+      out.reg = { bus: !!(window.SM_INCIDENTS && SM_INCIDENTS.bus), airliner: !!(window.SM_INCIDENTS && SM_INCIDENTS.airliner),
+        rotBus: SM_INCIDENTS.bus.want(5, 400) && !SM_INCIDENTS.bus.want(5, 60), rotPlane: SM_INCIDENTS.airliner.want(6, 400) && !SM_INCIDENTS.airliner.want(6, 60) };
+      return out; })()`,
+    check: r => [
+      ['both set pieces registered and in the late rotation', r.reg.bus && r.reg.airliner && r.reg.rotBus && r.reg.rotPlane, JSON.stringify(r.reg)],
+      ['bus: braced 40 m+ early and held E, it stops before the crosswalk', r.gentle.dist >= 40 && r.gentle.attached && r.gentle.success && r.gentle.short > 0, `${r.gentle.dist} m out, stopped ${(r.gentle.short || 0).toFixed(1)} m short, peak ${r.gentle.maxG} g`],
+      ['bus: gentle stop hurts nobody, 30 step off', r.gentle.hurt === 0 && r.gentle.disembarked === 30, `${r.gentle.hurt} hurt, ${r.gentle.disembarked} off`],
+      ['bus: a stationary block at 25 m/s hurts 10+', r.hard.blocked && r.hard.hurt >= 10, `${r.hard.hurt} hurt`],
+      ['bus: left alone it fails within its limit (+5 s) with lives lost', r.alone.ended && r.alone.success === false && r.alone.seconds <= 50 && r.alone.lost > 0, `${r.alone.seconds} s, ${r.alone.lost} lost`],
+      ['bus: never inside a live block, no NaN', ![r.gentle, r.hard, r.alone].some(x => x.insideAny || x.nanAny), ''],
+      ['bus: sim cost under 6 ms/frame', r.alone.simMs < 6 && r.gentle.simMs < 6, `${r.gentle.simMs} / ${r.alone.simMs} ms`],
+      ['airliner: freeze breath puts the fire out in 6 s or less', r.guide.fireOut && r.guide.fireOut.out && r.guide.fireOut.breath <= 6, JSON.stringify(r.guide.fireOut)],
+      ['airliner: guided down within limits (v/s < 6, roll < 15), 140 saved', r.guide.success && r.guide.kind === 'ditch' && r.guide.vs < 6 && r.guide.roll < 15 && r.guide.saved === 140, `v/s ${r.guide.vs}, roll ${r.guide.roll}, ${r.guide.saved} saved at ${r.guide.seconds} s`],
+      ['airliner: floats afterwards, people on the wings', r.guide.after && r.guide.after.phase === 'float' && Math.abs(r.guide.after.y - 0.5) < 1 && r.guide.after.standers > 0, JSON.stringify(r.guide.after)],
+      ['airliner: Hope gain capped (+10 passengers + medal)', r.guide.hopeGain <= 10 + ({ gold: 10, silver: 5, bronze: 1 }[r.guide.medal] || 0), `+${r.guide.hopeGain} (${r.guide.medal})`],
+      ['airliner: uncontrolled it fails before the limit', r.wild.ended && r.wild.success === false && r.wild.age < 75, `${r.wild.kind}/${r.wild.why} at ${r.wild.age} s, v/s ${r.wild.vs}`],
+      ['airliner: sim cost under 6 ms/frame, no NaN', r.guide.simMs < 6 && !r.guide.nan && !r.wild.nan, r.guide.simMs + ' ms']]
+  },
+  {
+    name: 'setpieces-budget', quality: 'high',
+    run: `(() => { const g = __game, S = g.setpieces, P = g.P, out = {}; g.begin(); g.deferIncident(1e9); const info = g.renderer.info; info.autoReset = false;
+      S.start('bus'); g.step(240); const b = S.bus; P.flying = true; P.pos.set(S.cfg.bus.x - 6, 4, b.s + 14); P.vel.set(0, 0, 0); g.setYawPitch(-0.35, -0.12); g.step(3);
+      info.reset(); g.composer.render(); out.bus = { calls: info.render.calls, tris: info.render.triangles, people: S.people };
+      S.start('airliner'); g.step(60); const v = S.hardpoint('left'); P.pos.set(v.x - 10, v.y - 6, v.z + 30); g.setYawPitch(0.3, 0.15); g.step(1);
+      info.reset(); g.composer.render(); out.plane = { calls: info.render.calls, tris: info.render.triangles };
+      return out; })()`,
+    check: r => ['bus', 'plane'].map(k => [`${k} set piece within draw-call budget (400)`, r[k].calls <= 400, `${r[k].calls} calls, ${(r[k].tris / 1e6).toFixed(2)}M tris`])
+      .concat(['bus', 'plane'].map(k => [`${k} set piece triangles within budget (3M)`, r[k].tris <= 3e6, (r[k].tris / 1e6).toFixed(2) + 'M']))
+  }
+);
+SCENARIOS.push({
+  name: 'setpieces-shots', shotsOnly: true, quality: 'high',
+  page: async (p) => {
+    const dir = path.join(OUT, 'setpieces'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [], info = {};
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    info.bus = await p.evaluate(() => { const g = __game, S = g.setpieces, P = g.P; g.begin(); g.deferIncident(1e9); g.step(20);
+      S.start('bus'); while (S.bus.v < 20) g.step(1); const b = S.bus; P.flying = true; P.pos.set(S.cfg.bus.x, 1.7, b.s + 2); P.vel.set(0, 0, b.v); S.press('KeyE');
+      g.step(50); g.setYawPitch(0.55, -0.12); g.step(4); g.render(); return S.bus; });
+    await snap('bus-holding-front.png');
+    info.plane = await p.evaluate(() => { const g = __game, S = g.setpieces, P = g.P; S.release('KeyE'); g.endIncident(true, 'shot'); g.step(2);
+      S.start('airliner'); g.step(30); g.keys.add('KeyQ');
+      for (let i = 0; i < 420 && S.plane.fire > 0; i++) { const e = S.hardpoint('engine'); P.pos.copy(e).add(new THREE.Vector3(-10, -4, 0)); P.vel.copy(S.plane.vel); const d = e.clone().sub(P.pos); d.y -= 0.66; d.normalize(); g.setYawPitch(Math.atan2(-d.x, -d.z), Math.asin(d.y)); g.step(1); }
+      g.keys.delete('KeyQ'); const v = S.hardpoint('left'); P.pos.copy(v); S.press('KeyE'); S.release('KeyE'); S.push(0.6, 0); g.step(40);
+      g.setYawPitch(2.2, 0.12); g.step(3); g.render(); S.push(null); return S.plane; });
+    await snap('airliner-wing-push-sunset.png');
+    return { info, shots };
+  },
+  check: r => [['bus braced in the shot', r.info.bus && r.info.bus.attached, JSON.stringify(r.info.bus && { v: r.info.bus.v, g: r.info.bus.g })],
+    ['Superman on the airliner wing in the shot', r.info.plane && r.info.plane.attached === 'left', JSON.stringify(r.info.plane && { y: r.info.plane.pos.y, attached: r.info.plane.attached })],
+    ['screenshots written', r.shots.length === 2, r.shots.join(', ')]]
+});
+
 const RIGS = [
   ['title', null],
   ['aerial', `g.P.flying = true; g.P.pos.set(0, 260, 380); g.setYawPitch(0, -0.18);`],
