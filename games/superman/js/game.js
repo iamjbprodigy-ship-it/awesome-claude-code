@@ -74,7 +74,11 @@ const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 450000);
 camera.rotation.order = 'YXZ';
 
 const isGL2 = renderer.capabilities.isWebGL2;
-const rtOpts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+// stencilBuffer: three r128 gives a render target without stencil a DEPTH_COMPONENT16 renderbuffer (MSAA
+// included); with stencil it allocates DEPTH24_STENCIL8. 16-bit log depth over a 450 km far plane resolves
+// only ~2e-4 x distance, so the road layers a few cm apart (asphalt, underlay, markings) z-fought and
+// dropped out beyond ~100 m. The composer's second buffer is a clone, so it inherits this.
+const rtOpts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, stencilBuffer: true };
 const mainRT = isGL2 && !LOWQ && !SHOTQ && !MEDQ && THREE.WebGLMultisampleRenderTarget
   ? Object.assign(new THREE.WebGLMultisampleRenderTarget(4, 4, rtOpts), { samples: ULTRA && PR < 1.4 ? 8 : 4 }) : new THREE.WebGLRenderTarget(4, 4, rtOpts);
 const composer = new THREE.EffectComposer(renderer, mainRT);
@@ -149,7 +153,13 @@ const skyMat = new THREE.ShaderMaterial({
   uniforms: { uSun: { value: SUN_DIR }, uSpace: { value: 0 } },
   vertexShader: SKY_VS, fragmentShader: SKY_FS, side: THREE.BackSide, depthWrite: false, fog: false
 });
-const sky = new THREE.Mesh(new THREE.SphereGeometry(380000, 48, 24), skyMat);
+// The dome rides on the camera and never writes depth, so its radius is free; it must just sit well inside
+// the far plane. At 380 km (far 450 km, near 0.1) the clip-space margin to the far plane, 2n(R-f)/(f-n),
+// was 0.031: one float32 ulp at 380000. Rounding pushed whole dome triangles past the far plane, so they
+// were clipped and left black holes (the clear colour) fanning out from the zenith whenever the player
+// looked up, at every altitude and quality. At 40 km the margin is ~0.18, about 45 ulps.
+const SKY_R = 40000;
+const sky = new THREE.Mesh(new THREE.SphereGeometry(SKY_R, 48, 24), skyMat);
 sky.renderOrder = -10; sky.frustumCulled = false;
 scene.add(sky);
 { // image-based lighting from the sky so glass, paint and water reflect the sunset
@@ -166,7 +176,7 @@ scene.add(sky);
 const stars = (() => {
   const n = 2600, p = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    T1.set(R(-1, 1), R(-0.3, 1), R(-1, 1)).normalize().multiplyScalar(300000);
+    T1.set(R(-1, 1), R(-0.3, 1), R(-1, 1)).normalize().multiplyScalar(SKY_R * 0.8); // same far-plane margin as the dome
     p[i * 3] = T1.x; p[i * 3 + 1] = T1.y; p[i * 3 + 2] = T1.z;
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(p, 3));
@@ -650,7 +660,9 @@ for (const m of typeMesh) { m.instanceMatrix.needsUpdate = true; if (m.instanceC
 
 function buildingAt(x, z) {
   const i = Math.floor((x + HALF) / PITCH), j = Math.floor((z + HALF) / PITCH);
-  if (i < 0 || j < 0 || i >= LOTS || j >= LOTS) return null;
+  // written as a positive range test so a NaN coordinate is rejected too (NaN fails every comparison, so
+  // the old `i < 0 || ...` form let it through and lotInfo[NaN].b threw every frame, freezing the loop)
+  if (!(i >= 0 && j >= 0 && i < LOTS && j < LOTS)) return null;
   return lotInfo[j * LOTS + i].b;
 }
 const cellIndex = (b, x, y, z) => b.start + (y * b.nz + z) * b.nx + x;
@@ -2450,10 +2462,19 @@ function startHeli() {
         if (rnd() < 0.8) FX.smoke(h.pos.x, h.pos.y + 1, h.pos.z, 1.2, 0.04);
         if (rnd() < 0.3) FX.fire(h.pos.x - 1, h.pos.y + 1, h.pos.z, 0.6);
       }
+      // landing is otherwise only detected inside a ground impact over 2.5 m/s, so a chopper set down gently,
+      // parked on a roof (block impacts run before onGround is set) or floating in the bay never counted as
+      // down and the incident ran forever, blocking every later emergency. At rest and free = down safely.
+      if (!h.landed && !h.crashed && h.phase === 'falling' && !h.held && (h.sleeping || ((h.onGround || h.wet) && h.vel.lengthSq() < 2.25))) h.landed = true;
       if (h.landed) { addSave(3, h.pos, h.occHurt ? 'Pilot, reporter and camera operator alive, but hurt' : 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter down safely'); }
       else if (h.crashed) { ledger.lost += 3; this.lost = 3; endIncident(false, 'The helicopter crashed.'); }
     },
-    timeout() { if (!h.landed && !h.crashed) { if (h.phase === 'trouble') { h.phase = 'falling'; h.noGrav = false; } } },
+    timeout() {
+      if (h.landed || h.crashed) return;
+      if (h.phase === 'trouble') { h.phase = 'falling'; h.noGrav = false; }
+      // still in his arms 15 s after the limit means he has them: a save (runs before the generic limit + 20 stop)
+      if (this.age > this.limit + 15) { if (h.held) { addSave(3, h.pos, 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter carried to safety'); } else endIncident(false, 'Lost contact with the helicopter.'); }
+    },
     cleanup() { setTimeout(() => removeBody(h), 25000); }
   };
 }
@@ -2491,9 +2512,15 @@ function startMeteor(kryp) {
       }
       if (kryp) for (let k = 0; k < 2; k++) FX.kryp(m.pos.x, m.pos.y, m.pos.z);
       if (m.heat >= 1) { vaporize(m); return; }
-      if (m.thrown && m.pos.y > 1500 && m.vel.y > 0) { m.done = 'space'; removeBody(m); }
+      if (m.thrown && m.pos.y > 1500 && m.vel.y > 0) { m.done = 'space'; removeBody(m); return; }
+      // once he has handled it (gravity on), a meteor that ends up at rest never "impacts": set down gently it
+      // sleeps on the street, dropped in the bay it floats. Both are defused; without this the incident never ended.
+      if (!m.held && !m.noGrav && (m.sleeping || (m.wet && m.vel.lengthSq() < 4))) { m.done = m.wet ? 'bay' : 'down'; endIncident(true, m.wet ? 'Meteor dumped in the bay' : 'Meteor set down safely'); }
     },
-    timeout() { },
+    timeout() {
+      // carried around past the limit: held means contained (runs before the generic limit + 20 stop)
+      if (this.age > this.limit + 15) endIncident(!!m.held, m.held ? 'Meteor contained' : 'The meteor was lost track of.');
+    },
     cleanup() { if (!m.dead && m.done !== 'hit') removeBody(m); }
   };
 }
@@ -3470,8 +3497,9 @@ function updateCars(dt) {
       if (blockAt(m.pos.x, m.pos.y, m.pos.z) >= 0 || m.pos.y < 3) meteorImpact(m);
     }
   }
-  for (const m of meteors) if (m.dead && m.mesh.parent) scene.remove(m.mesh);
-  for (const h of helis) if (h.dead && h.mesh.parent) scene.remove(h.mesh);
+  // drop finished helicopters and meteors entirely so the lists don't grow by one per incident
+  for (let i = meteors.length - 1; i >= 0; i--) if (meteors[i].dead) { if (meteors[i].mesh.parent) scene.remove(meteors[i].mesh); meteors.splice(i, 1); }
+  for (let i = helis.length - 1; i >= 0; i--) if (helis[i].dead) { if (helis[i].mesh.parent) scene.remove(helis[i].mesh); helis.splice(i, 1); }
 }
 const MAT_UP = new THREE.Matrix4();
 function updatePeople(dt) {
@@ -4321,6 +4349,9 @@ function frame(now) {
 // lightweight section profiler: __game.prof() returns ms per section since the last reset
 const PROF = { on: false, last: 0, acc: {}, t(name) { if (!this.on) return; const n = performance.now(); if (name !== '-') this.acc[name] = (this.acc[name] || 0) + n - this.last; this.last = n; } };
 function update(dt) {
+  // a non-finite or negative step (a bad caller, e.g. update(undefined)) would poison simT and every
+  // integrator for good; the frame loop never produces one, so just ignore it
+  if (!Number.isFinite(dt) || dt < 0) return;
   // hit-stop freezes the sim (then ramps back); the camera, its shake and the cape keep real time
   const rdt = dt; dt *= FEEL.step(rdt);
   const wdt = dt * (P.slow ? 0.12 : 1);
