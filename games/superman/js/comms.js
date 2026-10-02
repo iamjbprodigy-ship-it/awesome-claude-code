@@ -377,7 +377,7 @@
   let THREE = null, ctx = null, ready = false;
   let clock = 0;                 // real seconds while the game runs (pauses with it)
   let cur = null;                // the call on air
-  let lastStart = -99, lastEnd = -99, nextGap = 25, idleNext = 50, lastNonDispatch = -99;
+  let lastStart = -99, lastEnd = 0, nextGap = 25, idleNext = 50, lastNonDispatch = -99;
   const queue = [];              // pending calls, best first
   const history = [];            // every call: {who, text, trigger, prio, incidentType, t0, t1, cut}
   const lastPick = {};           // trigger -> last variant index (never the same twice running)
@@ -449,7 +449,7 @@
       who: line.w, text: fill(line.t, o.vars), trigger, prio: o.prio || 1, at: clock,
       notBefore: clock + (o.delay || 0), exp: clock + (o.ttl || 30), inc: o.inc || null,
       incidentType: o.incidentType !== undefined ? o.incidentType : null, group: GROUP[trigger] || null,
-      reaction: !!o.reaction, interrupt: !!o.interrupt, after: !!o.after
+      reaction: !!o.reaction, interrupt: !!o.interrupt, after: !!o.after, vi: lastPick[trigger]
     });
   }
   function say(who, text, o) {
@@ -483,7 +483,9 @@
     if (cur) {
       // only urgent calls cut in, and never on another urgent call
       const it = queue[0];
-      if (it.prio >= 3 && it.interrupt && cur.prio < 3 && clock >= it.notBefore) { hangUp(true); }
+      // (a callout for an emergency that has since been replaced counts as stale)
+      const stale = cur.inc && cur.inc !== g.currentInc;
+      if (it.prio >= 3 && it.interrupt && (cur.prio < 3 || stale) && clock >= it.notBefore) { hangUp(true); }
       else return;
     }
     for (let i = 0; i < queue.length; i++) {
@@ -530,14 +532,14 @@
     const t0 = clock;
     cur = {
       who: it.who, spk, text: it.text, trigger: it.trigger, prio: it.prio, incidentType: it.incidentType,
-      t0, tSpeak: t0 + CFG.open, tEnd: t0 + CFG.open + pl.dur + CFG.hold, plan: pl, word: -1, sylI: 0, audio: null, onEnd: it.onEnd || null
+      inc: it.inc, t0, tSpeak: t0 + CFG.open, tEnd: t0 + CFG.open + pl.dur + CFG.hold, plan: pl, word: -1, sylI: 0, audio: null, onEnd: it.onEnd || null
     };
     lastStart = t0;
     if (it.who !== 'dispatch') lastNonDispatch = t0;
     nextGap = R(CFG.gapChatter[0], CFG.gapChatter[1]);
     stats.calls++; stats.byWho[it.who] = (stats.byWho[it.who] || 0) + 1;
     recentText.push(it.text); if (recentText.length > 12) recentText.shift();
-    const rec = { who: it.who, name: spk.name, text: it.text, trigger: it.trigger, prio: it.prio, incidentType: it.incidentType, t0, t1: cur.tEnd, simT: g.simT, cut: false };
+    const rec = { who: it.who, name: spk.name, text: it.text, trigger: it.trigger, vi: it.vi === undefined ? -1 : it.vi, prio: it.prio, incidentType: it.incidentType, t0, t1: cur.tEnd, simT: g.simT, cut: false };
     history.push(rec); if (history.length > 400) history.shift();
     cur.rec = rec;
     // test-hook contract: __game.events gets a `line` entry per call
@@ -1058,7 +1060,7 @@
     clear() { queue.length = 0; if (cur) hangUp(true); },
     // card state for tests: '' (hidden), 'on ring', 'on', 'out'
     cardState() { return UI.state; },
-    cardVisible() { if (!UI.el) return false; const cs = getComputedStyle(UI.el); return cs.visibility === 'visible' && +cs.opacity > 0.5 && /\bon\b/.test(UI.el.className); },
+    cardVisible() { if (!UI.el) return false; const cs = getComputedStyle(UI.el); return cs.visibility === 'visible' && cs.display !== 'none' && /\bon\b/.test(UI.el.className) && !!UI.el.offsetWidth; },
     cardText() { return UI.el ? { name: UI.name.textContent, text: UI.said.textContent + UI.rest.textContent, said: UI.said.textContent } : null; },
     lineCount() { let n = 0; for (const k in LINES) n += LINES[k].length; return n; },
     nextGap() { return nextGap; }
