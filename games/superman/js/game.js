@@ -59,7 +59,9 @@ const DPR = window.devicePixelRatio || 1;
 // destruction budgets scale with the preset: live physics chunks and total debris/rubble pieces
 const LIVE_CAP = { low: 250, medium: 350, high: 600, ultra: 900, shot: 450 }[QUALITY];
 const DEBRIS_SLOTS = { low: 2400, medium: 3000, high: 4800, ultra: 7200, shot: 3600 }[QUALITY];
-const PR = LOWQ ? 0.5 : SHOTQ || MEDQ ? 1 : ULTRA ? Math.min(DPR, 2) : Math.min(DPR, 1.5);
+// Ultra supersamples: 1.5x native on strong GPUs (2.25x the pixels), capped at 2x device pixels; ?ss=1..2 overrides
+const SS = +(location.search.match(/[?&]ss=([\d.]+)/) || [])[1] || (ULTRA ? (STRONG_GPU ? 1.5 : 1.25) : 1);
+const PR = LOWQ ? 0.5 : SHOTQ || MEDQ ? 1 : ULTRA ? Math.min(DPR * SS, 2) : Math.min(DPR, 1.5);
 renderer.setPixelRatio(PR);
 renderer.shadowMap.enabled = !LOWQ;
 renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -74,7 +76,7 @@ camera.rotation.order = 'YXZ';
 const isGL2 = renderer.capabilities.isWebGL2;
 const rtOpts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
 const mainRT = isGL2 && !LOWQ && !SHOTQ && !MEDQ && THREE.WebGLMultisampleRenderTarget
-  ? Object.assign(new THREE.WebGLMultisampleRenderTarget(4, 4, rtOpts), { samples: ULTRA ? 8 : 4 }) : new THREE.WebGLRenderTarget(4, 4, rtOpts);
+  ? Object.assign(new THREE.WebGLMultisampleRenderTarget(4, 4, rtOpts), { samples: ULTRA && PR < 1.4 ? 8 : 4 }) : new THREE.WebGLRenderTarget(4, 4, rtOpts);
 const composer = new THREE.EffectComposer(renderer, mainRT);
 composer.addPass(new THREE.RenderPass(scene, camera));
 const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.55, 1.0);
@@ -467,6 +469,8 @@ float isRoof = 0.0;
   float seedW = vSeed;
 #endif
 vec3 base = diffuseColor.rgb;
+// real limestone and white render sit near 0.4 linear albedo; brighter paint clips to flat white in the low sun
+base *= min(1.0, 0.4 / max(dot(base, vec3(0.2126, 0.7152, 0.0722)), 1e-3));
 float gl = 0.0, fr = 0.0, nwin = 2.0, signGlow = 0.0;
 vec3 sc = vec3(0.0);
 if (st < 0.5) {
@@ -821,8 +825,7 @@ function hideBlock(g) { const t = blkT[g]; typeMesh[t].setMatrixAt(blkSub[g], ZE
   }
   for (let k = 0; k <= LOTS; k++) {
     const rc = -HALF + k * PITCH;
-    x.fillStyle = '#d9b23a';
-    for (let t = -240; t < 240; t += 6) { x.fillRect(P(t), P(rc) - 1.5, 3 * m, 3); x.fillRect(P(rc) - 1.5, P(t), 3, 3 * m); }
+    // centrelines are painted crisply in the asphalt shader (a 23 cm texel can't draw a 12 cm line)
     x.fillStyle = 'rgba(235,235,235,.75)';
     for (let k2 = 0; k2 <= LOTS; k2++) {
       const rc2 = -HALF + k2 * PITCH;
@@ -830,6 +833,7 @@ function hideBlock(g) { const t = blkT[g]; typeMesh[t].setMatrixAt(blkSub[g], ZE
     }
   }
   const cityMat = new THREE.MeshStandardMaterial({ map: tex(c, true), roughness: 0.92, metalness: 0 });
+  cityMat.extensions = { derivatives: true }; // fwidth() for the painted lines on WebGL1
   // asphalt detail in world space: aggregate grain, cracks, sealed seams, polished wheel tracks, oil, wet patches
   cityMat.onBeforeCompile = sh => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vAWP;')
@@ -842,10 +846,16 @@ float aNoise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 
       .replace('#include <map_fragment>', `#include <map_fragment>
 float aMask = 1.0 - smoothstep(0.035, 0.07, dot(diffuseColor.rgb, vec3(0.333)));
 vec2 ap = vAWP.xz;
-float aRough = 0.92;
+float aRough = 0.92, aWet = 0.0;
 if (aMask > 0.0) {
   float grain = aHash(floor(ap * 14.0)) * 0.5 + aNoise(ap * 2.3) * 0.35 + aNoise(ap * 0.31) * 0.45;
   vec3 aCol = diffuseColor.rgb * (0.82 + 0.3 * grain);
+  // macro wear: sun-faded areas, darker fresh-tar repairs cut as rectangles, a little gravel colour
+  aCol *= 0.8 + 0.4 * aNoise(ap * 0.06 + 31.0);
+  vec2 pc = floor(ap / vec2(6.5, 3.8));
+  float repair = step(0.86, aHash(pc + 5.0)) * step(0.12, fract(ap.x / 6.5)) * step(fract(ap.x / 6.5), 0.88) * step(0.15, fract(ap.y / 3.8)) * step(fract(ap.y / 3.8), 0.85);
+  aCol = mix(aCol, diffuseColor.rgb * 0.62, repair); aRough -= 0.08 * repair;
+  aCol += vec3(0.012, 0.01, 0.007) * smoothstep(0.6, 0.9, aNoise(ap * 0.7 + 3.0));
   float crack = 1.0 - smoothstep(0.0, 0.012, abs(aNoise(ap * 0.42 + 7.0) - 0.5));
   crack *= step(0.55, aNoise(ap * 0.07));
   aCol *= 1.0 - 0.45 * crack;
@@ -855,18 +865,38 @@ if (aMask > 0.0) {
   float lane = min(off.x, off.y);
   float tracks = max(smoothstep(0.5, 0.0, abs(lane - 2.6)), smoothstep(0.5, 0.0, abs(lane - 4.4)));
   aCol *= 1.0 + 0.1 * tracks; aRough -= 0.22 * tracks;
+  aCol *= 1.0 - 0.18 * smoothstep(1.4, 0.0, abs(lane - 3.5));   // the oil-drip line down the middle of each lane
+  // double yellow centrelines in world space, anti-aliased, stopping short of each junction's crosswalks
+  vec2 aw = fwidth(ap) * 0.75 + 0.002;
+  float yl = 0.0;
+  if (off.y > 14.0) yl += 1.0 - smoothstep(0.06 - aw.x, 0.06 + aw.x, abs(off.x - 0.17));
+  if (off.x > 14.0) yl += 1.0 - smoothstep(0.06 - aw.y, 0.06 + aw.y, abs(off.y - 0.17));
+  yl = clamp(yl, 0.0, 1.0) * (0.7 + 0.3 * aNoise(ap * 2.7 + 9.0));
+  aCol = mix(aCol, vec3(0.6, 0.4, 0.05), yl); aRough = mix(aRough, 0.62, yl);
   float oil = smoothstep(0.62, 0.8, aNoise(ap * 0.9)) * smoothstep(0.7, 0.0, abs(lane - 3.5));
   aCol *= 1.0 - 0.35 * oil; aRough -= 0.3 * oil;
-  float wet = smoothstep(0.74, 0.8, aNoise(ap * 0.045 + 13.0)) * smoothstep(0.35, 0.6, aNoise(ap * 0.4));
-  aCol *= 1.0 - 0.35 * wet; aRough = mix(aRough, 0.04, wet);
+  float wet = smoothstep(0.66, 0.74, aNoise(ap * 0.045 + 13.0)) * smoothstep(0.3, 0.55, aNoise(ap * 0.4));
+  aCol *= 1.0 - 0.35 * wet; aRough = mix(aRough, 0.04, wet); aWet = wet;
   diffuseColor.rgb = mix(diffuseColor.rgb, aCol, aMask);
 }`)
-      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(roughness, clamp(aRough, 0.03, 1.0), aMask);');
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(roughness, clamp(aRough, 0.03, 1.0), aMask);')
+      // aggregate relief: a two-octave height field tilts the normal so low sun glints off the stone; puddles stay flat
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+if (aMask > 0.0) {
+  float e = 0.05;
+  float h0 = aNoise(ap * 3.1) + 0.45 * aNoise(ap * 11.0);
+  float hx = aNoise((ap + vec2(e, 0.0)) * 3.1) + 0.45 * aNoise((ap + vec2(e, 0.0)) * 11.0);
+  float hz = aNoise((ap + vec2(0.0, e)) * 3.1) + 0.45 * aNoise((ap + vec2(0.0, e)) * 11.0);
+  vec3 gN = vec3(-(hx - h0) / e, 0.0, -(hz - h0) / e) * 0.03 * (1.0 - aWet);
+  normal = normalize(normal + (viewMatrix * vec4(gN, 0.0)).xyz * aMask);
+}`);
   };
-  const city = new THREE.Mesh(new THREE.PlaneGeometry(480, 480), cityMat);
+  scene.userData.cityMat = cityMat;
+  // subdivided: depth interpolated across one 480 m triangle is only good to a few cm, and the crosswalks sit just above it
+  const city = new THREE.Mesh(new THREE.PlaneGeometry(480, 480, 96, 96), cityMat);
   city.rotation.x = -Math.PI / 2; city.position.y = 0.02; city.receiveShadow = true; scene.add(city);
   const land = new THREE.Mesh(new THREE.PlaneGeometry(800000, 400000), new THREE.MeshStandardMaterial({ color: lin(0x5f604c), roughness: 1 }));
-  land.rotation.x = -Math.PI / 2; land.position.z = WATER_Z - 200000; land.receiveShadow = true; scene.add(land);
+  land.rotation.x = -Math.PI / 2; land.position.z = WATER_Z - 200000; land.position.y = -0.4; // well below the streets: depth across an 800 km triangle is only good to a few cm land.receiveShadow = true; scene.add(land);
   const waterN = (() => {
     const S = 256, [c, x] = cnv(S, S), img = x.createImageData(S, S), H = new Float32Array(S * S);
     const waves = [[3, 1, 0.5, 0.2], [1, 4, 0.35, 1.3], [5, -2, 0.25, 2.1], [-2, 7, 0.18, 0.7], [9, 3, 0.1, 3.3], [-6, -11, 0.07, 4.1]];
@@ -1497,6 +1527,7 @@ const hero = (() => {
 
 function updateCape(dt, t) {
   const C = hero.cape, n = C.pts.length;
+  if (!(dt > 0)) return; // the damping term divides by the substep: a zero or negative frame would turn the cloth to NaN
   TQ.copy(P.quat).invert();
   const grav = T1.set(0, -G, 0).applyQuaternion(TQ);
   const wind = T2.copy(P.vel).multiplyScalar(-1).applyQuaternion(TQ);
@@ -1532,6 +1563,11 @@ function updateCape(dt, t) {
       }
     }
   }
+  // self-heal: if anything ever blows up (NaN or flung metres away), snap the cloth back to rest instead of
+  // drawing giant black triangles around the hero
+  let bad = false;
+  for (let i = 0; i < n && !bad; i++) { const p = C.pts[i]; bad = !isFinite(p.x + p.y + p.z) || p.lengthSq() > 9; }
+  if (bad) for (let i = 0; i < n; i++) { C.pts[i].copy(C.rest[i]); C.prev[i].copy(C.rest[i]); }
   for (let i = 0; i < n; i++) { const p = C.pts[i]; C.pos[i * 3] = p.x; C.pos[i * 3 + 1] = p.y; C.pos[i * 3 + 2] = p.z; }
   C.geo.attributes.position.needsUpdate = true; C.geo.computeVertexNormals();
 }
@@ -3752,8 +3788,10 @@ function mapPins() {
   const carrying = P.hold && P.hold.kind === 'person';
   if (carrying || people.some(p => p.mode === 'down')) pins.push([HOSP.x, HOSP.z, 'hosp', 'Hospital']);
   if (MAP.waypoint) pins.push([MAP.waypoint.x, MAP.waypoint.z, 'way', 'Waypoint']);
+  for (const h of mapPinHooks) h(pins); // modules (missions.js) add their own pins
   return pins;
 }
+const mapPinHooks = [];
 const PIN_COL = { call: '#d6b4ff', inc: '#ffc531', kryp: '#a6ff3d', hurt: '#ff6b6b', trap: '#9be6ff', hosp: '#57e39a', way: '#5aa9ff' };
 function drawPin(ctx, x, y, kind, r, pulse) {
   ctx.save(); ctx.translate(x, y);
@@ -3942,6 +3980,27 @@ $('btn-quality').addEventListener('click', e => {
   try { localStorage.setItem('sm-quality', next); } catch (_) { /* storage blocked: URL still carries it */ }
   location.href = location.href.replace(/[?&]q=\w+/, '').replace(/[?&]bench\b/, '') + (location.href.includes('?') ? '&' : '?') + 'q=' + next;
 });
+// city reflection probe: one cube capture from above an intersection, prefiltered, so glass, paint and
+// wet asphalt reflect real buildings instead of only the sky gradient (rebaked after big collapses)
+const cityProbe = (() => {
+  if (LOWQ) return null;
+  const rt = new THREE.WebGLCubeRenderTarget(ULTRA ? 512 : 256, { type: THREE.HalfFloatType, generateMipmaps: false });
+  const cam = new THREE.CubeCamera(1, 500000, rt);
+  cam.position.set(30, 45, 30); scene.add(cam);
+  const pm = new THREE.PMREMGenerator(renderer);
+  const mats = [facadeMat, farFacadeMat, paintMat, glassMat, scene.userData.cityMat].filter(Boolean);
+  let env = null;
+  function bake() {
+    const heroVis = hero.g.visible; hero.g.visible = false; // keep Superman out of the city's reflections
+    cam.update(renderer, scene);
+    hero.g.visible = heroVis;
+    const next = pm.fromCubemap(rt.texture).texture;
+    for (const m of mats) { m.envMap = next; m.envMapIntensity = 1; m.needsUpdate = true; }
+    if (env) env.dispose(); env = next;
+  }
+  bake();
+  return { bake, get env() { return env; } };
+})();
 requestAnimationFrame(() => requestAnimationFrame(() => {
   titleReady = true; titleEl.classList.remove('loading');
   $('press').textContent = 'PRESS ENTER OR CLICK TO START';
@@ -4032,7 +4091,7 @@ function frame(now) {
     }
   }
   pollPad();
-  if (!paused && !MAP.open) update(dt);
+  if (!paused && !MAP.open && dt > 0) update(dt);
   if (started || MAP.open) updateMaps(dt);
   renderer.info.reset();
   composer.render();
@@ -4086,6 +4145,11 @@ function update(dt) {
   updateAtmosphere(dt);
   if (started) { updateHearing(dt); updateHUD(dt); }
 }
-window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; }, get POWER() { return POWER; }, setPower, PWR, groundY, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson, MAP, setMapOpen, drawBigMap, mapPins };
+window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; }, MAP, setMapOpen, drawBigMap, mapPins,
+  // power levels + super hearing
+  get POWER() { return POWER; }, setPower, PWR, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson,
+  // street-level missions + NPC dialogue (js/missions.js)
+  mapPinHooks, PIN_COL, BEACON_COL, toast, hopeAdd, hopeHit, addSave, SFX, AU, FX, PPL, placePerson, groundY, cars, HOSP, missions: window.SM_MISSIONS || null,
+  get heatOn() { return beams[0].visible; }, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
 requestAnimationFrame(frame);
 })();

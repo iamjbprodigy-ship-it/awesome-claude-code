@@ -2,6 +2,7 @@
 /* Automated playtest bot for Superman Over Metropolis.
  *
  *   node tools/playtest-bot.js [--shots] [--out DIR] [--quality low|shot] [--only name,name]
+ *   (--only missions,dialogue,mission-shots for the street-level missions; mission-shots writes DIR/missions/*.png)
  *
  * Drives the real game in headless Chromium (Playwright) through every power, every emergency
  * type and a full tower collapse, asserting physics and gameplay invariants, timing the CPU
@@ -248,6 +249,127 @@ const SCENARIOS = [
   }
 ];
 
+// Street-level help missions (js/missions.js): drives one mission of the given type to success with
+// scripted inputs (teleports plus __game.missions.press/release, which route through the real key handler).
+const MISSION_TYPES = ['pinned', 'beam', 'ledge', 'bay', 'crime', 'kid', 'worker', 'cat', 'washer'];
+const DRIVE_MISSION = `(type) => {
+  const g = __game, M = g.missions, P = g.P, V = THREE.Vector3;
+  if (M.current()) M.cancel();
+  g.ledger.hope = 50; P.slow = false; if (P.hold) g.grabOrRelease();
+  const tp = (v, dx, dy, dz, fly) => { P.pos.set(v.x + dx, v.y + dy, v.z + dz); P.vel.set(0, 0, 0); P.flying = fly; };
+  const aim = v => { const d = new V().copy(v).sub(P.pos); g.setYawPitch(Math.atan2(-d.x, -d.z), Math.atan2(d.y, Math.hypot(d.x, d.z))); };
+  const until = (fn, n) => { for (let i = 0; i < n; i++) { if (fn()) return true; g.step(1); } return !!fn(); };
+  if (!M.spawn(type)) return { type, spawned: false };
+  const m = M.current(), real = m.type, h0 = g.ledger.hope, n0 = g.ledger.missions, s0 = g.ledger.saves;
+  tp(m.giver.pos, 1.5, 0.1, 0, false); g.step(2);
+  M.press('KeyE'); M.release('KeyE');
+  const talked = M.state; g.step(60);
+  const out = { type: real, spawned: true, talked, active: M.state };
+  if (real === 'pinned') { tp(m.victim.pos, 1.6, 0.75, 0, false); g.step(2); M.press('KeyE'); g.step(150); M.release('KeyE'); }
+  else if (real === 'beam') { tp(m.victim.pos, 1.6, 0.75, 0, false); g.step(2); for (let i = 0; i < 40 && M.state === 'active'; i++) { M.press('Space'); M.release('Space'); g.step(5); } }
+  else if (real === 'ledge') { const v = m.victim.pos; tp(v, m.f.nx * 2.2, 0, m.f.nz * 2.2, true); g.step(2); out.sawWindow = until(() => { const q = M.qte(); return q && q.inWindow; }, 400); M.press('KeyE'); }
+  else if (real === 'bay') {
+    const c = m.car; g.step(30); tp(c.pos, 0, 3.2, 0, true); aim(c.pos); g.step(1); aim(c.pos); M.press('KeyE'); out.grabbed = !!c.held;
+    P.pos.set(c.pos.x, 2.6, 226); P.vel.set(0, 0, 0); g.step(3); M.press('KeyE'); until(() => M.state !== 'active', 300);
+  }
+  else if (real === 'crime') {
+    const r = m.robber; out.robber = !!r;
+    out.qte = until(() => { if (M.phase === 'chase') { tp(r.pos, 1.2, 0.1, 0, false); } return M.phase === 'qte'; }, 200);
+    out.sawWindow = until(() => { const q = M.qte(); return q && q.inWindow; }, 200); M.press('KeyE');
+    out.phase = M.phase; g.step(3);
+    tp(m.giver.pos, 1.5, 0.1, 0, false); g.step(2); M.press('KeyE');
+  }
+  else if (real === 'kid' || real === 'worker') {
+    const who = real === 'kid' ? m.giver : m.victim, dest = real === 'kid' ? m.parent.pos : g.HOSP;
+    tp(who.pos, 1.5, 0.3, 0, false); g.step(1); aim(who.pos); M.press('KeyE'); out.carried = who.mode === 'held';
+    g.step(2); tp(dest, 2, 0.97 - dest.y + (real === 'kid' ? dest.y - 0.9 : 0), 0, false); g.step(3); M.press('KeyE'); g.step(5);
+  }
+  else if (real === 'cat') { tp(m.cat, 1, 0, 0, true); g.step(2); M.press('KeyE'); out.carried = M.phase; g.step(2); tp(m.giver.pos, 1.5, 0.1, 0, false); g.step(3); M.press('KeyE'); }
+  else if (real === 'washer') { out.fell = until(() => M.phase === 'fall', 600); g.step(2); const v = m.victim.pos; tp(v, 0.6, -0.8, 0, true); g.step(2); }
+  g.step(2);
+  Object.assign(out, { state: M.state, phase: M.phase, hope0: Math.round(h0), hope1: Math.round(g.ledger.hope), missions: g.ledger.missions - n0, saves: g.ledger.saves - s0 });
+  g.step(400);
+  out.after = M.state; P.slow = false; if (P.hold) g.grabOrRelease();
+  return out;
+}`;
+SCENARIOS.push(
+  {
+    name: 'missions',
+    run: `(() => { const g = __game, M = g.missions; g.begin(); g.step(30); const drive = ${DRIVE_MISSION}; const out = { types: {} };
+      for (const t of ${JSON.stringify(MISSION_TYPES)}) out.types[t] = drive(t);
+      // a request nobody finishes times out gracefully and costs Hope
+      g.ledger.hope = 50; M.spawn('cat'); M.talk(); g.step(60); const lim = M.cfg.types.cat.limit;
+      for (let i = 0; i < lim + 5 && M.state === 'active'; i++) g.step(60);
+      out.timeout = { state: M.state, hope: Math.round(g.ledger.hope), failed: g.ledger.missionsFailed }; g.step(400);
+      // the scheduler opens a request on its own when the city is calm...
+      g.deferIncident(120); M.setSpawnTimer(0.5); g.step(60); out.sched = M.state;
+      // ...and the person waves you off when a major emergency starts
+      g.startIncident('robbery'); g.step(5); out.waveOff = M.state; g.step(200);
+      M.setSpawnTimer(0.5); g.step(120); out.duringInc = { state: M.state, inc: !!g.currentInc };
+      out.pins = g.mapPins().map(p => p[2]); out.lines = M.lineCount(); out.hud = !!document.getElementById('st-help');
+      return out; })()`,
+    check: r => MISSION_TYPES.map(t => { const x = r.types[t] || {};
+      return [`${t}: talk -> task -> success`, x.spawned && x.talked === 'talk' && x.active === 'active' && x.state === 'success' && x.after === 'idle', `${x.state} (${x.phase})`]; })
+      .concat(MISSION_TYPES.map(t => { const x = r.types[t] || {}; return [`${t}: Hope up, ledger counts it`, x.hope1 > x.hope0 && x.missions === 1, `Hope ${x.hope0} -> ${x.hope1}`]; }))
+      .concat([['unfinished request times out (fail, Hope down)', r.timeout.state === 'fail' && r.timeout.hope < 50 && r.timeout.failed >= 1, JSON.stringify(r.timeout)],
+        ['scheduler opens a request when calm', r.sched === 'flag', r.sched],
+        ['request waved off when an emergency starts', r.waveOff === 'expired' || r.waveOff === 'idle', r.waveOff],
+        ['no request while an emergency runs', r.duringInc.state === 'idle' && r.duringInc.inc, JSON.stringify(r.duringInc)],
+        ['150+ lines of dialogue', r.lines >= 150, r.lines + ' lines'], ['HUD shows help requests', r.hud, '']])
+  },
+  {
+    name: 'dialogue',
+    run: `(() => { const g = __game, M = g.missions; g.begin(); g.step(30); g.ledger.hope = 50;
+      const p = g.people.filter(q => q.mode === 'free' && !q.thug && Math.abs(q.pos.x) < 200 && q.pos.z < 200 && q.pos.z > -200)[0];
+      g.P.flying = false; g.P.pos.set(p.pos.x + 2.5, 14, p.pos.z); g.P.vel.set(0, 0, 0);
+      const n0 = M.barkLog().length, t0 = M.clock; let first = -1;
+      for (let i = 0; i < 300; i++) { g.step(1); if (M.barkLog().length > n0) { first = M.clock - t0; break; } }
+      const firstCat = (M.barkLog()[n0] || {}).cat;
+      // rate limit: hammer the bark API for 10 s of game time
+      const L0 = M.barkLog().length; let maxVis = 0;
+      for (let i = 0; i < 300; i++) { M.bark('landHigh'); M.bark('flyHigh'); M.bark('damage'); g.step(2); maxVis = Math.max(maxVis, M.visibleBarks()); }
+      const log = M.barkLog().slice(L0).filter(b => !b.prio); let minGap = 99;
+      for (let i = 1; i < log.length; i++) minGap = Math.min(minGap, log[i].t - log[i - 1].t);
+      return { first, firstCat, spam: log.length, attempts: 900, minGap, maxVis, gap: M.cfg.bark.minGap, cap: M.cfg.bark.maxVisible }; })()`,
+    check: r => [['landing near people gets a bark within 3 s', r.first >= 0 && r.first < 3, r.first >= 0 ? `${r.first.toFixed(2)} s (${r.firstCat})` : 'none'],
+      ['rate limit: min gap between ordinary barks', r.spam > 1 && r.minGap >= r.gap - 1e-6, `${r.spam} of ${r.attempts} requests shown, min gap ${r.minGap.toFixed(2)} s`],
+      ['rate limit: bubbles on screen capped', r.maxVis <= r.cap, `${r.maxVis} / ${r.cap}`]]
+  },
+  {
+    name: 'mission-shots', shotsOnly: true,
+    // screenshots of a QTE and of dialogue bubbles: OUT/missions/*.png
+    page: async (p) => {
+      const dir = path.join(OUT, 'missions'); fs.mkdirSync(dir, { recursive: true });
+      const shots = [];
+      const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+      await p.evaluate(() => { __game.begin(); __game.step(30); });
+      // 1. the ledge timing ring
+      const ledge = await p.evaluate(() => { const g = __game, M = g.missions, P = g.P; if (!M.spawn('ledge')) return false; const m = M.current();
+        P.pos.set(m.giver.pos.x + 1.5, 1, m.giver.pos.z); P.flying = false; g.step(2); M.press('KeyE'); g.step(60);
+        const v = m.victim.pos; P.flying = true; P.pos.set(v.x + m.f.nx * 3.2, v.y - 0.6, v.z + m.f.nz * 3.2); P.vel.set(0, 0, 0);
+        const d = v.clone().sub(P.pos); g.setYawPitch(Math.atan2(-d.x, -d.z) + 0.35, 0.12);
+        for (let i = 0; i < 200; i++) { g.step(1); const q = M.qte(); if (q && q.ring < 0.55 && q.ring > 0.45) break; } g.render(); return !!M.qte(); });
+      await snap('qte-ledge.png');
+      // 2. pinned under a car: the hold ring half full
+      const pinned = await p.evaluate(() => { const g = __game, M = g.missions, P = g.P; M.cancel(); if (!M.spawn('pinned')) return false; const m = M.current();
+        P.pos.set(m.giver.pos.x + 1.5, 1, m.giver.pos.z); P.flying = false; g.step(2); M.press('KeyE'); g.step(60);
+        const v = m.victim.pos; P.pos.set(v.x + 2.2, 1, v.z + 1.2); P.vel.set(0, 0, 0); const d = v.clone().sub(P.pos); g.setYawPitch(Math.atan2(-d.x, -d.z) + 0.3, -0.12);
+        g.step(2); M.press('KeyE'); g.step(50); g.render(); return M.qte() && M.qte().p; });
+      await snap('qte-pinned-hold.png');
+      // 3. dialogue: a request waving him down, the talk card and street barks
+      const talk = await p.evaluate(() => { const g = __game, M = g.missions, P = g.P; M.release('KeyE'); M.cancel(); g.ledger.hope = 80;
+        M.cfg.bark.dur = 60; // the page keeps running while a slow software-GL screenshot is taken
+        if (!M.spawn('crime')) return false; const m = M.current(), v = m.giver.pos;
+        P.flying = false; P.pos.set(v.x + 3.5, 1, v.z + 2.5); P.vel.set(0, 0, 0); const d = v.clone().sub(P.pos); g.setYawPitch(Math.atan2(-d.x, -d.z) + 0.4, -0.05);
+        g.step(30); M.press('KeyE'); g.step(20); M.bark('passHigh'); g.step(100); M.bark('photo'); g.step(10); g.render(); return M.visibleBarks(); });
+      await snap('dialogue-bubbles.png');
+      return { ledge, pinned, talk, shots };
+    },
+    check: r => [['ledge QTE on screen', r.ledge, ''], ['hold QTE fills', r.pinned > 0.1, String(r.pinned)], ['bubbles visible', r.talk >= 1, r.talk + ' bubbles'],
+      ['screenshots written', r.shots.length === 3, r.shots.join(', ')]]
+  }
+);
+
 const RIGS = [
   ['title', null],
   ['aerial', `g.P.flying = true; g.P.pos.set(0, 260, 380); g.setYawPitch(0, -0.18);`],
@@ -271,6 +393,7 @@ async function page(browser, q) {
   const report = { when: new Date().toISOString(), quality: QUALITY, scenarios: {}, shots: [], failures: 0 };
   for (const sc of SCENARIOS) {
     if (ONLY.length && !ONLY.includes(sc.name)) continue;
+    if (sc.shotsOnly && !SHOTS && !ONLY.includes(sc.name)) continue; // screenshot scenarios run with --shots
     const { p, errs } = await page(browser, sc.quality || 'low');
     let result, rows;
     try { result = sc.page ? await sc.page(p) : await p.evaluate(sc.run); rows = sc.check(result); }

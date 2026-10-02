@@ -25,7 +25,7 @@
       curbW: 0.25,             // granite curb strip on the road side
       pavingTile: 6,           // paving texture covers 6 m (4 x 1.5 m slabs)
       curbTile: 2,             // curb stones 2 m long
-      cross: { from: 11, len: 3, stripeW: 0.6, gap: 0.6, y: 0.03, underY: 0.026 },
+      cross: { from: 11, len: 3, stripeW: 0.6, gap: 0.6, y: 0.07, underY: 0.05 }, // cm-scale gaps lose to log-depth precision at range
       lamp: { along: [10, 30], inset: 0.6, glow: 1.5, glowHex: 0xffc27a },
       signal: { green: 8, amber: 2, red: 10, inset: 0.6, armY: 6.35, lane: 3.5 },
       tree: { inset: 1.2, along: [14, 26], jitter: 1, sideChance: 0.5, autumn: 0.25 },
