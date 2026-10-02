@@ -106,7 +106,13 @@ const SCENARIOS = [
         return { v: Math.round(v), peak: Math.round(mx), mach: +(v / Math.max(295, 340.3 - 0.0041 * a)).toFixed(2), alt: Math.round(a) }; };
       for (const l of [1, 2, 3]) { out['high' + l] = fly(l, 400); out['low' + l] = fly(l, 60); }
       let saved = null; try { saved = localStorage.getItem('sm-power'); } catch (_) {}
-      out.saved = saved; g.setPower(3); return out; })()`,
+      out.saved = saved; g.setPower(3);
+      // Mach 5 straight through the tallest tower at 30 m: he should come out the far side still fast
+      const b = g.buildings.reduce((a, c) => c.ny > a.ny ? c : a), cx = (b.x0 + b.x1) / 2;
+      g.P.flying = true; g.P.pos.set(cx, 30, b.z1 + 400); g.P.vel.set(0, 0, -1700); g.setYawPitch(0, 0); g.keys.clear(); g.keys.add('KeyW'); g.keys.add('ShiftLeft');
+      let vIn = 0, vOut = 0, smashed = 0;
+      for (let i = 0; i < 120 && !vOut; i++) { const z = g.P.pos.z; g.step(1); if (z > b.z1 + 2 && g.P.pos.z <= b.z1 + 2) vIn = g.P.vel.length(); if (g.P.pos.z < b.z0 - 20) vOut = g.P.vel.length(); }
+      g.keys.clear(); out.smash = { vIn: Math.round(vIn), vOut: Math.round(vOut) }; return out; })()`,
     check: r => [['starts at level 3 (max)', r.stored === 3, r.stored],
       ['top speed rises with each level', r.high1.v < r.high2.v && r.high2.v < r.high3.v, `sustained ${r.high1.v} < ${r.high2.v} < ${r.high3.v} m/s`],
       ['level 1 is about Mach 1', r.high1.mach >= 1.0 && r.high1.mach < 1.3, 'Mach ' + r.high1.mach],
@@ -114,7 +120,8 @@ const SCENARIOS = [
       ['level 3 reaches Mach 10', r.high3.mach >= 10, 'Mach ' + r.high3.mach],
       ['levels 1-2 stay subsonic below 150 m', r.low1.v <= 305 && r.low2.v <= 305, `${r.low1.v}, ${r.low2.v} m/s`],
       ['level 3 goes much faster low down', r.low3.mach >= 4, 'Mach ' + r.low3.mach],
-      ['choice is remembered (sm-power)', r.saved === '1' || r.saved === '2' || r.saved === '3', r.saved]]
+      ['choice is remembered (sm-power)', r.saved === '1' || r.saved === '2' || r.saved === '3', r.saved],
+      ['smashing through a tower at Mach 5 keeps most of the speed', r.smash.vIn > 1000 && r.smash.vOut > r.smash.vIn * 0.7, `${r.smash.vIn} -> ${r.smash.vOut} m/s`]]
   },
   {
     name: 'ground-run',
@@ -218,8 +225,9 @@ const SCENARIOS = [
       out.heatSeconds = t / 60; out.exploded = !!car.exploded;
       const car2 = g.bodies.find(b => b.kind === 'car' && b.parked && !b.exploded && b !== car);
       g.P.pos.copy(car2.pos).add(new THREE.Vector3(-3, 1.5, 0)); g.setYawPitch(-Math.PI / 2, -0.2); g.step(2);
-      g.grabOrRelease(); out.grabbed = !!g.P.hold; g.step(10); g.setYawPitch(-Math.PI / 2, 0.3); g.throwHeld(4); g.step(20);
-      out.thrownSpeed = car2.vel.length();
+      g.grabOrRelease(); out.grabbed = !!g.P.hold; g.step(10); g.setYawPitch(-Math.PI / 2, 0.3); g.throwHeld(4);
+      // peak launch speed over the next 20 frames (a level-3 throw is fast enough to reach a wall and stop in that time)
+      let tv = 0; for (let i = 0; i < 20; i++) { g.step(1); tv = Math.max(tv, car2.vel.length()); } out.thrownSpeed = tv;
       g.P.pos.set(0, 80, 0); g.P.vel.set(0, 0, 0); g.clap(); g.step(5); out.clap = true;
       g.keys.add('KeyQ'); g.step(30); g.keys.delete('KeyQ'); out.freeze = true;
       g.P.pos.set(0, 120, 0); g.P.flying = false; let landed = false; for (let i = 0; i < 400 && !landed; i++) { g.step(1); landed = g.P.grounded; }
