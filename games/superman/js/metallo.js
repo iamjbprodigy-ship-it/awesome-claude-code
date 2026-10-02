@@ -58,13 +58,14 @@
     pos: null, yaw: 0, center: null, crowdC: null, plaza: '', crowd: [], props: [], flying: [], lead: null,
     plates: [], heartOut: false, contained: false, spike: 0, beamHit: false, stag: 0, atk: null, atkCD: 0,
     tossCD: 0, alt: 0, collapseT: 0, caught: 0, hits: 0, startDamage: 0, startInj: 0, result: null,
-    retryT: 0, frostAvg: 0, events: [], inc: null, walkPh: 0, speed: 0, autoT: -1
+    retryT: 0, frostAvg: 0, events: [], inc: null, walkPh: 0, speed: 0, autoT: -1, tossN: 0, said: {}
   };
   for (let i = 0; i < NPL; i++) S.plates.push({ alive: true, frost: 0, hp: 1, heat: 0 });
 
   // ================================================================ scratch (no per-frame allocation)
   let T1, T2, T3, T4, TA, TB, TM, TM2, TQ, TS, UP, HEARTW, CHESTW, HANDW, EYEW, MARK;
   const PLW = [];
+  let SLABC = null; // torn-up paving slab colour
 
   // ================================================================ rig
   const bones = {};
@@ -80,6 +81,7 @@
   function build() {
     V3 = THREE.Vector3; M4 = THREE.Matrix4; Q4 = THREE.Quaternion;
     T1 = new V3(); T2 = new V3(); T3 = new V3(); T4 = new V3(); TA = new V3(); TB = new V3(); TM = new M4(); TM2 = new M4(); TQ = new Q4(); TS = new V3();
+    SLABC = new THREE.Color(0.42, 0.41, 0.39);
     UP = new V3(0, 1, 0); HEARTW = new V3(); CHESTW = new V3(); HANDW = new V3(); EYEW = new V3(); MARK = new V3();
     for (let i = 0; i < NPL; i++) PLW.push(new V3());
     S.pos = new V3(); S.center = new V3(); S.crowdC = new V3();
@@ -277,6 +279,28 @@
   }
   const hinted = {};
   function hint(id, msg) { const g = G(); if (hinted[id] && g.simT - hinted[id] < 12) return; hinted[id] = g.simT; g.toast(msg, ''); }
+  // radio beats over js/comms.js: once per fight per beat, a random variant, never urgent (dispatch's callout keeps its slot)
+  const RADIO = {
+    landed: [['dispatch', 'All units, something armoured just came down through {plaza}. Civilians pinned at the fountain. Do not engage, I repeat, do not engage.'],
+      ['dispatch', 'Dispatch to all cars: a chrome figure, ten feet tall, standing in a crater at {plaza}. Hold the perimeter and keep your heads down.']],
+    kryp: [['lois', 'Superman, the lab says that green light in his chest is Kryptonite. Every second you stand next to him costs you. Work from range.'],
+      ['lois', 'That glow is Kryptonite. Keep your distance and let your breath and your eyes do the work.']],
+    toss: [['dispatch', 'He is ripping cars off the street and throwing them at the hostages. Somebody has to catch those.'],
+      ['lois', 'He is aiming for the crowd now, not you. Every car he throws, catch it before it lands.']],
+    armour: [['perry', 'Jimmy has a long lens on the plaza. He says that chrome cracks when it is frozen. Ice it, then hit it hard.'],
+      ['perry', 'Kent called it from the newsroom: cold makes the plates brittle. Freeze them and break them.']],
+    heart: [['lois', 'The plating is gone and the heart is wide open. There is a lead-lined plate on the corner. Carry it in front of you and finish this.'],
+      ['dispatch', 'Hazmat says the construction plate at the corner is lead-lined. Hold it between you and that heart and you can get close.']],
+    win: [['perry', 'Metallo down and the Kryptonite sealed in lead. That is tomorrow\'s front page, and nobody has to write an obituary.'],
+      ['lois', 'He is down and the heart is sealed. The hostages are walking out on their own feet. Nice work, Superman.']],
+    lost: [['dispatch', 'All units, the armoured suspect has left the plaza. Last seen heading skyward. Treat the scene as hazardous.'],
+      ['lois', 'He is gone. Get some sun, get your strength back, and we go after him again.']]
+  };
+  function radio(beat, delay) {
+    const C = window.SM_COMMS; if (!C || !C.say || S.said[beat]) return; S.said[beat] = true;
+    const list = RADIO[beat], [who, text] = list[(Math.random() * list.length) | 0];
+    try { C.say(who, text.replace('{plaza}', S.plaza || 'the plaza'), { prio: 2, delay: delay || 0, ttl: 30, trigger: 'metallo_' + beat }); } catch (_) { /* the radio is optional */ }
+  }
 
   // ================================================================ power hooks
   function onPunch(o, d, power) {
@@ -336,7 +360,7 @@
     S.center.set(pz.x, 0, pz.z); S.plaza = pz.name;
     S.pos.set(pz.x, 120, pz.z); S.yaw = 0; S.t = 0; S.phase = 1; S.phaseT = 0; S.down = false; S.leaving = 0; S.linger = 0; S.heartOut = false; S.contained = false;
     S.spike = 0; S.beamHit = false; S.stag = 0; S.atk = null; S.atkCD = 1.5; S.tossCD = 0; S.collapseT = 0; S.caught = 0; S.hits = 0; S.result = null; S.retryT = 0; S.flying.length = 0;
-    S.startDamage = g.ledger.damage; S.walkPh = 0; S.speed = 0; S.downT = 0; S.landT = 99;
+    S.startDamage = g.ledger.damage; S.said = {}; S.tossN = 0; S.walkPh = 0; S.speed = 0; S.downT = 0; S.landT = 99;
     for (const pl of S.plates) { pl.alive = true; pl.frost = 0; pl.hp = 1; pl.heat = 0; }
     chromeMat.color.copy(ctx.lin(0xdfe4ea)); eyeM.material.color.setRGB(9, 0.5, 0.3);
     // the crowd he menaces: the clearest side of the plaza
@@ -388,6 +412,7 @@
     if (n <= S.phase && S.phase) { S.phase = Math.max(S.phase, n); return; }
     S.phase = n; S.phaseT = 0; ev('phase', { phase: n, name: PHASES[n] });
     const g = G(); if (n > 1 && g) g.toast(`Metallo · phase ${n}: ${PHASES[n]}`, n === 5 ? 'alert' : '');
+    radio(['', '', 'kryp', 'toss', 'armour', 'heart'][n]);
   }
   function onIncidentEnd(inc) {
     if (S.inc !== inc) return;
@@ -424,7 +449,7 @@
     const unhurt = [];
     for (const p of S.crowd) { if (p.mode === 'stuck') { p.mode = 'cheer'; p.cheerT = 6; p.photoT = R(0, 1); p.danger = false; } if (!p.injured) unhurt.push(p); }
     if (S.inc) { S.inc.medal = medal; S.inc.injuries = hurt; }
-    ev('medal', { medal, time: S.result.time, hurt, damage: S.result.damage });
+    ev('medal', { medal, time: S.result.time, hurt, damage: S.result.damage }); radio('win', 2);
     if (unhurt.length) g.addSave(unhurt.length, S.crowdC, 'Hostages freed');
     if (g.currentInc === S.inc) g.endIncident(true, 'Metallo is down. The Kryptonite heart is sealed in lead');
     ev('incidentEnd', { kind: 'metallo', success: true });
@@ -435,7 +460,7 @@
     S.result = { win: false, reason, time: +S.t.toFixed(1), hurt: hurtCount() };
     S.leaving = 3; S.retryT = 25; cancelAttack();
     if (reason === 'collapse' || reason === 'solar') { g.P.flying = false; g.P.vel.set(0, -5, 0); }
-    ev('fail', { reason });
+    ev('fail', { reason }); radio('lost', 1.5);
     if (g.currentInc === S.inc) g.endIncident(false, msg + ' Press F8 to retry.');
     g.hopeHit(5); // with endIncident's 5: Hope -10
     ev('incidentEnd', { kind: 'metallo', success: false, reason });
@@ -460,6 +485,16 @@
     if (!best) for (const c of g.cars) if (!c.dead && !c.held && !c.mThrown && !c.drive) { const d = c.pos.distanceToSquared(S.pos); if (d < bd) { bd = d; best = c; } }
     return best;
   }
+  // no car in reach (or every third throw once his armour is failing): he tears a paving slab out of the plaza
+  function tearSlab() {
+    const g = G(); if (!g.spawnDebris) return null;
+    T1.set(Math.sin(S.yaw), 0, Math.cos(S.yaw)).multiplyScalar(1.7).add(S.pos); T1.y = g.groundY(T1.x, T1.z) + 0.25;
+    const b = g.spawnDebris(T1, 0.85, 0.2, 0.65, T2.set(0, 0, 0), g.T_SLAB, SLABC, 0, 0, 0.2, true, 0);
+    if (!b) return null;
+    b.mSlab = true; g.SFX.punch(T1, 1.1); if (g.shakeAt) g.shakeAt(T1, 0.25);
+    for (let k = 0; k < 24; k++) g.FX.dust(T1.x, 0.3, T1.z, R(-5, 5), R(1, 5), R(-5, 5), 1.2);
+    return b;
+  }
   function crowdTarget(o) {
     let n = 0; o.set(0, 0, 0);
     for (const p of S.crowd) if (p.mode === 'stuck' && !p.injured) { o.add(p.pos); n++; }
@@ -470,12 +505,15 @@
     const g = G(), P = g.P, dh = P.pos.distanceTo(S.pos), ph = S.phase;
     const alt = S.alt++ % 2;
     let kind = alt ? 'pulse' : 'beam';
-    if ((ph === 3 || ph === 4) && S.tossCD <= 0 && tossCar() && crowdTarget(T4)) kind = 'toss';
+    if ((ph === 3 || ph === 4) && S.tossCD <= 0 && (tossCar() || G().spawnDebris) && crowdTarget(T4)) kind = 'toss';
     else if (ph === 4 && dh < CFG.pound.r && P.pos.y - g.groundY(P.pos.x, P.pos.z) < 4 && Math.random() < 0.6) kind = 'pound';
     if (kind === 'beam' && dh > CFG.beam.range) kind = 'pulse';
     const a = { kind, t: 0, fired: false, tele: CFG[kind === 'toss' ? 'toss' : kind].tele, dur: 0, car: null, aim: new THREE.Vector3().copy(P.pos), target: new THREE.Vector3(), from: new THREE.Vector3() };
     if (kind === 'toss') {
-      a.car = tossCar(); a.car.held = true; a.car.sleeping = true; a.from.copy(a.car.pos);
+      const slab = ph >= 4 && S.tossN % 3 === 2; S.tossN++;
+      a.car = (slab ? tearSlab() : null) || tossCar() || tearSlab();
+      if (!a.car) { S.atk = null; S.atkCD = 1; return; }
+      a.car.held = true; a.car.sleeping = true; a.from.copy(a.car.pos);
       crowdTarget(a.target); a.target.x += R(-1, 1); a.target.z += R(-1, 1); a.dur = 0.8; S.tossCD = R(CFG.toss.every[0], CFG.toss.every[1]);
       teleRing.material.color.setRGB(3, 0.9, 0.6); teleRing.position.set(a.target.x, g.groundY(a.target.x, a.target.z) + 0.15, a.target.z); teleRing.scale.setScalar(3.5);
     } else if (kind === 'pulse') {
@@ -617,7 +655,7 @@
       if (S.pos.y > 0) {
         S.pos.y = Math.max(0, 120 - 0.5 * 9.81 * 4 * S.t * S.t);
         if (S.pos.y <= 0) {
-          S.landT = S.t; ev('landing', {}); g.SFX.boom(S.pos, 1.6); if (g.addShake) g.addShake(0.6); if (g.hitStop) g.hitStop(0.06);
+          S.landT = S.t; ev('landing', {}); radio('landed', 2.5); g.SFX.boom(S.pos, 1.6); if (g.addShake) g.addShake(0.6); if (g.hitStop) g.hitStop(0.06);
           for (let k = 0; k < 80; k++) g.FX.dust(S.pos.x + R(-2, 2), 0.4, S.pos.z + R(-2, 2), R(-18, 18), R(1, 8), R(-18, 18), 2);
           for (let k = 0; k < 30; k++) g.FX.kryp(S.pos.x, 1.5, S.pos.z);
           if (g.ring) g.ring(T1.set(S.pos.x, 0.3, S.pos.z), UP, 1, 30, 0.8, new THREE.Color(2.5, 1.8, 1), 0.7);

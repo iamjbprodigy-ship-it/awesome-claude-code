@@ -961,7 +961,7 @@ SCENARIOS.push({
 });
 // screenshots: OUT/metallo/*.png (reveal in the plaza, freezing him, the heart torn out)
 SCENARIOS.push({
-  name: 'metallo-shots', shotsOnly: true, quality: 'high',
+  name: 'metallo-shots', shotsOnly: true, quality: SCEN_QUALITY === 'low' ? 'high' : SCEN_QUALITY, // --quality shot for the final grade
   page: async (p) => {
     const dir = path.join(OUT, 'metallo'); fs.mkdirSync(dir, { recursive: true });
     const shots = [];

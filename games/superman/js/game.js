@@ -4410,6 +4410,8 @@ window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, ren
   // set pieces (js/setpieces.js)
   endIncident, aimDir: (o) => aimDir(o), registerIncident(type, def) { INC_REG[type] = def; }, setpieces: window.SM_SETPIECES || null, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
 // power hooks + helpers for js/metallo.js
-Object.assign(window.__game, { metallo: window.SM_METALLO || null, hooks: HOOKS, kryptoniteNear, ring, makeBody, removeBody, get cityEnv() { return cityProbe ? cityProbe.env : null; } });
+Object.assign(window.__game, { metallo: window.SM_METALLO || null, hooks: HOOKS, kryptoniteNear, ring, makeBody, removeBody, spawnDebris, T_SLAB });
+// a live getter (Object.assign would copy the value once, and the city probe re-bakes and disposes it)
+Object.defineProperty(window.__game, 'cityEnv', { get() { return cityProbe ? cityProbe.env : null; }, configurable: true });
 requestAnimationFrame(frame);
 })();
