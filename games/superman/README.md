@@ -9,6 +9,13 @@ A fan-made physics sandbox for PC: the whole power set in a destructible, golden
 
 On the title screen, press **Enter** or click **Start**. **Quality** cycles Low / Medium / High / Ultra and remembers your choice. Press `` ` `` or **F3** in game to show the frame rate.
 
+**Graphics on Ultra:**
+- Screen-space ambient occlusion: contact shadow where walls meet the street and cars sit on the road.
+- A city reflection probe, so glass, car paint and wet asphalt reflect real buildings.
+- Supersampling: it renders at 1.5× native resolution on strong GPUs such as the RTX 20 to 50 series, and 1.25× otherwise.
+
+Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, or `?ao=1` to force it on at High.
+
 **Test it on your GPU:** pick **Benchmark** on the title screen (or open the file with `?bench` added). It flies a fixed route through the heaviest scenes for about 45 s, then shows your GPU, average fps, 1% lows and draw calls per scene, with a **Copy results** button.
 
 ## Controls
