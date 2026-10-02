@@ -2945,7 +2945,9 @@ function playerCollide(prevSpeed) {
       // superpowered flight: plough through glass, floors and columns alike; he barely slows
       if ((P.flying && sp > 12) || sp > 30 || (P.charging && P.charge > 0.8)) {
         breakBlock(g, T1.copy(P.vel).multiplyScalar(0.6).add(T2.set(R(-4, 4), R(-2, 5), R(-4, 4))), sp > 70 ? 8 : 4, 'smash');
-        P.vel.multiplyScalar(t === T_COL ? 0.97 : 0.99); smashedThisStep = true;
+        // each block costs a sliver of speed; at Mach 3-10 it is a sliver of a sliver, or a city block
+        // of sub-steps (up to 80 a frame) would grind him down to subsonic in one pass
+        P.vel.multiplyScalar(1 - (t === T_COL ? 0.03 : 0.01) * clamp(150 / Math.max(sp, 1), 0.08, 1)); smashedThisStep = true;
         continue;
       }
       const cx = ax0 + CELL / 2, cy = (ay0 + ay1) / 2, cz = az0 + CELL / 2;
@@ -3016,6 +3018,7 @@ function superLanding(v) {
 }
 // ground super speed: keep him planted on his feet, then let the street feel the wake
 let runFxT = 0;
+const RUN_O = new V3(), RUN_D = new V3();
 function groundRun(dt, wasGrounded) {
   const p = P.pos, hs = Math.hypot(P.vel.x, P.vel.z), top = pw('run');
   if (hs < top * 0.6) P.runTopT = 0;
@@ -3047,6 +3050,8 @@ function groundRun(dt, wasGrounded) {
   // the bow wave shoves cars, loose chunks and bystanders out of his path
   runFxT += dt; if (runFxT < 0.08) return; runFxT = 0;
   const reach = 5 + 9 * k;
+  // the pressure front ahead of him: loose rubble and debris kick forward (own vectors: coneImpulse uses T1/T2)
+  if (hs > 30) coneImpulse(RUN_O.set(p.x, 0.6, p.z), RUN_D.copy(dir), reach * 1.3, 0.55, Math.min(16, hs * 0.07));
   for (const b of bodies) {
     if (b.dead || b.held) continue;
     const rel = T2.copy(b.pos).sub(p), along = rel.dot(dir); if (along < -4 || along > reach * 1.5) continue;
@@ -3089,7 +3094,7 @@ function updatePlayer(dt) {
     if (wish.lengthSq() > 0.01) {
       // top speed comes from the power level; below 150 m a lower cap keeps booms off the streets
       // (the 'speed' unlock lifts it to Mach 3, never past the level's own top speed)
-      const top = pw('fly'), low = Math.min(top, Math.max(pw('flyLow'), unlocked.has('speed') ? 1020 : 0));
+      const top = pw('fly'), low = Math.min(top, Math.max(pw('flyLow'), POWER >= 2 && unlocked.has('speed') ? 1020 : 0));
       const vmax = (boost ? (alt < 150 ? low : Math.min(pw('flyMax'), top * Math.sqrt(1.225 / rho))) : 75) * weak;
       const acc = (boost ? (140 + sp * 1.3) * pw('flyAcc') : 55) * weak;
       P.vel.addScaledVector(wish, acc * dt);
@@ -3493,11 +3498,20 @@ function updateSpeedLines(dt, sp, mach, run) {
 // ============================================================ super hearing
 // While H is on (tap) or held, the city ducks under a low-pass and every need within range plays a
 // procedural, stereo-panned sound: louder when near and when looked at. Heard sources get markers.
-const HEAR = { on: false, t: 0, scanT: 0, list: [], voices: new Map(), minor: [], minorCD: 0 };
-const HEAR_CLS = { hurt: 'hurt', trap: 'trap', stuck: 'trap', crime: 'call', mug: 'call', fire: 'call' };
+const HEAR = { on: false, t: 0, scanT: 0, list: [], voices: new Map(), minor: [], minorCD: 0, waitMsn: 0, nextMsn: true };
+const HEAR_CLS = { hurt: 'hurt', trap: 'trap', stuck: 'trap', crime: 'call', mug: 'call', fire: 'call', help: 'call' };
+// missions.js owns the street-level help requests; hearing only listens to them (and may nudge its
+// scheduler to open one that is due), it never runs a second mission system
+function hearMission() {
+  const A = window.SM_MISSIONS, m = A && A.current ? A.current() : null;
+  if (!m || (m.state !== 'flag' && m.state !== 'talk' && m.state !== 'active')) return null;
+  const v = m.state === 'active' && m.victim && m.victim.mode !== 'gone' ? m.victim : m.giver;
+  const pos = v && v.pos ? v.pos : m.pinPos; if (!pos) return null;
+  return { m, pos, label: (m.lines && m.lines.label) || 'a call for help' };
+}
 const hearingActive = () => started && (P.hear || keys.has('KeyH'));
 function incDesc(inc) {
-  return inc.type === 'robbery' ? `gunshots and an alarm, a robbery at ${inc.where}` : inc.type === 'fire' ? `screams and crackling flames at ${inc.where}`
+  return inc.type === 'robbery' ? `a robbery at ${inc.where}: gunshots, an alarm, shouting` : inc.type === 'fire' ? `screams and crackling flames at ${inc.where}`
     : inc.type === 'heli' ? `a rotor failing over ${inc.where}` : `a roar high above ${inc.where}`;
 }
 function scanHearing() {
@@ -3516,6 +3530,7 @@ function scanHearing() {
   const inc = currentInc;
   if (inc && inc.type === 'robbery' && inc.crew.some(p => !p.cuffed && !p.injured && p.mode !== 'gone')) add('rob', 'crime', inc.corner, 'Robbery, shots fired');
   for (const n of HEAR.minor) if (n.kind === 'mug' && !n.done) add('mug' + n.p.slot, 'mug', n.p.pos, 'Mugging');
+  const ms = hearMission(); if (ms) add('msn', 'help', ms.pos, 'Cry for help: ' + ms.label);
   // one source per burning building, at its fires' centre
   const fb = new Map();
   for (const g of fires) { const id = blkB[g]; let e = fb.get(id); if (!e) fb.set(id, e = { n: 0, p: new V3() }); if (e.n < 24) { e.p.add(blockCenter(g, T2)); e.n++; } }
@@ -3539,7 +3554,7 @@ function playHeard(s, v, dt) {
   if (s.kind === 'hurt') {
     if (t >= v.a) { v.a = t + 0.85; sfxTone(0.9, 0.13, 'sine', 64, 40, x); setTimeout(() => AU.ctx && sfxTone(0.7, 0.13, 'sine', 58, 38, x), 170); }
     if (t >= v.c) { v.c = t + R(3, 6); sfxVoice(x, 0.22, R(120, 150), [VOW.o, VOW.u], 0.9, 0.6); } // a weak moan
-  } else if (s.kind === 'trap' || s.kind === 'stuck') {
+  } else if (s.kind === 'trap' || s.kind === 'stuck' || s.kind === 'help') {
     if (t >= v.a) {
       v.a = t + R(1.4, 2.6); const f0 = R(240, 330);
       sfxVoice(x, 0.7, f0, HELP, 0.42, 0.35); setTimeout(() => AU.ctx && sfxNoise(0.25, 0.03, 'bandpass', 1500, null, 1, x), 400); // "help!" + the p
@@ -3578,6 +3593,16 @@ function spawnMinorNeed(kind) {
   toast(kind === 'stuck' ? `You hear: someone stranded on the roof at ${L.name}` : `You hear: a mugging at ${L.name}`, 'alert');
   return n;
 }
+// listening in a quiet moment surfaces someone in need: alternately a missions.js help request
+// (brought forward if the city is calm) and one of hearing's own small calls (rooftop, mugging)
+function surfaceNeed() {
+  const A = window.SM_MISSIONS;
+  const useMsn = HEAR.nextMsn && !currentInc && A && A.setSpawnTimer && A.state === 'idle';
+  HEAR.nextMsn = !HEAR.nextMsn;
+  if (!useMsn) return !!spawnMinorNeed();
+  A.setSpawnTimer(0); HEAR.waitMsn = 1.5; HEAR.minorCD = R(45, 75);
+  return true;
+}
 function updateMinorNeeds(dt) {
   if (HEAR.minorCD > 0) HEAR.minorCD -= dt;
   for (let i = HEAR.minor.length - 1; i >= 0; i--) {
@@ -3598,12 +3623,20 @@ function updateHearing(dt) {
   HEAR.t += dt;
   if (on && !HEAR.on) { // just started listening
     HEAR.list = scanHearing(); HEAR.scanT = 0.25;
-    const inc = currentInc;
+    const inc = currentInc, ms = hearMission();
     if (inc && !inc.heard) { inc.heard = true; toast('You hear: ' + incDesc(inc), 'alert'); }
-    else if (!HEAR.minor.length && HEAR.minorCD <= 0 && spawnMinorNeed()) HEAR.list = scanHearing();
+    else if (ms && !ms.m.heard) { ms.m.heard = true; toast(`You hear: someone crying for help, ${ms.label}, ${Math.round(ms.pos.distanceTo(P.pos) / 5) * 5} m away`, 'alert'); }
+    else if (!HEAR.minor.length && HEAR.minorCD <= 0 && surfaceNeed()) HEAR.list = scanHearing();
     else toast(HEAR.list.length ? `Listening: ${HEAR.list.length} sound${HEAR.list.length > 1 ? 's' : ''} within ${pw('hear')} m` : `Listening: nothing within ${pw('hear')} m`, '');
   }
   HEAR.on = on;
+  // a request nudged out of missions.js opens on its next update: announce it once it is there,
+  // or fall back to an ambient call if the scheduler declined (an emergency due, nowhere to stand)
+  if (HEAR.waitMsn > 0) {
+    HEAR.waitMsn -= dt; const ms = hearMission();
+    if (ms && !ms.m.heard) { ms.m.heard = true; HEAR.waitMsn = 0; HEAR.scanT = 0; toast(`You hear: someone crying for help, ${ms.label}, ${Math.round(ms.pos.distanceTo(P.pos) / 5) * 5} m away`, 'alert'); }
+    else if (HEAR.waitMsn <= 0 && on && !HEAR.minor.length && spawnMinorNeed()) HEAR.scanT = 0;
+  }
   if (on && (HEAR.scanT -= dt) <= 0) { HEAR.scanT = 0.25; HEAR.list = scanHearing(); }
   if (!on) HEAR.list.length = 0;
   if (!AU.ctx || !AU.hearBus) return;

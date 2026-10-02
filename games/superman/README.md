@@ -50,7 +50,11 @@ Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, o
 | Heaviest lift | 25 t | 120 t | anything |
 | Super hearing range | 300 m | 600 m | 1.2 km |
 
-**Super hearing:** while it's on, the city goes muffled and every need in range plays from where it is: cries for help, the heartbeat of someone injured, alarm bells and gunshots at a robbery, fires crackling. Sounds are louder when they're close and when you face them, and each gets a marker. Listening between emergencies sometimes picks up a smaller call: someone stranded on a roof, or a mugging.
+**Super hearing:** while it's on, the city goes muffled and every need in range plays from where it is: cries for help, the heartbeat of someone injured, alarm bells and gunshots at a robbery, fires crackling. Sounds are louder when they're close and when you face them, and each gets a marker. Street-level help requests (the person waving you down) are heard too, as a cry for help at the person's position. Press H on a fresh emergency and you're told what and where ("You hear: a robbery at ..."). Listening in a quiet moment surfaces someone in need: either a help request brought forward, or a smaller call (someone stranded on a roof, or a mugging).
+
+**Super speed on foot:** Shift while walking (F toggles walking) is a real run, not a hover. He stays planted on the street and sidewalks with arms pumping and a forward lean. Dust and paper fly off to the sides, and the bow wave shoves cars and pedestrians out of his path. A whip-crack sounds at top speed. The camera drops low and pulls back.
+
+**Why Mach 3 used to stall:** the *speed* unlock promised "Mach 3 at sea level", but it only raised the cap above 150 m. Below 150 m, boosted flight was always clamped to 300 m/s. Dropping under that line also braked you at 400 m/s² back down to it. Without the unlock, the top speed was 480 m/s (about Mach 1.4) until the thin air above roughly 10 km. On top of that, each block he smashed through cost 1-3% of his speed on every one of up to 80 sub-steps a frame, so one pass through a tower bled off most of a Mach 3 run. Now each power level sets its own top speed and its own low cap (Level 3 allows Mach 5 low down), and smash losses shrink as speed rises.
 
 **Map:** the minimap (bottom right) turns with you and zooms out as you speed up. Alerts appear as pins, with arrows on the rim when they're off-screen, and a tall coloured light beam rises from each one in the city: gold for emergencies, green for Kryptonite, red for the injured, blue for your waypoint.
 
