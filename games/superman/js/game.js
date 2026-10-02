@@ -13,7 +13,7 @@ const V3 = THREE.Vector3, Q4 = THREE.Quaternion;
 const G = 9.81, CELL = 5, STORY = 4, LOTS = 7, PITCH = 60, HALF = LOTS * PITCH / 2;
 const WATER_Z = 240, WATER_Y = -0.6, SEAFLOOR = -24, FAR_SHORE = 1800;
 const inBay = z => z > WATER_Z && z < FAR_SHORE;
-const LIVE_CAP = 450, DEBRIS_SLOTS = 3600, MAXP = 200;
+const MAXP = 200;
 const T_COL = 0, T_GLASS = 1, T_SLAB = 2;               // block types
 const BREAK_E = [9e6, 5e5, 1.6e6];                        // joules to break each type
 const MASS_T = [62000, 11000, 30000];                     // kg per block type
@@ -50,9 +50,15 @@ try {
 } catch (e) { fail(); return; }
 // quality presets: ?q=low|medium|high|ultra (remembered), or ?q=shot for headless screenshots
 let storedQ = null; try { storedQ = localStorage.getItem('sm-quality'); } catch (_) { /* storage blocked */ }
-const QUALITY = (location.search.match(/[?&]q=(low|medium|high|ultra|shot)/) || [])[1] || storedQ || 'high';
+const GPU_NAME = (() => { try { const gl = renderer.getContext(), x = gl.getExtension('WEBGL_debug_renderer_info'); return x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : ''; } catch (_) { return ''; } })();
+// high-end desktop GPUs default to Ultra; everything else to High (the player can always change it)
+const STRONG_GPU = /RTX\s?(20[6-9]0|30[6-9]0|40[6-9]0|50[6-9]0)|RX\s?(6[7-9]|7[7-9]|9[0-9])\d\d|Arc\s?A7|Apple M\d (Pro|Max|Ultra)/i.test(GPU_NAME);
+const QUALITY = (location.search.match(/[?&]q=(low|medium|high|ultra|shot)/) || [])[1] || storedQ || (STRONG_GPU ? 'ultra' : 'high');
 const LOWQ = QUALITY === 'low', SHOTQ = QUALITY === 'shot', MEDQ = QUALITY === 'medium', ULTRA = QUALITY === 'ultra';
 const DPR = window.devicePixelRatio || 1;
+// destruction budgets scale with the preset: live physics chunks and total debris/rubble pieces
+const LIVE_CAP = { low: 250, medium: 350, high: 600, ultra: 900, shot: 450 }[QUALITY];
+const DEBRIS_SLOTS = { low: 2400, medium: 3000, high: 4800, ultra: 7200, shot: 3600 }[QUALITY];
 const PR = LOWQ ? 0.5 : SHOTQ || MEDQ ? 1 : ULTRA ? Math.min(DPR, 2) : Math.min(DPR, 1.5);
 renderer.setPixelRatio(PR);
 renderer.shadowMap.enabled = !LOWQ;
@@ -1650,8 +1656,10 @@ function updateFires(dt) {
 
 // ============================================================ destruction
 const dirtyBuildings = new Set();
+const _bbVel = new V3();
 function breakBlock(g, vel, pieces, cause) {
   if (!alive[g]) return;
+  vel = _bbVel.copy(vel); // callers pass shared scratch vectors that the piece placement below reuses
   alive[g] = 0; pendingFall[g] = 0; hideBlock(g); dropAttachments(g);
   const b = buildings[blkB[g]], t = blkT[g];
   dirtyBuildings.add(b);
@@ -1676,10 +1684,11 @@ function breakBlock(g, vel, pieces, cause) {
     if (pieces <= 1) {
       spawnDebris(c, 2.45, hy * 0.98, 2.45, vel, t, col, h, f, 0.3, false, blkStyle[g] & 7);
     } else {
-      const ex = t === T_GLASS ? 0.55 : 1;
-      for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-        spawnDebris(T1.set(c.x + sx * 1.25, c.y, c.z + sz * 1.25), 1.2 * ex, hy * 0.95 * (t === T_GLASS ? 0.5 : 1), 1.2 * ex,
-          T2.copy(vel).add(T3.set(sx * R(1, 4), R(0, 4), sz * R(1, 4))), t, col, h, f, 2.5, false, blkStyle[g] & 7);
+      const ex = t === T_GLASS ? 0.55 : 1, layers = pieces >= 8 && t !== T_SLAB ? [-1, 1] : [0];
+      for (const sy of layers) for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+        const hy2 = layers.length > 1 ? hy * 0.47 : hy * 0.95;
+        spawnDebris(T1.set(c.x + sx * 1.25, c.y + sy * hy * 0.5, c.z + sz * 1.25), 1.2 * ex * R(0.75, 1), hy2 * (t === T_GLASS ? 0.5 : 1), 1.2 * ex * R(0.75, 1),
+          T2.copy(vel).add(T3.set(sx * R(1, 5), R(0, 5) + sy * 2, sz * R(1, 5))), t, col, h, f, 3, false, blkStyle[g] & 7);
       }
     }
     for (let k = 0; k < 8; k++) FX.dust(c.x + R(-2, 2), c.y + R(-1, 1), c.z + R(-2, 2), vel.x * 0.15 + R(-2, 2), R(-1, 2), vel.z * 0.15 + R(-2, 2), 1);
@@ -1727,6 +1736,13 @@ function structuralCheck(b) {
     toast(fell > 120 ? `${b.name}: the tower is coming down!` : `${b.name}: floors collapsing`, 'alert');
     SFX.crumble(T1, 2); addShake(Math.min(2, fell / 80) / (1 + camera.position.distanceTo(T1) / 150));
     scare(T1, 90, 10); hopeHit(Math.min(8, fell / 40));
+    if (fell > 30) { // a billowing dust cloud rolls out through the streets
+      const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, n = Math.min(260, 60 + fell / 3);
+      for (let k = 0; k < n; k++) {
+        const a = R(0, 6.28), s = R(6, 22), r0 = R(8, 18);
+        SMK.emit(cx + Math.cos(a) * r0, R(0.5, 6), cz + Math.sin(a) * r0, Math.cos(a) * s, R(0.5, 4), Math.sin(a) * s, R(6, 11), R(5, 9), R(22, 34), 0.5, 0.46, 0.4, 0.75, 0.62, 0.58, 0.52, 0.0, 0.35);
+      }
+    }
   }
 }
 let fqSorted = true;
@@ -2029,6 +2045,7 @@ function staticCollide(b) {
     }
   }
 }
+let lastCrackT = 0;
 function onImpact(b, sp, kind) {
   b.impact = Math.max(b.impact, sp);
   const p = b.pos;
@@ -2037,6 +2054,9 @@ function onImpact(b, sp, kind) {
     for (let k = 0; k < n; k++) FX.dust(p.x + R(-1, 1) * b.half.x, p.y - b.half.y * 0.6, p.z + R(-1, 1) * b.half.z, R(-3, 3), R(0, 2), R(-3, 3), Math.min(1.5, b.rad / 1.5));
     if (b.kind === 'debris') SFX.crumble(p, Math.min(1.5, b.mass / 30000 * sp / 15)); else if (b.kind === 'car') SFX.punch(p, 0.5);
     if (b.mass > 20000 && sp > 12) addShake(Math.min(1, b.mass / 60000 * sp / 30) / (1 + camera.position.distanceTo(p) / 60));
+  }
+  if (b.kind === 'debris' && kind === 'ground' && b.mass > 15000 && sp > 13 && simT - lastCrackT > 0.15 && !inBay(p.z)) {
+    lastCrackT = simT; addDecal('crater', p.x, 0, p.z, Math.min(4.5, Math.cbrt(b.mass) / 14 * sp / 20));
   }
   if (b.kind === 'debris') {
     if (b.full && sp > 15 && kind === 'ground' && liveDebrisCount < LIVE_CAP - 4) shatter(b, false);
@@ -2708,11 +2728,20 @@ function heatVision(dt, on) {
   if (!hit.type) return;
   if (rnd() < 0.8) FX.beam(end.x, end.y, end.z);
   if (hit.type === 'block') {
-    const g = hit.g, v = heat[g] + dt * 0.85 * power;
+    // a cutting beam: melts a block in a fraction of a second and keeps burning through the next one
+    const g = hit.g, v = heat[g] + dt * 6 * power;
     setBlockHeat(g, v);
-    if (v > 0.55 && rnd() < dt * 1.5) igniteBlock(g, 0.3);
-    if (rnd() < 0.3) FX.molten(end.x, end.y, end.z, hit.normal.x * 2 + R(-1, 1), R(-1, 1), hit.normal.z * 2 + R(-1, 1));
-    if (v >= (blkT[g] === T_COL ? 1.6 : 1.0)) breakBlock(g, T3.set(0, -1, 0), 0, 'melt');
+    forBlocksInSphere(end, 4, (n, d) => { if (n !== g) { setBlockHeat(n, Math.min(1.3, heat[n] + dt * 1.6 * power * (1 - d / 4))); if (heat[n] > 0.9 && rnd() < dt * 0.6) igniteBlock(n, 0.25); } });
+    if (rnd() < 0.7) FX.molten(end.x, end.y, end.z, hit.normal.x * 3 + R(-2, 2), R(-1, 3), hit.normal.z * 3 + R(-2, 2));
+    if (rnd() < 0.25) FX.smoke(end.x, end.y, end.z, 0.8, 0.05);
+    if (v >= (blkT[g] === T_COL ? 1.5 : 1.0)) {
+      const c = blockCenter(g, new V3());
+      breakBlock(g, T3.set(0, -1, 0), 0, 'melt');
+      // molten slag drops out of the cut and glows as it falls
+      if (rnd() < 0.6) spawnDebris(c, R(0.4, 0.8), R(0.3, 0.6), R(0.4, 0.8), T3.set(R(-2, 2), R(-1, 2), R(-2, 2)), T_COL, new THREE.Color(0.08, 0.06, 0.05), 1.3, 0, 2, false, 5);
+      if (rnd() < 0.5) igniteBlock(g, 0.4);
+      SFX.crumble(c, 0.6);
+    }
   } else if (hit.type === 'body' || hit.type === 'rubble') {
     let b = hit.body;
     if (b.kind === 'rubble') { b.heat += dt * power; if (b.heat > 1) { const rb = reviveRubble(b, null); if (rb) b = rb; else return; } else { const m = debrisMeshes[b.btype]; m.userData.aH.setX(b.slot, b.heat); m.userData.aH.needsUpdate = true; return; } }
@@ -2787,8 +2816,10 @@ let hitStopT = 0;
 function addShake(a) { camState.shake = Math.min(2.5, camState.shake + a); }
 function hitStop(t) { hitStopT = Math.max(hitStopT, t); }
 function flashHit(a) { const el = $('fx-hit'); el.style.opacity = a; setTimeout(() => { el.style.opacity = 0; }, 120); }
+let smashedThisStep = false, lastSmashFx = 0;
 function playerCollide(prevSpeed) {
   const p = P.pos;
+  smashedThisStep = false;
   const bd = buildingAt(p.x, p.z);
   if (bd && p.y - 1 < bd.h) {
     const hx = 0.35, hy = 0.97;
@@ -2801,11 +2832,10 @@ function playerCollide(prevSpeed) {
       const ox = Math.min(p.x + hx - ax0, ax0 + CELL - (p.x - hx)), oy = Math.min(p.y + hy - ay0, ay1 - (p.y - hy)), oz = Math.min(p.z + hx - az0, az0 + CELL - (p.z - hx));
       if (ox <= 0 || oy <= 0 || oz <= 0) continue;
       const sp = P.vel.length(), t = blkT[g];
-      // fast flight: punch through glass and floors, glance off structure
-      if (sp > 26 && (t !== T_COL || (P.charging && P.charge > 0.8) || sp > 160)) {
-        breakBlock(g, T1.copy(P.vel).multiplyScalar(0.45).add(T2.set(R(-3, 3), R(-2, 3), R(-3, 3))), t === T_GLASS ? 1 : 4, 'smash');
-        P.vel.multiplyScalar(t === T_GLASS ? 0.99 : 0.95); addShake(t === T_GLASS ? 0.12 : 0.35); hitStop(t === T_GLASS ? 0 : 0.02);
-        if (t !== T_GLASS) SFX.punch(p, 0.7);
+      // superpowered flight: plough through glass, floors and columns alike; he barely slows
+      if ((P.flying && sp > 12) || sp > 30 || (P.charging && P.charge > 0.8)) {
+        breakBlock(g, T1.copy(P.vel).multiplyScalar(0.6).add(T2.set(R(-4, 4), R(-2, 5), R(-4, 4))), sp > 70 ? 8 : 4, 'smash');
+        P.vel.multiplyScalar(t === T_COL ? 0.97 : 0.99); smashedThisStep = true;
         continue;
       }
       const cx = ax0 + CELL / 2, cy = (ay0 + ay1) / 2, cz = az0 + CELL / 2;
@@ -2823,6 +2853,19 @@ function playerCollide(prevSpeed) {
       }
     }
   }
+  if (smashedThisStep) {
+    // tear a ragged, body-sized hole around his path and blow it out ahead of him
+    const sp = P.vel.length();
+    forBlocksInSphere(p, 3.2, (g, d) => {
+      if (rnd() < (blkT[g] === T_COL ? 0.45 : 0.75) * (1 - d / 4.5)) breakBlock(g, T1.copy(P.vel).multiplyScalar(0.5).add(T2.set(R(-6, 6), R(-3, 6), R(-6, 6))), sp > 70 ? 8 : 4, 'smash');
+    });
+    if (simT - lastSmashFx > 0.08) {
+      lastSmashFx = simT;
+      addShake(0.35); hitStop(0.012); SFX.punch(p, 1); SFX.crumble(p, 1.2);
+      for (let k = 0; k < 24; k++) FX.dust(p.x, p.y, p.z, P.vel.x * 0.35 + R(-8, 8), P.vel.y * 0.35 + R(-4, 8), P.vel.z * 0.35 + R(-8, 8), 1.6);
+      for (let k = 0; k < 30; k++) FX.glass(p.x, p.y, p.z, P.vel.x * 0.5 + R(-10, 10), R(-4, 10), P.vel.z * 0.5 + R(-10, 10));
+    }
+  }
   // rubble pushes Superman out (or gets kicked loose if he is fast)
   rubbleNear(p, 4, r => {
     const d = p.distanceTo(r.pos), rs2 = r.rad + 0.6; if (d >= rs2) return;
@@ -2830,7 +2873,12 @@ function playerCollide(prevSpeed) {
     const n = T1.copy(p).sub(r.pos).normalize(); p.addScaledVector(n, rs2 - d);
     const vn = P.vel.dot(n); if (vn < 0) P.vel.addScaledVector(n, -vn); if (n.y > 0.5) P.grounded = true;
   });
-  { const n = pushOutColliders(p, 0.5, P.vel, 0); if (n && n.y > 0.5) P.grounded = true; }
+  if (P.flying && P.vel.length() > 40) {
+    const list = collidersNear(p.x, p.z);
+    if (list) for (const c of list) if (p.x > c.x0 && p.x < c.x1 && p.z > c.z0 && p.z < c.z1 && p.y > c.y0 && p.y < c.y1 && rnd() < 0.5) {
+      FX.dust(p.x, p.y, p.z, P.vel.x * 0.3 + R(-6, 6), R(-3, 6), P.vel.z * 0.3 + R(-6, 6), 1.4); FX.glass(p.x, p.y, p.z, R(-8, 8), R(-2, 8), R(-8, 8)); break;
+    }
+  } else { const n = pushOutColliders(p, 0.5, P.vel, 0); if (n && n.y > 0.5) P.grounded = true; }
   const gy = groundY(p.x, p.z);
   if (p.y - 0.97 < gy) {
     const vy = P.vel.y;
@@ -3519,6 +3567,6 @@ function update(dt) {
   updateAtmosphere(dt);
   if (started) updateHUD(dt);
 }
-window.__game = { bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; } };
+window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; } };
 requestAnimationFrame(frame);
 })();

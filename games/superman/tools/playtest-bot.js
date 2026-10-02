@@ -73,13 +73,34 @@ const SCENARIOS = [
       for (let i = 0; i < 1800; i++) { const a = performance.now(); g.update(1 / 60); worstFrame = Math.max(worstFrame, performance.now() - a); peakLive = Math.max(peakLive, g.liveDebrisCount); }
       const ms = (performance.now() - t0) / 1800;
       for (const o of g.bodies) if (!isFinite(o.pos.x + o.pos.y + o.pos.z)) nan++;
-      return { afterPunch, peakLive, live: g.liveDebrisCount, rubble: g.rubble.length, queue: g.fallQueue.length, nan, ms, worstFrame, damage: g.ledger.damage }; })()`,
+      return { cap: g.liveCap, afterPunch, peakLive, live: g.liveDebrisCount, rubble: g.rubble.length, queue: g.fallQueue.length, nan, ms, worstFrame, damage: g.ledger.damage }; })()`,
     check: r => [['punch breaks the wall', r.afterPunch > 0, r.afterPunch + ' pieces'],
       ['tower comes down', r.rubble + r.live > 150, `${r.rubble} rubble, ${r.live} live`],
-      ['live debris stays under cap', r.peakLive <= 450, r.peakLive],
+      ['live debris stays under cap', r.peakLive <= r.cap, r.peakLive + ' / ' + r.cap],
       ['collapse finishes (queue drains)', r.queue === 0, r.queue],
       ['no NaN bodies', r.nan === 0, r.nan],
       ['collapse sim cost (ms/frame, CPU)', r.ms < 12, r.ms.toFixed(2) + ' avg, ' + r.worstFrame.toFixed(1) + ' worst']]
+  },
+  {
+    name: 'superpowers',
+    run: `(() => { const g = __game; g.begin(); const out = {};
+      const b = g.buildings.reduce((a, c) => c.ny > a.ny ? c : a);
+      const zc = (b.z0 + b.z1) / 2, y = 30, alive0 = g.bodies.length + g.rubble.length;
+      // fly straight through the tallest tower at 90 m/s
+      g.P.flying = true; g.P.pos.set(b.x0 - 25, y, zc); g.setYawPitch(-Math.PI / 2, 0); g.keys.add('KeyW');
+      for (let i = 0; i < 120; i++) { g.P.vel.set(Math.max(g.P.vel.x, 90), 0, 0); g.step(1); if (g.P.pos.x > b.x1 + 8) break; }
+      g.keys.clear(); out.exitX = g.P.pos.x - b.x1; out.speed = g.P.vel.length(); out.pieces = g.bodies.length + g.rubble.length - alive0;
+      // heat vision cutting the base of another tower for 3 s
+      const t2 = g.buildings.filter(c => c !== b && c.ny > 10)[0];
+      g.P.flying = true; g.P.pos.set(t2.x0 - 30, 6, (t2.z0 + t2.z1) / 2); g.P.vel.set(0, 0, 0); g.step(2);
+      let melted = 0; const count = () => { let n = 0; for (let z = 0; z < t2.nz; z++) for (let x = 0; x < t2.nx; x++) for (let yy = 0; yy < 3; yy++) if (g.blockAt(t2.x0 + (x + 0.5) * 5, yy * 4 + 2, t2.z0 + (z + 0.5) * 5) < 0) n++; return n; };
+      const before = count(); g.keys.add('KeyR');
+      for (let i = 0; i < 180; i++) { const c = g.camera.position, tx = t2.x0 + 2.5, tz = t2.z0 + 2.5 + ((i * 0.15) % (t2.z1 - t2.z0 - 5)); const dx = tx - c.x, dy = 4 - c.y, dz = tz - c.z; g.setYawPitch(Math.atan2(-dx, -dz), Math.atan2(dy, Math.hypot(dx, dz))); g.step(1); }
+      g.keys.clear(); out.melted = count() - before; return out; })()`,
+    check: r => [['flies clean through a tower', r.exitX > 0, `exited ${r.exitX.toFixed(1)} m past the far wall`],
+      ['keeps his speed through the building', r.speed > 50, r.speed.toFixed(0) + ' m/s'],
+      ['leaves a hole (debris made)', r.pieces > 10, r.pieces + ' pieces'],
+      ['heat vision cuts through the structure', r.melted >= 4, r.melted + ' blocks melted in 3 s']]
   },
   {
     name: 'powers',
