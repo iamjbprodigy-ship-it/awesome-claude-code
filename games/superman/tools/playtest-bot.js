@@ -24,6 +24,12 @@ const flag = n => args.includes('--' + n);
 const opt = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : d; };
 const OUT = path.resolve(opt('out', path.join(__dirname, '..', '.playtest')));
 const QUALITY = opt('quality', 'low');
+// --quality also drives the gameplay scenarios (it used to reach only the --shots rigs, so `--quality high`
+// never played the game at high); scenarios that pin a preset (render-budget, depth-buffer) keep theirs
+const SCEN_QUALITY = args.includes('--quality') ? QUALITY : 'low';
+// SwiftShader on a shared CPU can take minutes to build the city: generous timeouts, so a slow machine
+// produces slow results instead of an uncaught TimeoutError that kills the whole run without a report
+const LOAD_TIMEOUT = +opt('timeout', 600000);
 const SHOTS = flag('shots');
 const ONLY = (opt('only', '') || '').split(',').filter(Boolean);
 const GAME = 'file://' + path.resolve(opt('file', path.join(__dirname, '..', 'index.html')));
@@ -36,7 +42,7 @@ const SCENARIOS = [
     name: 'title-start',
     // real user path: wait for the title to say it's ready, then click Start / press Enter
     page: async (p) => {
-      await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: 120000 });
+      await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: LOAD_TIMEOUT });
       const press = await p.textContent('#press');
       await p.click('#go');
       await p.waitForTimeout(500);
@@ -56,7 +62,7 @@ const SCENARIOS = [
     name: 'map',
     // a real emergency should put a pin on the minimap; M opens the city map, a click sets a waypoint
     page: async (p) => {
-      await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: 120000 });
+      await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: LOAD_TIMEOUT });
       await p.evaluate(() => { const g = __game; g.begin(); g.P.pos.set(0, 120, 300); g.startIncident('fire'); g.step(30); g.render(); });
       const pins = await p.evaluate(() => __game.mapPins().map(q => q[2]));
       const miniShown = await p.isVisible('#minimap');
@@ -356,11 +362,12 @@ const RIGS = [
 
 async function page(browser, q) {
   const p = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  p.setDefaultTimeout(LOAD_TIMEOUT);
   const errs = [];
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
   p.on('pageerror', e => errs.push('PAGEERROR ' + e.message + ' @ ' + (e.stack || '').split('\n').slice(1, 3).join(' <- ')));
-  await p.goto(GAME + '?q=' + q);
-  await p.waitForFunction(() => window.__game, null, { timeout: 120000 });
+  await p.goto(GAME + '?q=' + q, { timeout: LOAD_TIMEOUT });
+  await p.waitForFunction(() => window.__game, null, { timeout: LOAD_TIMEOUT });
   return { p, errs };
 }
 
@@ -370,24 +377,26 @@ async function page(browser, q) {
   for (const sc of SCENARIOS) {
     if (ONLY.length && !ONLY.includes(sc.name)) continue;
     if (sc.shotsOnly && !SHOTS && !ONLY.includes(sc.name)) continue; // screenshot scenarios run with --shots
-    const { p, errs } = await page(browser, sc.quality || 'low');
-    let result, rows;
-    try { result = sc.page ? await sc.page(p) : await p.evaluate(sc.run); rows = sc.check(result); }
-    catch (e) { rows = [['scenario ran', false, e.message.split('\n')[0]]]; }
+    let p = null, errs = [], result, rows;
+    try {
+      ({ p, errs } = await page(browser, sc.quality || SCEN_QUALITY));
+      result = sc.page ? await sc.page(p) : await p.evaluate(sc.run); rows = sc.check(result);
+    } catch (e) { rows = [['scenario ran', false, e.message.split('\n')[0]]]; }
     rows.push(['no console errors', errs.length === 0, errs.slice(0, 3).join(' | ')]);
     report.scenarios[sc.name] = { result, rows };
     for (const [label, ok, detail] of rows) {
       if (!ok) report.failures++;
       console.log(`${ok ? 'PASS' : 'FAIL'}  ${sc.name.padEnd(20)} ${label}${detail !== '' && detail !== undefined ? '  (' + detail + ')' : ''}`);
     }
-    await p.close();
+    if (p) await p.close().catch(() => {});
+    fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2)); // partial results survive a crash
   }
   if (flag('shots')) {
     for (const [name, setup] of RIGS) {
       if (ONLY.length && !ONLY.includes('shot:' + name)) continue;
       const { p } = await page(browser, QUALITY);
       if (setup) await p.evaluate(`(() => { const g = __game; g.begin(); ${setup} g.step(45); })()`);
-      else { await p.waitForFunction(() => window.__game.titleReady, null, { timeout: 120000 }); await p.evaluate(() => __game.step(150)); }
+      else { await p.waitForFunction(() => window.__game.titleReady, null, { timeout: LOAD_TIMEOUT }); await p.evaluate(() => __game.step(150)); }
       const file = path.join(OUT, `rig-${name}.png`);
       await p.screenshot({ path: file, timeout: 300000 });
       report.shots.push(file); console.log('SHOT  ' + file);
