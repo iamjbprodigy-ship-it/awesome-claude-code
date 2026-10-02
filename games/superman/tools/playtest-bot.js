@@ -5,6 +5,7 @@
  *   (--only missions,dialogue,mission-shots for the street-level missions; mission-shots writes DIR/missions/*.png)
  *   (--only power-levels,ground-run,hearing for the power set; powers-shots writes DIR/powers/*.png)
  *   (--only feel for hit-stop, shake, camera framing and the landing tiers; feel-shots writes DIR/feel/*.png)
+ *   (--only comms for the radio calls; comms-shots writes DIR/comms/*.png)
  *
  * Drives the real game in headless Chromium (Playwright) through every power, every emergency
  * type and a full tower collapse, asserting physics and gameplay invariants, timing the CPU
@@ -788,6 +789,153 @@ SCENARIOS.push({
   check: r => [['hero landing captured', r.info.hero && r.info.hero.tier === 'hero', JSON.stringify(r.info)],
     ['Mach 10 framing keeps him readable', r.info.mach.mach >= 9 && r.info.mach.frac >= 0.115, JSON.stringify(r.info.mach)],
     ['screenshots written', r.shots.length === 4, r.shots.join(', ')]]
+});
+
+// radio comms (js/comms.js, dream-features #6 / demo step 5): dispatch on every emergency within 1 s,
+// a newsroom verdict on a medal, no overlapping calls, the 20-40 s chatter limit over 3 simulated
+// minutes, the card showing and hiding, and silent (but subtitled) calls with no audio context
+SCENARIOS.push({
+  name: 'comms',
+  page: async (p) => {
+    const out = {};
+    // 1. an emergency start -> one Dispatch callout within 1 s, on the card with the speaker's name
+    out.start = await p.evaluate(() => {
+      const g = __game, C = SM_COMMS; g.begin(); g.step(30); C.clear();
+      const tS = C.clock; g.startIncident('robbery');
+      let lat = -1, shown = false, name = '', said = '';
+      for (let i = 0; i < 90; i++) {
+        g.step(1);
+        const c = C.current;
+        if (lat < 0 && c && c.who === 'dispatch' && /^start_/.test(c.trigger)) lat = C.clock - tS;
+        if (lat >= 0 && !shown) { shown = C.cardVisible(); name = C.cardText().name; }
+      }
+      said = C.cardText().said;
+      const inWin = C.history.filter(h => h.t0 >= tS - 1e-6 && h.t0 <= tS + 1 && h.who === 'dispatch').length;
+      const tag = (C.history.find(h => h.t0 >= tS - 1e-6 && /^start_/.test(h.trigger)) || {}).incidentType;
+      return { lat: +lat.toFixed(3), shown, name, said, inWin, tag, audio: !!(g.AU && g.AU.ctx) };
+    });
+    // 2. a medal -> Perry or Lois reacts. Let the callout finish, then shatter a meteor (a clean save)
+    out.medal = await p.evaluate(() => {
+      const g = __game, C = SM_COMMS;
+      for (let i = 0; i < 400 && C.current; i++) g.step(1, 1 / 30);
+      g.startIncident('meteor'); g.step(10, 1 / 30);
+      const inc = g.currentInc; inc.m.done = 'shattered';
+      const m0 = g.ledger.medals.gold + g.ledger.medals.silver + g.ledger.medals.bronze;
+      for (let i = 0; i < 30 && g.currentInc; i++) g.step(1, 1 / 30);
+      const tEnd = C.clock, medal = g.ledger.medals.gold + g.ledger.medals.silver + g.ledger.medals.bronze - m0;
+      let r = null;
+      for (let i = 0; i < 900 && !r; i++) { g.step(1, 1 / 30); r = C.history.find(h => h.t0 >= tEnd && /^(gold|silver|bronze)$/.test(h.trigger)) || null; }
+      return { medal, who: r && r.who, trigger: r && r.trigger, after: r ? +(r.t0 - tEnd).toFixed(1) : -1, text: r && r.text };
+    });
+    // 3. three minutes of busy play: emergencies, speed, powers, damage and Hope swings
+    // (run in 30 s slices so one long evaluate can't stall a loaded machine)
+    await p.evaluate(() => {
+      const g = __game, C = SM_COMMS, P = g.P;
+      const plan = { 5: () => g.startIncident('fire'), 40: () => { g.ledger.damage += 4e6; }, 55: () => g.startIncident('heli'),
+        80: () => { P.flying = true; P.pos.set(0, 600, 1500); P.vel.set(0, 0, 0); g.setYawPitch(0, 0); g.keys.add('KeyW'); g.keys.add('ShiftLeft'); },
+        86: () => g.keys.clear(), 95: () => g.setMouse(false, true), 97: () => g.setMouse(false, false),
+        105: () => { g.ledger.hope = 88; }, 120: () => g.startIncident('robbery'), 150: () => { g.ledger.hope = 12; }, 160: () => g.startIncident('meteor') };
+      window.__ct = { t0: C.clock, starts: [], prev: g.currentInc, wasOn: false, shownAny: false, plan, done: {} };
+    });
+    for (let k = 0; k < 6; k++) {
+      await p.evaluate(() => {
+        const g = __game, C = SM_COMMS, s0 = window.__ct;
+        for (let i = 0; i < 30 * 30; i++) {
+          const s = Math.floor(C.clock - s0.t0);
+          if (s0.plan[s] && !s0.done[s]) { s0.done[s] = true; s0.plan[s](); }
+          g.step(1, 1 / 30);
+          if (g.currentInc !== s0.prev) { s0.prev = g.currentInc; if (s0.prev) s0.starts.push({ t: C.clock, type: s0.prev.type }); }
+          const on = !!C.current;
+          if (on && !s0.wasOn) s0.shownAny = s0.shownAny || C.cardVisible();
+          s0.wasOn = on;
+        }
+      });
+    }
+    out.play = await p.evaluate(() => {
+      const g = __game, C = SM_COMMS, s0 = window.__ct, dt = 1 / 30;
+      g.keys.clear(); g.setMouse(false, false);
+      // let the last call finish: the card must go away
+      for (let i = 0; i < 900 && C.current; i++) g.step(1, dt);
+      g.step(20, dt);
+      const hiddenAfter = !C.cardVisible() && C.cardState() !== 'on';
+      const H = C.history.filter(h => h.t0 >= s0.t0 - 1e-6).map(h => ({ who: h.who, trigger: h.trigger, prio: h.prio, t0: h.t0, t1: h.t1, it: h.incidentType, vi: h.vi, cut: h.cut }));
+      const lineEv = (g.events || []).filter(e => e.type === 'line').length;
+      return { H, starts: s0.starts, shownAny: s0.shownAny, hiddenAfter, span: C.clock - s0.t0, lineEv };
+    });
+    // 4. no audio context (headless / blocked audio) and voice off: silent calls, subtitles still render
+    out.noAudio = await p.evaluate(() => {
+      const g = __game, C = SM_COMMS, ctx = g.AU.ctx; C.clear();
+      g.AU.ctx = null;
+      C.say('lois', 'Lois here. Testing the line with no audio at all.', { interrupt: true }); g.step(40);
+      const a = C.cardVisible() && /Lois/.test(C.cardText().name);
+      C.say('dispatch', 'All units, radio check on band three.', { interrupt: true }); g.step(40);
+      const b = C.cardVisible() && /Dispatch/.test(C.cardText().name);
+      g.AU.ctx = ctx; C.voice = false;
+      C.say('perry', 'Perry White. Voice off, words on.', { interrupt: true }); g.step(60);
+      const c = C.cardVisible() && C.cardText().said.length > 0;
+      C.voice = true; C.clear(); g.step(30);
+      return { a, b, c, hidden: !C.cardVisible() };
+    });
+    out.table = await p.evaluate(() => {
+      const L = SM_COMMS.lines, few = Object.keys(L).filter(k => L[k].length < 2);
+      const who = {}; for (const k in L) for (const l of L[k]) who[l.w] = (who[l.w] || 0) + 1;
+      return { total: SM_COMMS.lineCount(), triggers: Object.keys(L).length, few, who };
+    });
+    return out;
+  },
+  check: r => {
+    const H = r.play.H, rows = [];
+    rows.push(['emergency start: Dispatch on the radio within 1 s', r.start.lat >= 0 && r.start.lat <= 1.0, r.start.lat + ' s']);
+    rows.push(['exactly one Dispatch line in that second', r.start.inWin === 1, r.start.inWin]);
+    rows.push(['callout tagged with the incident type', r.start.tag === 'robbery', r.start.tag]);
+    rows.push(['card shows the speaker and subtitle', r.start.shown && /Dispatch/.test(r.start.name) && r.start.said.length > 0, `${r.start.name}: "${r.start.said}"`]);
+    rows.push(['medal: Perry or Lois reacts', r.medal.medal === 1 && (r.medal.who === 'perry' || r.medal.who === 'lois'), `${r.medal.trigger} by ${r.medal.who} +${r.medal.after}s: ${r.medal.text}`]);
+    let overlap = 0; for (let i = 1; i < H.length; i++) if (H[i].t0 < H[i - 1].t1 - 1e-6) overlap++;
+    rows.push(['calls never overlap (3 min)', overlap === 0 && H.length >= 6, `${H.length} calls, ${overlap} overlaps`]);
+    let chat = 0, minChat = 999; for (let i = 1; i < H.length; i++) if (H[i].prio === 1) { const d = H[i].t0 - H[i - 1].t0; minChat = Math.min(minChat, d); if (d < 20 - 1e-6) chat++; }
+    rows.push(['chatter at most 1 per 20 s (3 min)', chat === 0, `min gap ${minChat === 999 ? '-' : minChat.toFixed(1)} s`]);
+    const nd = H.filter(h => h.who !== 'dispatch'); let fast = 0, minNd = 999;
+    for (let i = 1; i < nd.length; i++) { const d = nd[i].t0 - nd[i - 1].t0; minNd = Math.min(minNd, d); if (d < 8 - 1e-6) fast++; }
+    rows.push(['non-dispatch lines 8 s or more apart', fast === 0, `min ${minNd === 999 ? '-' : minNd.toFixed(1)} s`]);
+    const miss = r.play.starts.filter(s => H.filter(h => h.who === 'dispatch' && /^start_/.test(h.trigger) && h.t0 >= s.t - 0.05 && h.t0 <= s.t + 1 && h.it === s.type).length !== 1);
+    rows.push(['every emergency start gets its callout within 1 s', r.play.starts.length >= 4 && miss.length === 0, `${r.play.starts.length} starts (${r.play.starts.map(s => s.type).join(',')}), ${miss.length} missed`]);
+    let rep = 0; const lastVi = {}; for (const h of H) { if (h.vi >= 0 && lastVi[h.trigger] === h.vi) rep++; lastVi[h.trigger] = h.vi; }
+    rows.push(['no variant twice in a row', rep === 0, rep]);
+    const kinds = [...new Set(H.map(h => h.who))];
+    rows.push(['each call logs a line event', r.play.lineEv >= H.length, `${r.play.lineEv} line events`]);
+    rows.push(['several voices heard', kinds.length >= 3, kinds.join(',')]);
+    rows.push(['card shows during calls, hides after', r.play.shownAny && r.play.hiddenAfter, `shown ${r.play.shownAny}, hidden ${r.play.hiddenAfter}`]);
+    rows.push(['no audio context / voice off: calls still subtitled', r.noAudio.a && r.noAudio.b && r.noAudio.c && r.noAudio.hidden, JSON.stringify(r.noAudio)]);
+    rows.push(['line table: 150+ lines, every trigger 2+ variants', r.table.total >= 150 && r.table.few.length === 0, `${r.table.total} lines, ${r.table.triggers} triggers ${JSON.stringify(r.table.who)}${r.table.few.length ? ' short: ' + r.table.few : ''}`]);
+    return rows;
+  }
+});
+
+// screenshots of a Lois call and a police dispatch call: OUT/comms/*.png
+SCENARIOS.push({
+  name: 'comms-shots', shotsOnly: true,
+  page: async (p) => {
+    const dir = path.join(OUT, 'comms'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [];
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    const lois = await p.evaluate(() => {
+      const g = __game, C = SM_COMMS; g.begin(); g.P.flying = true; g.P.pos.set(-60, 140, 260); g.setYawPitch(-0.3, -0.12); g.step(30); C.clear(); C.cfg.hold = 120; // the page keeps running during a slow software-GL screenshot
+      C.say('lois', 'Lois here. My source at the fire marshal says the stairwell is gone. Those people can only come down the outside.', { interrupt: true });
+      g.step(150); g.render(); return C.cardText();
+    });
+    await p.waitForTimeout(400);
+    await snap('comms-lois.png');
+    const disp = await p.evaluate(() => {
+      const g = __game, C = SM_COMMS; C.clear(); g.step(5);
+      g.startIncident('robbery'); g.step(170); g.render(); return C.cardText();
+    });
+    await p.waitForTimeout(400);
+    await snap('comms-dispatch.png');
+    return { lois, disp, shots };
+  },
+  check: r => [['Lois call on the card', /Lois/.test(r.lois.name) && r.lois.said.length > 10, r.lois.said],
+    ['Dispatch call on the card', /Dispatch/.test(r.disp.name) && r.disp.said.length > 10, r.disp.said],
+    ['screenshots written', r.shots.length === 2, r.shots.join(', ')]]
 });
 
 const RIGS = [
