@@ -3668,9 +3668,9 @@ const cityProbe = (() => {
   const mats = [facadeMat, farFacadeMat, paintMat, glassMat, scene.userData.cityMat].filter(Boolean);
   let env = null;
   function bake() {
-    const heroVis = hero.visible; hero.visible = false;
+    const heroVis = hero.g.visible; hero.g.visible = false; // keep Superman out of the city's reflections
     cam.update(renderer, scene);
-    hero.visible = heroVis;
+    hero.g.visible = heroVis;
     const next = pm.fromCubemap(rt.texture).texture;
     for (const m of mats) { m.envMap = next; m.envMapIntensity = 1; m.needsUpdate = true; }
     if (env) env.dispose(); env = next;
