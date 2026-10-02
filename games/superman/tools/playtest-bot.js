@@ -315,9 +315,11 @@ const SCENARIOS = [
         Object.assign(res, { ended: g.currentInc !== inc, seconds: Math.round(t / 60), limit: inc.limit, resolved: g.ledger.resolved - r0, medals: m0 !== JSON.stringify(g.ledger.medals), hope: Math.round(g.ledger.hope - h0) });
         if (P.hold) g.grabOrRelease(); g.deferIncident(1e6); out[name] = res; };
       const roof = g.buildings.filter(b => b.ny > 6 && b.ny < 20)[0];
-      run('heliOnRoof', 'heli', h => { P.pos.set((roof.x0 + roof.x1) / 2, roof.h + 1.2, (roof.z0 + roof.z1) / 2); P.vel.set(0, 0, 0); g.step(2); g.grabOrRelease(); }, 60);
-      run('heliInBay', 'heli', h => { P.pos.set(0, 4, 420); P.vel.set(0, 0, 0); g.step(2); g.grabOrRelease(); }, 60);
-      run('meteorInBay', 'meteor', m => { P.pos.set(40, 5, 420); P.vel.set(0, 0, 0); g.step(2); g.grabOrRelease(); }, 60);
+      // after letting go he flies clear, so the auto-catch of a falling chopper doesn't grab it straight back
+      const away = () => { g.step(1); P.pos.y += 80; P.vel.set(0, 0, 0); };
+      run('heliOnRoof', 'heli', h => { P.pos.set((roof.x0 + roof.x1) / 2, roof.h + 1.2, (roof.z0 + roof.z1) / 2); P.vel.set(0, 0, 0); g.step(2); g.grabOrRelease(); away(); }, 60);
+      run('heliInBay', 'heli', h => { P.pos.set(0, 4, 420); P.vel.set(0, 0, 0); g.step(2); g.grabOrRelease(); away(); }, 60);
+      run('meteorInBay', 'meteor', m => { P.pos.set(40, 5, 420); P.vel.set(0, 0, 0); g.step(2); g.grabOrRelease(); away(); }, 60);
       run('meteorHeld', 'meteor', m => { P.pos.set(0, 300, 0); P.vel.set(0, 0, 0); }, 120);
       return out; })()`,
     check: r => ['heliOnRoof', 'heliInBay', 'meteorInBay', 'meteorHeld'].map(k => [`${k}: grabbed, then the emergency ends`, r[k].grabbed && r[k].ended && r[k].seconds <= r[k].limit + 35, `${r[k].seconds} s (limit ${r[k].limit})`])
