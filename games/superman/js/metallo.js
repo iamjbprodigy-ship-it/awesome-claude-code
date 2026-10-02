@@ -207,7 +207,7 @@
   function ev(type, data) {
     const g = G(); const e = Object.assign({ t: g ? +g.simT.toFixed(3) : 0, type, attacker: 'metallo' }, data || {});
     S.events.push(e); if (S.events.length > 400) S.events.shift();
-    if (g && Array.isArray(g.events)) g.events.push(e);
+    if (g && g.emit) g.emit(type, Object.assign({ attacker: 'metallo' }, data || {}));
   }
   function shielded() { const g = G(); return !!(g && S.lead && !S.lead.dead && g.P.hold === S.lead); }
   function hurtCount() { let n = 0; for (const p of S.crowd) if (p.injured) n++; return n; }
@@ -377,6 +377,7 @@
       marker() { return MARK.clone(); },
       update() { /* the fight runs in the plugin update, after the player and physics */ },
       timeout() { fail('escape'); },
+      fallers() { return S.flying; }, // thrown cars: js/catch.js offers its match-speed catch on these
       cleanup() { onIncidentEnd(this); }
     };
     S.inc = inc; MARK.copy(S.center).setY(4);
@@ -793,7 +794,7 @@
     attached = true;
     g.hooks.kryp.push(exposure); g.hooks.punch.push(onPunch); g.hooks.clap.push(onClap);
     g.hooks.freeze.push(onFreeze); g.hooks.heat.push(onHeat); g.hooks.grab.push(onGrab);
-    g.registerIncident('metallo', startInc);
+    g.registerIncident('metallo', { start: startInc, want: () => false }); // the finale: never in the random rotation
     if (g.mapPinHooks) g.mapPinHooks.push(pins => { if (S.active && S.lead && !S.lead.dead) pins.push([S.lead.pos.x, S.lead.pos.z, 'trap', 'Lead plate']); });
     g.metallo = API;
     if (/[?&]metallo\b/.test(location.search)) { S.autoT = 2; if (g.deferIncident) g.deferIncident(1e9); }

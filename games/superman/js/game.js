@@ -1369,6 +1369,7 @@ function knock(p, vel, injure) {
   if (p.mode === 'trapped') p.danger = true;
   p.mode = 'phys'; p.vel.copy(vel); p.sleeping = false; p.sleepT = 0; p.onGround = false;
   p.angVel.set(R(-3, 3), R(-1, 1), R(-3, 3)); p.quat.setFromAxisAngle(UP, p.face);
+  if (!p.thug && vel.lengthSq() > 64) p.danger = true;   // thrown hard: catch them before they land
   if (injure) injurePerson(p);
 }
 function injurePerson(p) {
@@ -1426,7 +1427,9 @@ const P = {
   pos: new V3(-90, 45, 150), vel: new V3(), flying: true, grounded: false, quat: new Q4(),
   hold: null, holdRel: new Q4(), charge: 0, charging: false, punchT: 0, heat: false, freeze: false,
   xray: false, hear: false, slow: false, solar: 1, boomed: false, clapCD: 0, walkPhase: 0, hitT: 0,
-  landT: 0, bank: 0, lastYaw: 0, combatT: 0, kryp: 0, runK: 0, runTopT: 0
+  landT: 0, bank: 0, lastYaw: 0, combatT: 0, kryp: 0, runK: 0, runTopT: 0,
+  // feel: charged takeoff and landing tiers
+  jumpCharging: false, jumpT: 0, jumpCharge: 0, spaceWas: false, airT: 0, flareT: 0, landTier: '', landDur: 0.6, poseDrop: 0, poseLean: 0
 };
 let yaw = -0.54, pitch = -0.08;
 const hero = (() => {
@@ -1677,8 +1680,11 @@ function hopeHit(v) {
   if (ledger.time - hopeWinT > 5) { hopeWinT = ledger.time; hopeWinLoss = 0; }
   const take = Math.max(0, Math.min(v, 10 - hopeWinLoss)); hopeWinLoss += take; hopeAdd(-take);
 }
+const SAVE_HOPE_CAP = 10;   // T5: per-person save Hope is capped per incident; set pieces pay out through the medal
 function addSave(n, pos, why) {
-  ledger.saves += n; hopeAdd(2 * n); SFX.good();
+  let h = 2 * n;
+  if (currentInc) { const got = currentInc.saveHope || 0; h = Math.max(0, Math.min(h, SAVE_HOPE_CAP - got)); currentInc.saveHope = got + h; }
+  ledger.saves += n; hopeAdd(h); SFX.good();
   if (pos) celebrate(pos, 45);
   toast((why || 'Saved') + (n > 1 ? ` ×${n}` : ''), 'good');
   checkUnlocks();
@@ -1850,7 +1856,7 @@ function structuralCheck(b) {
   if (fell > 12) {
     blockCenter(b.start + ((b.ny >> 1) * b.nz + (b.nz >> 1)) * b.nx + (b.nx >> 1), T1);
     toast(fell > 120 ? `${b.name}: the tower is coming down!` : `${b.name}: floors collapsing`, 'alert');
-    SFX.crumble(T1, 2); addShake(Math.min(2, fell / 80) / (1 + camera.position.distanceTo(T1) / 150));
+    SFX.crumble(T1, 2); shakeAt(Math.min(0.7, 0.15 + fell / 200), T1, 400);
     scare(T1, 90, 10); hopeHit(Math.min(8, fell / 40));
     if (fell > 30) { // a billowing dust cloud rolls out through the streets
       const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, n = Math.min(260, 60 + fell / 3);
@@ -1896,7 +1902,7 @@ function explode(pos, energy, opts) {
   ring(T1.set(c.x, Math.max(c.y, 0.3), c.z), UP, 1, Rr * 2.2, 0.7, new THREE.Color(2.5, 1.6, 0.9), 0.7);
   if (c.y < 3 && !inBay(c.z)) addDecal('crater', c.x, 0, c.z, Rr * 0.5);
   SFX.boom(c, Math.min(2, Rr / 12));
-  addShake(Math.min(2.5, Rr / 8) / (1 + camera.position.distanceTo(c) / 120));
+  shakeAt(Math.min(0.8, 0.2 + Rr / 20), c, 150 + Rr * 6);
   const R2 = Rr * 2;
   for (const b of bodies) {
     if (b === opts.src || b.dead || b.held) continue;
@@ -2169,7 +2175,7 @@ function onImpact(b, sp, kind) {
     const n = Math.min(14, sp * 0.5) | 0;
     for (let k = 0; k < n; k++) FX.dust(p.x + R(-1, 1) * b.half.x, p.y - b.half.y * 0.6, p.z + R(-1, 1) * b.half.z, R(-3, 3), R(0, 2), R(-3, 3), Math.min(1.5, b.rad / 1.5));
     if (b.kind === 'debris') SFX.crumble(p, Math.min(1.5, b.mass / 30000 * sp / 15)); else if (b.kind === 'car') SFX.punch(p, 0.5);
-    if (b.mass > 20000 && sp > 12) addShake(Math.min(1, b.mass / 60000 * sp / 30) / (1 + camera.position.distanceTo(p) / 60));
+    if (b.mass > 20000 && sp > 12) shakeAt(Math.min(0.4, b.mass / 60000 * sp / 60), p, 90);
   }
   if (b.kind === 'debris' && kind === 'ground' && b.mass > 15000 && sp > 13 && simT - lastCrackT > 0.15 && !inBay(p.z)) {
     lastCrackT = simT; addDecal('crater', p.x, 0, p.z, Math.min(4.5, Math.cbrt(b.mass) / 14 * sp / 20));
@@ -2320,17 +2326,17 @@ function updateBullets(dt) {
 // ============================================================ emergencies (one at a time)
 let currentInc = null, nextIncT = 25, incCount = 0;
 const INC_TYPES = ['heli', 'meteor', 'fire', 'robbery'];
-// modules add incident types that only start when forced (never in the random rotation): registerIncident('metallo', () => inc)
-const INC_REG = {};
-function registerIncident(type, start) { INC_REG[type] = start; }
-// power hooks for modules: kryp(pos) -> extra exposure 0..1; punch(o, d, power) / grab() return true to consume the input;
-// clap(o, d, reach, k), heat(o, d, hit, dt, power), freeze(o, d, range, cos, dt)
+// module-registered incident types (js/setpieces.js): { start(forced) -> inc, want(incCount, time) -> bool }
+const INC_REG = window.SM_INCIDENTS = window.SM_INCIDENTS || {};
+// power hooks for modules (js/metallo.js): kryp(pos) -> extra exposure 0..1; punch(o, d, power) / grab() return true to consume
+// the input; clap(o, d, reach, k), heat(o, d, hit, dt, power), freeze(o, d, range, cos, dt)
 const HOOKS = { kryp: [], punch: [], grab: [], clap: [], heat: [], freeze: [] };
 function startIncident(forced) {
   if (currentInc) endIncident(false, 'Emergency abandoned.');
-  const type = forced ? String(forced).replace('kryptonite', 'meteor') : INC_TYPES[incCount % INC_TYPES.length]; incCount++;
+  let type = forced ? String(forced).replace('kryptonite', 'meteor') : INC_TYPES[incCount % INC_TYPES.length]; incCount++;
+  if (!forced) for (const k in INC_REG) if (INC_REG[k].want && INC_REG[k].want(incCount, ledger.time)) { type = k; break; }
   let inc = null;
-  if (INC_REG[type]) inc = INC_REG[type]();
+  if (INC_REG[type]) inc = INC_REG[type].start(forced);
   else if (type === 'fire') inc = startFire();
   else if (type === 'heli') inc = startHeli();
   else if (type === 'robbery') inc = startRobbery();
@@ -2372,6 +2378,7 @@ function updateIncident(dt) {
   const inc = currentInc; inc.age += dt;
   inc.update(dt);
   if (currentInc === inc && inc.age > inc.limit) inc.timeout();
+  if (currentInc === inc && inc.age > inc.limit + 20) endIncident(false, 'Out of time.'); // hard stop: every incident ends
 }
 // --- fire with trapped people
 function startFire() {
@@ -2443,7 +2450,7 @@ function startHeli() {
         if (rnd() < 0.8) FX.smoke(h.pos.x, h.pos.y + 1, h.pos.z, 1.2, 0.04);
         if (rnd() < 0.3) FX.fire(h.pos.x - 1, h.pos.y + 1, h.pos.z, 0.6);
       }
-      if (h.landed) { addSave(3, h.pos, 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter down safely'); }
+      if (h.landed) { addSave(3, h.pos, h.occHurt ? 'Pilot, reporter and camera operator alive, but hurt' : 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter down safely'); }
       else if (h.crashed) { ledger.lost += 3; this.lost = 3; endIncident(false, 'The helicopter crashed.'); }
     },
     timeout() { if (!h.landed && !h.crashed) { if (h.phase === 'trouble') { h.phase = 'falling'; h.noGrav = false; } } },
@@ -2609,7 +2616,8 @@ function onKey(code) {
   if (code === 'KeyK') { AU.muted = !AU.muted; if (AU.master) AU.master.gain.value = AU.muted ? 0 : 0.75; toast(AU.muted ? 'Sound off' : 'Sound on'); }
   if (code === 'KeyE') grabOrRelease();
   if (code === 'KeyF') { P.flying = !P.flying; if (P.flying) P.vel.y = Math.max(P.vel.y, 6); toast(P.flying ? 'Flying' : 'Walking'); }
-  if (code === 'Space' && !P.flying) { if (P.grounded) { P.vel.y = 38; P.grounded = false; FX.dust(P.pos.x, P.pos.y - 0.9, P.pos.z, 0, 1, 0, 2); SFX.whoosh(); } else P.flying = true; }
+  // Space on the ground: hold to crouch and charge, release to launch (see updatePlayer); in the air it flies
+  if (code === 'Space' && !P.flying && !P.grounded && !P.jumpCharging) P.flying = true;
   if (code === 'KeyX') { P.xray = !P.xray; setXray(P.xray); }
   if (code === 'KeyH') { P.hear = !P.hear; hearDownT = performance.now(); if (!P.hear) toast('Hearing off'); }
   if (code === 'Digit1' || code === 'Numpad1') setPower(1);
@@ -2696,7 +2704,8 @@ function punch(power) {
     const at = T1.copy(t.pos).lerp(o, 0.4);
     ring(at, d, 0.3, 3 + power * 2, 0.35, null, 0.9);
     for (let k = 0; k < 12; k++) FX.spark(at.x, at.y, at.z, d.x * 10 + R(-6, 6), d.y * 10 + R(-6, 6), d.z * 10 + R(-6, 6));
-    addShake(0.25 * power); hitStop(0.05 * power);
+    // Arkham impact: 20 + 20 per power ms (40-100), 0.25 -> 1 time-scale ramp scaled by the charge
+    addShake(0.15 + 0.1 * (power - 1)); hitStop(Math.min(100, 20 + 20 * power) / 1000, 0.15 * (power - 1) / 3); FEEL.kick(d.x, d.y, d.z, 0.1 + 0.07 * power);
     if (t.kind === 'person') {
       if (t.thug) { knock(t, T2.copy(d).multiplyScalar(7).setY(3), false); t.mode = 'phys'; apprehend(t, 'Pulled punch'); SFX.punch(at, 0.6); }
       else toast('Superman doesn’t hit civilians. Press E to carry them.', '');
@@ -2723,7 +2732,7 @@ function punch(power) {
       breakBlock(g, T3.copy(d).multiplyScalar(30 * Math.sqrt(power) * (1 - dist / (rad + 1)) + 6).add(T4.set(R(-3, 3), R(0, 4), R(-3, 3))), 4, 'punch');
     });
     for (let k = 0; k < 14; k++) FX.dust(c.x, c.y, c.z, d.x * 8 + R(-4, 4), R(-1, 4), d.z * 8 + R(-4, 4), 1.4);
-    SFX.punch(c, 1.2); SFX.crumble(c); addShake(0.4 * power); hitStop(0.06 * power);
+    SFX.punch(c, 1.2); SFX.crumble(c); addShake(0.2 + 0.1 * (power - 1)); hitStop(Math.min(100, 20 + 20 * power) / 1000, 0.15 * (power - 1) / 3); FEEL.kick(d.x, d.y, d.z, 0.1 + 0.05 * power);
     if (budget === E) { for (let k = 0; k < 10; k++) FX.spark(c.x, c.y, c.z, R(-8, 8), R(-8, 8), R(-8, 8)); toast('Too solid for that. Charge the punch.', ''); }
     return;
   }
@@ -2750,7 +2759,7 @@ function clap() {
   if (P.clapCD > 0) return; P.clapCD = 1.0; P.punchT = 0.25; P.clapT = 0.25;
   const o = T5.copy(P.pos).add(T6.set(0, 0.3, 0)).clone(), d = aimDir(new V3());
   const k = pw('clap'), reach = 0.6 + 0.4 * k; // force scales fully, reach more gently
-  SFX.clap(); addShake(0.5 * k); hitStop(0.04);
+  SFX.clap(); addShake(0.3 * k); hitStop(0.04);
   ring(T1.copy(o).addScaledVector(d, 2), d, 0.5, 30 * reach, 0.6, new THREE.Color(2.2, 2.3, 2.6), 0.7);
   for (let k = 0; k < 60; k++) { const v = T1.copy(d).multiplyScalar(R(30, 60)).add(T2.set(R(-12, 12), R(-12, 12), R(-12, 12))); FX.vapor(o.x, o.y, o.z, v.x, v.y, v.z); }
   coneImpulse(o, d, 70 * reach, 0.6, 45 * k);
@@ -2787,7 +2796,7 @@ function grabOrRelease() {
       if (liveDebrisCount >= LIVE_CAP) { toast('Too much falling already. Wait a moment.', ''); return; }
       const before = liveDebrisCount; breakBlock(g, T1.set(0, 0, 0), 1, 'rip');
       if (liveDebrisCount > before) t = bodies[bodies.length - 1];
-      SFX.crumble(hit.point); addShake(0.3);
+      SFX.crumble(hit.point); addShake(0.25);
     }
   }
   if (!t) {
@@ -2795,8 +2804,14 @@ function grabOrRelease() {
     return;
   }
   if (t.mass > pw('grab')) { tooHeavy(t.mass); return; }
+  grabBody(t);
+}
+// take hold of a body; the catch rule (js/catch.js) judges the velocity change first
+function grabBody(t) {
+  if (P.hold || t.held) return false;
+  if (t.kind === 'person' && t.mode === 'trapped') return false;
+  if (window.SM_CATCH) SM_CATCH.onGrab(t);
   if (t.kind === 'person') {
-    if (t.mode === 'trapped') return;
     if (t.thug && !t.cuffed) apprehend(t, 'Disarmed');
     t.mode = 'held'; t.prevDanger = t.danger || t.pos.y > 4 || t.injured;
   } else if (t.kind === 'car') disturbCar(t);
@@ -2807,6 +2822,7 @@ function grabOrRelease() {
   if (t.kind === 'person') P.holdRel.setFromAxisAngle(T1.set(1, 0, 0), -Math.PI / 2);
   P.hold = t; SFX.whoosh();
   if (t.mass > 20000) toast(`${Math.round(t.mass / 1000)} tonnes. Easy.`, '');
+  return true;
 }
 function tooHeavy(kg) { toast(`${Math.round(kg / 1000)} tonnes is too heavy at power ${POWER}. Press 3 for full strength.`, ''); }
 function heldPos(h, o) {
@@ -2838,7 +2854,7 @@ function throwHeld(power) {
   const v = Math.min(170 * Math.sqrt(pw('punch')), Math.sqrt(2 * 3e7 * power * pw('punch') * (1 - kryptoniteNear() * 0.8) / h.mass));
   releaseHeld(T1.copy(P.vel).addScaledVector(d, v));
   h.angVel.set(R(-1, 1), R(-1, 1), R(-1, 1)).multiplyScalar(2); h.thrown = true;
-  P.punchT = 0.3; SFX.whoosh(); addShake(0.2 * power);
+  P.punchT = 0.3; SFX.whoosh(); addShake(Math.min(0.4, 0.1 * power));
   if (h.kind === 'meteor' && d.y > 0.3) toast('Up and away…', '');
 }
 
@@ -2956,10 +2972,23 @@ function setXray(on) {
 }
 
 // ============================================================ player
-const camState = { off: new V3(0, 2, 8), fov: 70, shake: 0, roll: 0 };
-let hitStopT = 0;
-function addShake(a) { camState.shake = Math.min(2.5, camState.shake + a); }
-function hitStop(t) { hitStopT = Math.max(hitStopT, t); }
+// feel (js/feel.js): trauma shake, hit-stop with a time-scale ramp, camera springs. See dream-features §3.
+const FEEL = window.SM_FEEL;
+const camState = {
+  off: new V3(0, 2, 8), fov: 70, roll: 0, init: false,
+  rel: new V3(), relV: new V3(), lastVel: new V3(), dist: { x: 6.8, v: 0 }, up: { x: 1.5, v: 0 }, side: { x: 0.95, v: 0 },
+  la: new V3(), laV: new V3(), boostT: 0, fovKick: { x: 0, v: 0 }, heroFrac: 0, heroH: 1.95, maxDist: 0, minDist: 0, hold: false
+};
+// add screen-shake trauma (0..1); shakeAt falls off with distance from the camera
+function addShake(a) { FEEL.add(a); }
+function shakeAt(a, pos, range) { FEEL.addAt(a, camera.position.distanceTo(pos), range); }
+// freeze the sim for t seconds (150 ms ceiling); `ramp` eases the time scale 0.25 -> 1 afterwards
+function hitStop(t, ramp) { FEEL.hitStop(t, ramp); }
+// a brief FOV kick in degrees, sprung back (takeoff, boost onset); not rate-limited
+function fovKick(deg) { camState.fovKick.v += deg * 2 * Math.LN2 / 0.12 * Math.E; }
+// test-hook contract (dream-features §2): an append-only event log
+const events = [];
+function emit(type, data) { const e = Object.assign({ t: +simT.toFixed(3), type }, data); events.push(e); if (events.length > 4000) events.splice(0, 1000); return e; }
 function flashHit(a) { const el = $('fx-hit'); el.style.opacity = a; setTimeout(() => { el.style.opacity = 0; }, 120); }
 let smashedThisStep = false, lastSmashFx = 0;
 function playerCollide(prevSpeed) {
@@ -2993,7 +3022,7 @@ function playerCollide(prevSpeed) {
       const vn = P.vel.dot(n);
       if (vn < 0) {
         if (sp > 26 && t === T_COL) {
-          P.vel.addScaledVector(n, -vn * 1.6); P.vel.multiplyScalar(0.7); addShake(0.6); SFX.punch(p, 1);
+          P.vel.addScaledVector(n, -vn * 1.6); P.vel.multiplyScalar(0.7); addShake(0.3); SFX.punch(p, 1);
           for (let k = 0; k < 16; k++) FX.spark(p.x, p.y, p.z, n.x * 10 + R(-8, 8), R(-4, 8), n.z * 10 + R(-8, 8));
           setBlockHeat(g, Math.min(1, heat[g] + 0.2)); hotSet.add(g);
         } else P.vel.addScaledVector(n, -vn);
@@ -3008,7 +3037,7 @@ function playerCollide(prevSpeed) {
     });
     if (simT - lastSmashFx > 0.08) {
       lastSmashFx = simT;
-      addShake(0.35); hitStop(0.012); SFX.punch(p, 1); SFX.crumble(p, 1.2);
+      addShake(0.25); hitStop(0.012); SFX.punch(p, 1); SFX.crumble(p, 1.2);
       for (let k = 0; k < 24; k++) FX.dust(p.x, p.y, p.z, P.vel.x * 0.35 + R(-8, 8), P.vel.y * 0.35 + R(-4, 8), P.vel.z * 0.35 + R(-8, 8), 1.6);
       for (let k = 0; k < 30; k++) FX.glass(p.x, p.y, p.z, P.vel.x * 0.5 + R(-10, 10), R(-4, 10), P.vel.z * 0.5 + R(-10, 10));
     }
@@ -3030,10 +3059,60 @@ function playerCollide(prevSpeed) {
   if (p.y - 0.97 < gy) {
     const vy = P.vel.y;
     p.y = gy + 0.97;
-    if (vy < -30 && (!P.flying || vy < -45)) superLanding(-vy);
+    // landing tiers (soft / hero / crater); a soft touchdown only counts after a real drop on foot
+    if (-vy >= FEEL.SOFT_MAX || (!P.flying && -vy > SOFT_LAND_V && P.airT > 0.25)) landing(-vy);
     if (vy < 0) P.vel.y = 0;
     P.grounded = true;
   }
+}
+// ---- launch and land (dream-features #1): charged takeoff and three landing tiers by impact speed
+const SOFT_LAND_V = 2, DUST_C = new THREE.Color(1.6, 1.5, 1.4);
+function takeoff(c) {
+  const p = P.pos, gy = groundY(p.x, p.z), street = gy >= 0 && p.y - 0.97 - gy < 0.6;
+  P.vel.y = lerp(38, 90, c); P.grounded = false; P.airT = 0;
+  SFX.whoosh(); if (c > 0.3) SFX.boom(p, 0.25 + 0.4 * c);
+  const n = 6 + (30 * c) | 0;
+  for (let k = 0; k < n; k++) { const a = R(0, 6.28), s = R(3, 8) + 14 * c; FX.dust(p.x + Math.cos(a), p.y - 0.85, p.z + Math.sin(a), Math.cos(a) * s, R(0, 2) + 3 * c, Math.sin(a) * s, 1 + 0.6 * c); }
+  if (c > 0.3) ring(T1.set(p.x, p.y - 0.8, p.z), UP, 0.5, 3 + 9 * c, 0.5, DUST_C, 0.3 + 0.3 * c);
+  // the downblast pushes bystanders back and nudges cars
+  const reach = 2 + 8 * c;
+  if (c > 0.3) for (const pp of people) {
+    if (pp.mode !== 'free' && pp.mode !== 'cheer') continue; const d = pp.pos.distanceTo(p); if (d > reach) continue;
+    knock(pp, T2.copy(pp.pos).sub(p).setY(0).normalize().multiplyScalar(2 + 3 * c * (1 - d / reach)).setY(1 + c), false);
+  }
+  if (c > 0.6) for (const b of bodies) {
+    if (b.dead || b.held || b.kind !== 'car') continue; const d = b.pos.distanceTo(p); if (d > reach) continue;
+    b.vel.add(T2.copy(b.pos).sub(p).setY(0).normalize().multiplyScalar(4 * c * (1 - d / reach))); wake(b); disturbCar(b);
+  }
+  // full charge cracks the pavement: a small crater decal and $5K
+  if (c > 0.7 && street && !inBay(p.z)) { addDecal('crater', p.x, gy, p.z, 1.2); ledger.damage += 5000; }
+  scare(p, 25, 3);
+  addShake(0.08 + 0.3 * c); fovKick(8 * c);
+  emit('takeoff', { charge: +c.toFixed(3), v: +P.vel.y.toFixed(1) });
+}
+function landing(v) {
+  const p = P.pos, gy = groundY(p.x, p.z), braked = P.flareT > 0;
+  if (gy < 0) { // into the bay
+    if (v >= FEEL.SOFT_MAX) { for (let k = 0; k < 80; k++) FX.water(p.x, WATER_Y, p.z, R(-12, 12), R(6, 26), R(-12, 12)); SFX.splash(p); }
+    emit('land', { tier: 'water', v: +v.toFixed(1) }); return;
+  }
+  const tier = FEEL.landTier(v, braked);
+  P.landTier = tier; P.airT = 0;
+  if (tier === 'soft') {
+    for (let k = 0; k < 6; k++) { const a = k / 6 * 6.28; FX.dust(p.x + Math.cos(a) * 0.4, gy + 0.15, p.z + Math.sin(a) * 0.4, Math.cos(a) * 2.5, R(0.2, 1), Math.sin(a) * 2.5, 0.9); }
+    P.landT = P.landDur = 0.3; FEEL.kick(0, -1, 0, 0.2);
+  } else if (tier === 'hero') {
+    // the hero landing: one knee, a fist on the pavement, a ring of dust; no decal, no bill
+    ring(T1.set(p.x, gy + 0.3, p.z), UP, 0.8, 5 + v * 0.12, 0.55, DUST_C, 0.45);
+    for (let k = 0; k < 28; k++) { const a = R(0, 6.28), s = R(5, 9) + v * 0.15; FX.dust(p.x + Math.cos(a) * 0.8, gy + 0.25, p.z + Math.sin(a) * 0.8, Math.cos(a) * s, R(0, 1.5), Math.sin(a) * s, 1.2); }
+    SFX.punch(p, 0.7); addShake(0.12 + 0.12 * (v - FEEL.SOFT_MAX) / 30); FEEL.kick(0, -1, 0, 0.4);
+    P.landT = P.landDur = 0.6;
+  } else {
+    superLanding(v);
+    FEEL.kick(0, -1, 0, 0.7); P.landT = P.landDur = 0.8;
+  }
+  if (tier !== 'soft') { P.vel.x *= 0.15; P.vel.z *= 0.15; P.flying = false; }
+  emit('land', { tier, v: +v.toFixed(1), braked });
 }
 function superLanding(v) {
   const p = P.pos, gy = groundY(p.x, p.z);
@@ -3042,7 +3121,7 @@ function superLanding(v) {
   addDecal('crater', p.x, 0, p.z, r * 0.5);
   ring(T1.set(p.x, 0.4, p.z), UP, 1, r * 3, 0.6, new THREE.Color(1.6, 1.5, 1.4), 0.6);
   for (let k = 0; k < 50; k++) { const a = R(0, 6.28), s = R(8, 22); FX.dust(p.x + Math.cos(a) * 1.5, 0.3, p.z + Math.sin(a) * 1.5, Math.cos(a) * s, R(0, 3), Math.sin(a) * s, 1.5); }
-  SFX.boom(p, Math.min(1.5, v / 50)); addShake(Math.min(2, v / 40)); hitStop(0.08); P.landT = 0.6;
+  SFX.boom(p, Math.min(1.5, v / 50)); addShake(clamp(0.3 + (v - 45) / 120, 0.3, 0.7)); hitStop(0.08); P.landT = P.landDur = 0.8; P.landTier = 'crater';
   ledger.damage += 25000;
   for (const b of bodies) {
     if (b.dead || b.held) continue; const d = b.pos.distanceTo(p); if (d > r * 3) continue;
@@ -3078,7 +3157,7 @@ function groundRun(dt, wasGrounded) {
   if (!water && rnd() < hs / 300) FX.paper(p.x + R(-3, 3), 0.3, p.z + R(-3, 3), dir.x * hs * 0.2 + R(-4, 4), R(3, 9), dir.z * hs * 0.2 + R(-4, 4));
   // breaking away at top speed: a whip-crack and a ring of dust (the true sonic boom needs 340 m/s)
   if (hs > top * 0.92 && !P.runTopT) {
-    P.runTopT = 1; SFX.crack(0.4 + 0.25 * POWER); addShake(0.25 * POWER);
+    P.runTopT = 1; SFX.crack(0.4 + 0.25 * POWER); addShake(0.1 * POWER);
     ring(T2.set(p.x, 0.3, p.z), UP, 1, 6 + 6 * POWER, 0.45, new THREE.Color(1.5, 1.45, 1.35), 0.5);
     for (let i = 0; i < 18 * POWER; i++) { const a = R(0, 6.28), s = R(6, 14) * k + 4; FX.dust(p.x, 0.3, p.z, Math.cos(a) * s, R(0, 2), Math.sin(a) * s, 1.2); }
   }
@@ -3113,7 +3192,8 @@ function updatePlayer(dt) {
   const right = new V3(Math.cos(yaw), 0, -Math.sin(yaw));
   let mx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + pad.lx;
   let mz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0) - pad.ly;
-  const my = (keys.has('Space') || pad.up ? 1 : 0) - (keys.has('KeyC') || pad.down ? 1 : 0);
+  const spaceDown = keys.has('Space') || !!pad.up;
+  const my = (spaceDown ? 1 : 0) - (keys.has('KeyC') || pad.down ? 1 : 0);
   if (keys.has('ArrowLeft')) yaw += dt * 2; if (keys.has('ArrowRight')) yaw -= dt * 2;
   if (keys.has('ArrowUp')) pitch = clamp(pitch + dt * 1.5, -1.45, 1.45); if (keys.has('ArrowDown')) pitch = clamp(pitch - dt * 1.5, -1.45, 1.45);
   if (pad.on) { yaw -= pad.rx * dt * 2.6; pitch = clamp(pitch - pad.ry * dt * 2, -1.45, 1.45); }
@@ -3141,9 +3221,19 @@ function updatePlayer(dt) {
       }
       allowed = Math.max(vmax, sp - Math.max(400, sp * 0.8) * dt); // bleed off quickly, not instantly
       const s2 = P.vel.length(); if (s2 > allowed) P.vel.multiplyScalar(allowed / s2);
-    } else P.vel.multiplyScalar(Math.exp(-2.4 * dt));
+    } else if (!(P.hold && window.SM_CATCH && SM_CATCH.coast(dt))) P.vel.multiplyScalar(Math.exp(-2.4 * dt));
     if (P.kryp > 0.2) P.vel.y -= G * P.kryp * dt * 2;
   } else {
+    // charged takeoff: hold Space on the ground to crouch and charge (0.15-0.6 s), release to launch
+    if (spaceDown && !P.spaceWas && P.grounded && Math.abs(P.vel.y) < 2) { P.jumpCharging = true; P.jumpT = 0; P.jumpCharge = 0; }
+    if (P.jumpCharging && P.airT > 0.1) { P.jumpCharging = false; P.jumpCharge = 0; } // walked off an edge: no launch from mid-air
+    if (P.jumpCharging) {
+      if (spaceDown) { P.jumpT += dt; P.jumpCharge = clamp((P.jumpT - 0.15) / 0.45, 0, 1); const k = 1 - 0.85 * P.jumpCharge; mx *= k; mz *= k; }
+      else { const c = P.jumpCharge; P.jumpCharging = false; P.jumpCharge = 0; takeoff(c); }
+    } else if (spaceDown && P.vel.y < -4 && P.pos.y - 0.97 - Math.max(0, groundY(P.pos.x, P.pos.z)) < 20) {
+      // landing flare: Space held while dropping within 20 m of the street brakes at 60 m/s^2
+      P.vel.y = Math.min(-4, P.vel.y + 60 * dt); P.flareT = 0.2;
+    }
     P.vel.y -= G * dt;
     const fH = T1.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     const wish = T2.copy(fH).multiplyScalar(mz).addScaledVector(right, mx); if (wish.lengthSq() > 1) wish.normalize();
@@ -3158,7 +3248,8 @@ function updatePlayer(dt) {
     P.walkPhase += dt * Math.min(hs * 1.7, 12 + hs * 0.1);
     P.runK = lerp(P.runK, boost && wish.lengthSq() > 0.01 ? clamp((hs - 10) / (runTop * 0.5), 0, 1) : 0, 1 - Math.exp(-6 * dt));
   }
-  if (P.flying) P.runK = 0;
+  if (P.flying) { P.runK = 0; P.jumpCharging = false; P.jumpCharge = 0; }
+  P.spaceWas = spaceDown;
   // integrate with sub-steps so fast flight sweeps through blocks instead of tunnelling
   const prevSpeed = P.vel.length(), wasGrounded = P.grounded;
   P.grounded = false;
@@ -3176,7 +3267,7 @@ function updatePlayer(dt) {
     const d = b.pos.distanceTo(P.pos), rr = b.rad + 0.55; if (d >= rr) continue;
     const n = T1.copy(b.pos).sub(P.pos).divideScalar(d || 1);
     const vr = T2.copy(P.vel).sub(b.vel).dot(n);
-    if (vr > 0) { b.vel.addScaledVector(n, vr * 1.3); wake(b); if (b.kind === 'car') { disturbCar(b); damageCar(b, vr); } if (vr > 15) { SFX.punch(b.pos, 0.6); addShake(0.2); } }
+    if (vr > 0) { b.vel.addScaledVector(n, vr * 1.3); wake(b); if (b.kind === 'car') { disturbCar(b); damageCar(b, vr); } if (vr > 15) { SFX.punch(b.pos, 0.6); addShake(0.15); } }
     if (b.mass > 50000 && ps < 20) P.pos.addScaledVector(n, -(rr - d)); else b.pos.addScaledVector(n, rr - d);
   }
   // sonic boom, vapour cone, re-entry plasma
@@ -3219,6 +3310,7 @@ function updatePlayer(dt) {
   if (P.hitT > 0) P.hitT -= dt;
   if (P.punchT > 0) P.punchT -= dt;
   if (P.landT > 0) P.landT -= dt;
+  P.airT = P.grounded ? 0 : P.airT + dt; if (P.flareT > 0) P.flareT -= dt;
   if (P.combatT > 0) P.combatT -= dt; else ledger.combo = 0;
   if (alt > 100000 && !P.karman) { P.karman = true; toast('Above the Kármán line. Welcome to space.', 'good'); }
   // the held object rides with him
@@ -3227,6 +3319,7 @@ function updatePlayer(dt) {
     if (h.dead || (h.kind === 'person' && h.mode !== 'held')) P.hold = null;
     else {
       heldPos(h, h.pos); h.vel.copy(P.vel); h.quat.copy(P.quat).multiply(P.holdRel);
+      if (window.SM_CATCH) SM_CATCH.carry(h, dt);   // g on the carried body (js/catch.js)
       if (ps > 14 && h.kind !== 'person') buildingCollide(h);
       if (h.kind === 'meteor' && h.kryp) { releaseHeld(); toast('Kryptonite burns. You had to drop it.', 'alert'); }
     }
@@ -3237,7 +3330,7 @@ function updatePlayer(dt) {
 }
 function sonicBoom() {
   const p = P.pos.clone();
-  SFX.sonic(); addShake(1.2); hitStop(0.05);
+  SFX.sonic(); addShake(0.5); hitStop(0.05);
   const vd = T1.copy(P.vel).normalize();
   ring(p, vd, 1, 80, 0.9, new THREE.Color(2, 2.1, 2.3), 0.5);
   ring(p, vd, 1, 40, 0.5, new THREE.Color(2, 2.1, 2.3), 0.7);
@@ -3288,6 +3381,14 @@ function updateHeroPose(dt, fwd) {
   }
   P.quat.slerp(TQ, 1 - Math.exp(-10 * dt));
   hero.g.position.copy(P.pos); hero.g.quaternion.copy(P.quat);
+  // launch and land poses: crouch while charging a takeoff, the one-knee hero landing, a soft knee bend
+  const crouch = !P.flying && P.jumpCharging ? clamp(0.3 + P.jumpCharge * 0.7, 0, 1) : 0;
+  const landW = P.landT > 0 ? clamp(P.landT / 0.18, 0, 1) : 0, kneel = landW > 0 && (P.landTier === 'hero' || P.landTier === 'crater');
+  const softW = landW > 0 && P.landTier === 'soft' ? landW : 0;
+  P.poseDrop = lerp(P.poseDrop, kneel ? 0.56 * landW : softW ? 0.14 * softW : crouch * 0.4, 1 - Math.exp(-20 * dt));
+  P.poseLean = lerp(P.poseLean, kneel ? 0.55 * landW : crouch * 0.38, 1 - Math.exp(-20 * dt));
+  if (P.poseLean > 0.005) hero.g.quaternion.multiply(TQ2.setFromAxisAngle(T1.set(1, 0, 0), -P.poseLean));
+  hero.g.position.y -= P.poseDrop;
   if (run) hero.g.position.y += (Math.abs(Math.cos(P.walkPhase)) * 0.09 - 0.07) * run; // stride bob, sunk into the lean
   // limbs
   const t = simT;
@@ -3303,7 +3404,9 @@ function updateHeroPose(dt, fwd) {
   else if (P.idleT > 1.5) { aL = -0.3; aR = -0.3; aLz = -0.55; aRz = 0.55; lL = 0.06; lR = -0.06; }
   else if (P.flying) { aL = 0.25 + Math.sin(t * 2) * 0.05; aR = 0.25 + Math.cos(t * 2) * 0.05; aLz = -0.22; aRz = 0.22; lL = 0.12 + Math.sin(t * 1.6) * 0.06; lR = -0.05; }
   else if (P.grounded) { const s = Math.sin(P.walkPhase); lL = s * 0.7; lR = -s * 0.7; aL = -s * 0.5; aR = s * 0.5; }
-  if (P.landT > 0) { lL = -0.8; lR = 0.4; aL = 0.6; aR = 0.2; aRz = -0.6; }
+  if (kneel) { lL = -0.05; lR = 1.65; aL = -0.6; aLz = -0.6; aR = 0.62; aRz = 0.12; }
+  else if (softW) { lL = lR = 0.35 * softW; aLz = -0.3; aRz = 0.3; }
+  else if (crouch) { lL = lR = 1.05 * crouch; aL = aR = -0.6 * crouch; aLz = -0.25; aRz = 0.25; }
   if (P.hold) {
     const big = Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) > 1;
     if (big) { aL = aR = Math.PI * 0.97; aLz = -0.15; aRz = 0.15; } else { aL = aR = 1.3; aLz = -0.2; aRz = 0.2; }
@@ -3320,7 +3423,9 @@ function updateHeroPose(dt, fwd) {
   else if (P.idleT > 1.5) { eLx = eRx = -0.1; eLz = 1.45; eRz = -1.45; }
   else if (P.flying) { eLx = eRx = 0.3; kL = -0.25 - Math.sin(t * 1.6) * 0.08; kR = -0.12; }
   else if (P.grounded) { const s = P.walkPhase; kL = -Math.max(0, Math.sin(s + 1.6)) * 0.9; kR = -Math.max(0, Math.sin(s + 1.6 + Math.PI)) * 0.9; eLx = eRx = 0.35; }
-  if (P.landT > 0) { kL = -1.4; kR = -0.35; eRx = 0.3; }
+  if (kneel) { kL = -1.8; kR = -1.75; eLx = 0.4; eRx = 0; }
+  else if (softW) { kL = kR = -0.7 * softW; }
+  else if (crouch) { kL = kR = -1.9 * crouch; eLx = eRx = 0.35; }
   if (P.hold) { const big = Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) > 1; eLx = eRx = big ? 0.25 : 0.9; }
   if (P.punchT > 0) { eRx = 0; if (P.clapT > 0) eLx = eRx = 0.15; }
   if (P.charging) { eRx = 1.9; }
@@ -3462,50 +3567,99 @@ function cool(dt) {
 
 // ============================================================ camera
 const titleAngle = () => 0.55 + Math.sin(simT * 0.07) * 0.35;
+// critically damped vector spring (half-life form), no allocation
+function springV(x, v, g, half, dt) {
+  const y = 2 * Math.LN2 / half, e = Math.exp(-y * dt);
+  let j0 = x.x - g.x, j1 = v.x + j0 * y; x.x = e * (j0 + j1 * dt) + g.x; v.x = e * (v.x - j1 * y * dt);
+  j0 = x.y - g.y; j1 = v.y + j0 * y; x.y = e * (j0 + j1 * dt) + g.y; v.y = e * (v.y - j1 * y * dt);
+  j0 = x.z - g.z; j1 = v.z + j0 * y; x.z = e * (j0 + j1 * dt) + g.z; v.z = e * (v.z - j1 * y * dt);
+}
+const HERO_H = 1.95, HERO_H_FLY = 0.9, FRAC_MIN = 0.12, FRAC_MAX = 0.18, CAM_LAG_MAX = 1.5;
+const CAM_WANT = new V3();
 function updateCamera(dt) {
+  const C = camState;
   if (!started) {
     // cinematic title framing: hero in the right third, slow drift around him
     const ta = titleAngle();
     camera.position.set(P.pos.x + Math.sin(ta) * 6.2, P.pos.y + 0.35, P.pos.z + Math.cos(ta) * 6.2);
     const rx = Math.cos(ta), rz = -Math.sin(ta);
     camera.lookAt(T5.set(P.pos.x - rx * 2.1, P.pos.y + 0.25, P.pos.z - rz * 2.1));
-    if (camera.fov !== 48) { camera.fov = 48; camState.fov = 48; camera.updateProjectionMatrix(); }
+    if (camera.fov !== 48) { camera.fov = 48; C.fov = 48; camera.updateProjectionMatrix(); }
+    C.init = false;
     return;
   }
+  FEEL.shake(dt);
+  if (C.hold) return; // a scripted or photo camera owns the lens
   const fwd = aimDir(T1), right = T2.set(Math.cos(yaw), 0, -Math.sin(yaw));
   const sp = P.vel.length();
   const combat = currentInc && currentInc.type === 'robbery' && currentInc.marker().distanceTo(P.pos) < 70;
-  const walking = !P.flying && started;
+  const walking = !P.flying;
   const run = walking ? P.runK : 0;
+  const mach = sp / soundSpeed(P.pos.y);
+  // ---- FOV: the powers team's speed curve (log past Mach 1), soft-capped above 94 deg and rate-limited
+  // to 40 deg/s; kicks (boost onset, takeoff) ride on top through a spring
+  const boosting = P.flying && (keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.boost);
+  if (boosting && C.boostT === 0) fovKick(Math.min(8, 3 + 1.5 * Math.log2(1 + pw('fly') / 350)));
+  C.boostT = boosting ? C.boostT + dt : 0;
+  let fovT = (combat ? 62 : 68) + Math.min(18, mach * 10 + sp * 0.02) + Math.min(14, Math.log2(1 + Math.max(0, mach - 1)) * 4.5) + run * 10
+    + (P.charging ? -Math.min(6, P.charge * 5) : 0) - 4 * (P.jumpCharge || 0);
+  if (fovT > 94) fovT = 94 + (fovT - 94) * 0.3;
+  const fstep = 40 * dt;
+  C.fov += clamp((fovT - C.fov) * (1 - Math.exp(-4 * dt)), -fstep, fstep);
+  FEEL.spring(C.fovKick, 0, 0.12, dt);
+  const fov = clamp(C.fov + C.fovKick.x, 30, 110), tanH = Math.tan(fov * Math.PI / 360);
+  // ---- distance per mode, then springs so walk / run / fly / hover blend instead of snapping
   // flight keeps pulling back past Mach 1 (log scale) so Mach 3 and Mach 10 read differently
   let dist = combat ? 5.2 : walking ? 8.4 + Math.min(4, sp * 0.05) * (1 - run * 0.6) + run * 1.5 : 6.8 + Math.min(9, sp * 0.025) + Math.min(6, Math.log2(1 + sp / 400) * 2);
   if (P.hold) dist += Math.min(8, Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) * 1.4);
-  if (!started) dist = 9;
-  // walking frames him low and off-centre, like a third-person street camera; flight keeps him central
+  // walking frames him low and off-centre, like a third-person street camera; flight keeps him central;
   // the sprint camera drops low behind him so the street rushes past
-  const want = T3.copy(fwd).multiplyScalar(-dist).addScaledVector(UP, combat ? 1.1 : walking ? 2.4 - run * 1.3 : 1.5).addScaledVector(right, combat ? 1.2 : walking ? 0.85 : 0.95);
-  camState.off.lerp(want, 1 - Math.exp(-(combat ? 6 : 9) * dt));
-  const cp = T4.copy(P.pos).add(camState.off);
+  const modeHalf = combat ? 0.2 : 0.18;
+  FEEL.spring(C.dist, dist, modeHalf, dt);
+  FEEL.spring(C.up, combat ? 1.1 : walking ? 2.4 - run * 1.3 : 1.5, modeHalf, dt);
+  FEEL.spring(C.side, combat ? 1.2 : walking ? 0.85 : 0.95, modeHalf, dt);
+  const want = CAM_WANT.copy(fwd).multiplyScalar(-C.dist.x).addScaledVector(UP, C.up.x).addScaledVector(right, C.side.x);
+  // screen-space readability: in flight he stays 12-18% of screen height (as a standing figure) at any
+  // speed, so Mach 10 no longer shrinks him to a speck; the near limit only engages at speed
+  // his on-screen height shrinks from 1.95 m standing to ~0.9 m seen from behind in a full flight stretch
+  const heroH = lerp(HERO_H, HERO_H_FLY, P.flying ? clamp((sp - 12) / 25, 0, 1) : 0); C.heroH = heroH;
+  C.maxDist = heroH / (2 * tanH * FRAC_MIN); C.minDist = heroH / (2 * tanH * FRAC_MAX);
+  if (P.flying && !P.hold) {
+    const L = want.length(), lo = C.minDist * clamp((sp - 75) / 75, 0, 1);
+    if (L > C.maxDist) want.multiplyScalar(C.maxDist / L); else if (L < lo) want.multiplyScalar(lo / L);
+  }
+  // ---- follow: critically damped spring on the hero-relative offset. The camera keeps its world
+  // velocity when he accelerates, so a boost surges him ahead in frame (half-life 140 ms for the first
+  // 0.5 s), then it settles (70 ms cruise). The lag is clamped so he never runs away from the lens.
+  if (!C.init) { C.rel.copy(want); C.relV.set(0, 0, 0); C.lastVel.copy(P.vel); C.la.set(0, 0, 0); C.laV.set(0, 0, 0); C.init = true; }
+  const dv = T3.copy(P.vel).sub(C.lastVel); C.lastVel.copy(P.vel);
+  if (dv.lengthSq() < 400 * 400) C.relV.addScaledVector(dv, P.flying ? -1 : -0.5); // teleports don't count
+  const half = combat ? 0.2 : P.flying ? (C.boostT > 0 && C.boostT < 0.5 ? 0.14 : 0.07) : 0.09;
+  springV(C.rel, C.relV, want, half, dt);
+  const lag = T3.copy(C.rel).sub(want), lagL = lag.length();
+  if (lagL > CAM_LAG_MAX) { C.rel.copy(want).addScaledVector(lag, CAM_LAG_MAX / lagL); C.relV.multiplyScalar(0.5); }
+  if (P.flying && !P.hold) { // the lag never takes him outside the 12-18% band at speed
+    const L = C.rel.length(), lo = C.minDist * clamp((sp - 75) / 75, 0, 1);
+    if (L > C.maxDist) C.rel.multiplyScalar(C.maxDist / L); else if (L < lo && L > 0.01) C.rel.multiplyScalar(lo / L);
+  }
+  // look-ahead: lead the frame toward where he is going (velocity across the view)
+  const la = T3.copy(P.vel).addScaledVector(fwd, -P.vel.dot(fwd)).multiplyScalar(0.012), laMax = walking ? 0.6 : 1.2, laL = la.length();
+  if (laL > laMax) la.multiplyScalar(laMax / laL);
+  springV(C.la, C.laV, la, 0.25, dt);
+  const cp = T4.copy(P.pos).add(C.la).add(C.rel).add(T5.set(FEEL.ox, FEEL.oy, FEEL.oz));
+  C.off.copy(cp).sub(P.pos);
   // keep the camera out of walls
   const toCam = T5.copy(cp).sub(P.pos), L = toCam.length(); toCam.divideScalar(L || 1);
   const hit = raycast(T6.copy(P.pos).addScaledVector(UP, 0.5), toCam, L, { bodies: false });
   if (hit.type === 'block' && !P.xray) cp.copy(P.pos).addScaledVector(UP, 0.5).addScaledVector(toCam, Math.max(1.2, hit.t - 0.6));
   if (cp.y < groundY(cp.x, cp.z) + 0.4 && !inBay(cp.z)) cp.y = 0.4;
   camera.position.copy(cp);
-  if (camState.shake > 0) {
-    const s = camState.shake * camState.shake * 0.35;
-    camera.position.add(T5.set(R(-1, 1) * s, R(-1, 1) * s, R(-1, 1) * s));
-    camState.shake = Math.max(0, camState.shake - dt * 2.2);
-  }
   camera.lookAt(T5.copy(camera.position).add(fwd));
-  // banking and speed FOV give flight its weight
-  camState.roll = lerp(camState.roll, -P.bank * 0.35, 1 - Math.exp(-5 * dt));
-  camera.rotateZ(camState.roll);
-  const mach = sp / soundSpeed(P.pos.y);
-  // speed FOV: the old kick saturated at ~Mach 1; this keeps growing (log) up to Mach 10+, and the sprint gets its own kick
-  const fovT = (combat ? 62 : 68) + Math.min(18, mach * 10 + sp * 0.02) + Math.min(14, Math.log2(1 + Math.max(0, mach - 1)) * 4.5) + run * 10 + (P.charging ? -Math.min(6, P.charge * 5) : 0);
-  camState.fov = lerp(camState.fov, fovT, 1 - Math.exp(-4 * dt));
-  camera.fov = camState.fov; camera.updateProjectionMatrix();
+  // banking roll gives flight its weight; trauma shake is rotational (pitch / yaw / roll), not a jitter
+  C.roll = lerp(C.roll, -P.bank * 0.35, 1 - Math.exp(-5 * dt));
+  camera.rotateY(FEEL.yaw); camera.rotateX(FEEL.pitch); camera.rotateZ(C.roll + FEEL.roll);
+  camera.fov = fov; camera.updateProjectionMatrix();
+  C.heroFrac = heroH / (2 * Math.max(0.5, cp.distanceTo(P.pos)) * tanH);
   updateSpeedLines(dt, sp, mach, run);
 }
 // speed lines: streaks of air rushing past the camera, from the sprint and from Mach 0.8 up
@@ -4167,7 +4321,8 @@ function frame(now) {
 // lightweight section profiler: __game.prof() returns ms per section since the last reset
 const PROF = { on: false, last: 0, acc: {}, t(name) { if (!this.on) return; const n = performance.now(); if (name !== '-') this.acc[name] = (this.acc[name] || 0) + n - this.last; this.last = n; } };
 function update(dt) {
-  if (hitStopT > 0) { hitStopT -= dt; dt *= 0.08; }
+  // hit-stop freezes the sim (then ramps back); the camera, its shake and the cape keep real time
+  const rdt = dt; dt *= FEEL.step(rdt);
   const wdt = dt * (P.slow ? 0.12 : 1);
   simT += dt;
   if (started) { ledger.time += dt; updatePlayer(dt); }
@@ -4208,18 +4363,22 @@ function update(dt) {
   updateBirds(wdt);
   updateRings(dt);
   PROF.t('-'); ADD.update(wdt); SMK.update(wdt); PROF.t('particles');
-  updateCape(dt, simT);
-  updateCamera(dt);
+  updateCape(rdt, simT);
+  updateCamera(rdt);
   updateAtmosphere(dt);
   if (started) { updateHearing(dt); updateHUD(dt); }
 }
 window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; }, MAP, setMapOpen, drawBigMap, mapPins,
   // power levels + super hearing
-  get POWER() { return POWER; }, setPower, PWR, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson,
+  get POWER() { return POWER; }, setPower, PWR, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson, grabBody, SAVE_HOPE_CAP,
   // street-level missions + NPC dialogue (js/missions.js)
   mapPinHooks, PIN_COL, BEACON_COL, toast, hopeAdd, hopeHit, addSave, SFX, AU, FX, PPL, placePerson, groundY, cars, HOSP, missions: window.SM_MISSIONS || null,
-  get heatOn() { return beams[0].visible; }, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
-// incident registry + power hooks for js/metallo.js (and any later module)
-Object.assign(window.__game, { metallo: window.SM_METALLO || null, registerIncident, endIncident, hooks: HOOKS, kryptoniteNear, hitStop, addShake, ring, makeBody, removeBody, injurePerson, get cityEnv() { return cityProbe ? cityProbe.env : null; } });
+  // feel pass (js/feel.js): feel = {lastHitStopMs, trauma, timeScale, ...}; events = test-hook log
+  feel: FEEL, events, emit, camState, addShake, shakeAt, hitStop, fovKick, takeoff, landing, superLanding,
+  get heatOn() { return beams[0].visible; },
+  // set pieces (js/setpieces.js)
+  endIncident, aimDir: (o) => aimDir(o), registerIncident(type, def) { INC_REG[type] = def; }, setpieces: window.SM_SETPIECES || null, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
+// power hooks + helpers for js/metallo.js
+Object.assign(window.__game, { metallo: window.SM_METALLO || null, hooks: HOOKS, kryptoniteNear, ring, makeBody, removeBody, get cityEnv() { return cityProbe ? cityProbe.env : null; } });
 requestAnimationFrame(frame);
 })();

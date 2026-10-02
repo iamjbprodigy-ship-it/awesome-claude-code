@@ -4,6 +4,7 @@
  *   node tools/playtest-bot.js [--shots] [--out DIR] [--quality low|shot] [--only name,name]
  *   (--only missions,dialogue,mission-shots for the street-level missions; mission-shots writes DIR/missions/*.png)
  *   (--only power-levels,ground-run,hearing for the power set; powers-shots writes DIR/powers/*.png)
+ *   (--only feel for hit-stop, shake, camera framing and the landing tiers; feel-shots writes DIR/feel/*.png)
  *
  * Drives the real game in headless Chromium (Playwright) through every power, every emergency
  * type and a full tower collapse, asserting physics and gameplay invariants, timing the CPU
@@ -418,6 +419,375 @@ SCENARIOS.push({
   },
   check: r => [['ground-run shots at speed', [1, 2, 3].every(l => r.info['run' + l].hs > 30 && Math.abs(r.info['run' + l].y) < 0.5), JSON.stringify(r.info)],
     ['screenshots written', r.shots.length === 5, r.shots.join(', ')]]
+});
+
+// The Catch (js/catch.js): velocity matching, the g rule, the g-meter, triage and the Hope cap
+const CATCH_LIB = `
+  const g = __game, C = window.SM_CATCH, P = g.P, V = THREE.Vector3;
+  // let go; a test passenger is taken off the board so they can't land on a later test
+  const clearAll = () => { g.keys.clear(); P.slow = false; const h = P.hold; if (h) g.grabOrRelease(); if (h && h.kind === 'person') { h.mode = 'gone'; h.danger = false; } };
+  // a fresh, unhurt pedestrian turned into a free body at pos with velocity vel
+  const body = (pos, vel) => { const p = g.people.find(q => q.mode === 'free' && !q.thug && !q.msnRole && !q.injured);
+    p.mode = 'phys'; p.pos.copy(pos); p.vel.copy(vel); p.onGround = false; p.sleeping = false; p.sleepT = 0; p.danger = true; p.injured = false; p.severe = false; return p; };
+  const air = new V(-90, 220, 150);
+  const lastLog = k => { for (let i = C.log.length - 1; i >= 0; i--) if (C.log[i].kind === k) return C.log[i]; return null; };
+  const injCount = () => C.log.filter(e => e.kind === 'injure').length;
+  // carry the helicopter down to a street, let go 2 m up and wait for it to settle
+  const landHeli = (h) => { const gy = Math.max(0, g.groundY(-90, 150)); P.vel.set(0, 0, 0); P.pos.set(-90, gy + 2 + 1.5 - 2.45, 150); g.step(3);
+    g.grabOrRelease(); P.pos.x += 12; let n = 0; while (!h.landed && !h.crashed && n < 900) { g.step(3); n += 3; } g.step(3); return { landed: h.landed, crashed: h.crashed }; };
+`;
+SCENARIOS.push({
+  name: 'catch',
+  run: `(() => { ${CATCH_LIB} g.begin(); g.setPower(3); g.deferIncident(1e6); g.step(30); const out = {};
+    if (g.missions) g.missions.setSpawnTimer(1e6);
+    // 1. a faller met at matched velocity: auto-assist catches, cushioned, unhurt
+    clearAll(); P.flying = true; P.pos.copy(air); P.vel.set(0, -19.5, 0);
+    let p = body(new V(air.x + 1.2, air.y, air.z), new V(0, -20, 0)); g.step(2);
+    out.matched = { held: p.mode === 'held', hurt: p.injured, log: lastLog('catch') };
+    let pk = 0; for (let i = 0; i < 150; i++) { g.step(1); pk = Math.max(pk, C.g); }
+    out.matched.peak = +pk.toFixed(2); out.matched.after = p.injured; out.matched.speed = +P.vel.length().toFixed(2);
+    out.hud = { on: C.state().hud, cls: document.getElementById('catch-hud').className, read: document.querySelector('#catch-hud .cg-read b').textContent };
+    clearAll(); g.step(2);
+    // 2. a hard-stop catch: hovering still, the faller arrives at 25 m/s
+    P.pos.copy(air); P.vel.set(0, 0, 0); p = body(new V(air.x + 1.2, air.y, air.z), new V(0, -25, 0));
+    let i0 = injCount(); g.grabBody(p); g.step(2);
+    out.hard = { held: P.hold === p, hurt: p.injured, severe: !!p.severe, log: lastLog('catch'), injureEvents: injCount() - i0 };
+    clearAll(); g.step(2);
+    // 3. carry: a 4 g ramp is fine, a 10 g turn is not; P.catchG matches |dv|/dt/g over the 0.1 s window
+    P.pos.copy(air); P.vel.set(0, 0, 0); p = body(new V(air.x + 1, air.y, air.z), new V(0, 0, 0)); g.grabBody(p); g.step(2);
+    const dt = 1 / 60, hist = []; let maxErr = 0, rampPeak = 0;
+    const rec = () => { hist.push(P.vel.clone()); if (hist.length > 6) { const a = hist[hist.length - 1], b = hist[hist.length - 7];
+      const bot = a.distanceTo(b) / (6 * dt) / 9.81; maxErr = Math.max(maxErr, Math.abs(bot - P.catchG)); } };
+    let v = 0; for (let i = 0; i < 60; i++) { v += 4 * 9.81 * dt * 0.98; P.vel.set(v, 0, 0); g.step(1); rec(); rampPeak = Math.max(rampPeak, C.g); }
+    out.ramp = { speed: +v.toFixed(1), peak: +rampPeak.toFixed(2), hurt: p.injured };
+    const sp = v, w = 10 * 9.81 / sp; let ang = 0, turnPeak = 0;
+    for (let i = 0; i < 40; i++) { ang += w * dt; P.vel.set(Math.cos(ang) * sp, 0, Math.sin(ang) * sp); g.step(1); rec(); turnPeak = Math.max(turnPeak, C.g); }
+    out.turn = { peak: +turnPeak.toFixed(2), hurt: p.injured, severe: !!p.severe, gErr: +maxErr.toFixed(3) };
+    clearAll(); g.step(2);
+    // 3b. boosting from a standstill with a passenger hurts them
+    P.pos.copy(air); P.vel.set(0, 0, 0); g.setYawPitch(0, 0.3); p = body(new V(air.x + 1, air.y, air.z), new V(0, 0, 0)); g.grabBody(p); g.step(2);
+    g.keys.add('KeyW'); g.keys.add('ShiftLeft'); let bp = 0; for (let i = 0; i < 60 && !p.injured; i++) { g.step(1); bp = Math.max(bp, C.g); }
+    out.boost = { hurt: p.injured, peak: +bp.toFixed(1), speed: Math.round(P.vel.length()) };
+    clearAll(); g.step(2);
+    // 4. T5: per-person save Hope from one incident is capped at +10; the triage counter is on screen
+    g.startIncident('fire'); let inc = g.currentInc; g.ledger.hope = 40; for (let i = 0; i < 12; i++) g.addSave(1, null, 'test'); const hopeGain = g.ledger.hope - 40;
+    g.step(4); const tri = document.getElementById('triage');
+    out.cap = { hopeGain, cap: g.SAVE_HOPE_CAP, saveHope: inc.saveHope };
+    out.triage = { atRisk: inc.atRisk, safe: inc.safe, text: tri && !tri.hidden ? tri.textContent : '', want: 'Saved ' + inc.safe + ' / ' + inc.atRisk + ' at risk' };
+    // explosion-thrown people are at risk and catchable
+    const gx = -90, gz = 150, gy = Math.max(0, g.groundY(gx, gz)); const q = g.people.find(r => r.mode === 'free' && !r.thug && !r.msnRole && !r.injured);
+    q.pos.set(gx + 15, gy + 0.9, gz); g.explode(new V(gx, gy + 1, gz), 2.5e7);
+    const thrown = { mode: q.mode, danger: q.danger, injured: q.injured, vy: +q.vel.y.toFixed(1), risk0: inc.atRisk };
+    g.step(15); thrown.tracked = inc.atRisk > thrown.risk0;
+    let ok = false; for (let i = 0; i < 120 && !ok; i++) { if (q.mode === 'phys' && !q.onGround && q.vel.y < 0) { P.flying = true; P.pos.copy(q.pos).add(new V(1.2, 0, 0)); P.vel.copy(q.vel); g.step(1); ok = q.mode === 'held'; } else g.step(1); }
+    thrown.caught = ok; thrown.hurt = q.injured; out.thrown = thrown; clearAll(); g.step(2);
+    // let everyone the blast threw come down before the next emergency starts counting who is at risk
+    let settle = 0; while (g.people.some(r => r.danger && r.mode === 'phys') && settle < 900) { g.step(10); settle += 10; }
+    // 5. the helicopter, caught at matched speed, then set down: no injuries, success
+    g.startIncident('heli'); inc = g.currentInc; let h = inc.h; let n = 0;
+    while (h.phase !== 'falling' && n < 900) { g.step(5); n += 5; } for (let i = 0; i < 90; i++) g.step(1);
+    P.flying = true; P.pos.copy(h.pos).add(new V(2.6, 0, 0)); P.vel.copy(h.vel); const hv = +h.vel.length().toFixed(1); g.grabBody(h); g.step(1);
+    let hp = 0; for (let i = 0; i < 240; i++) { g.step(1); hp = Math.max(hp, C.g); }
+    const res0 = g.ledger.resolved, gold0 = g.ledger.medals.gold, eh0 = C.state().everyoneHome;
+    out.heliSoft = { fallSpeed: hv, injuries: inc.injuries, occHurt: !!h.occHurt, peak: +hp.toFixed(2), log: lastLog('catch'), atRisk: inc.atRisk };
+    Object.assign(out.heliSoft, landHeli(h)); g.step(20);
+    out.heliSoft.ended = g.currentInc !== inc; out.heliSoft.success = g.ledger.resolved > res0; out.heliSoft.gold = g.ledger.medals.gold > gold0;
+    out.heliSoft.everyoneHome = C.state().everyoneHome > eh0; out.heliSoft.age = Math.round(inc.age); out.heliSoft.damage = Math.round(inc.damage);
+    clearAll(); g.step(2);
+    // 6. the helicopter grabbed by a hovering hero at 20+ m/s: the crew are hurt, no gold
+    g.startIncident('heli'); inc = g.currentInc; h = inc.h; n = 0;
+    while (h.phase !== 'falling' && n < 900) { g.step(5); n += 5; } n = 0; while (h.vel.length() < 21 && n < 900 && !h.crashed) { g.step(1); n++; }
+    P.flying = true; P.pos.copy(h.pos).add(new V(2.6, 0, 0)); P.vel.set(0, 0, 0); const hv2 = +h.vel.length().toFixed(1);
+    i0 = injCount(); g.grabBody(h); g.step(3);
+    out.heliHard = { dv: hv2, injuries: inc.injuries, occHurt: !!h.occHurt, injureEvents: injCount() - i0 };
+    const r1 = g.ledger.resolved, g1 = g.ledger.medals.gold; g.step(60); Object.assign(out.heliHard, landHeli(h)); g.step(20);
+    out.heliHard.success = g.ledger.resolved > r1; out.heliHard.gold = g.ledger.medals.gold > g1;
+    clearAll(); g.step(2);
+    // 7. missions: the window washer goes through the same rule (matched: unhurt; hovering at 13+ m/s: hurt)
+    const M = g.missions, washer = (matched) => {
+      if (M.current()) M.cancel(); clearAll(); if (!M.spawn('washer')) return { spawned: false }; const m = M.current();
+      P.flying = false; P.pos.set(m.giver.pos.x + 1.5, m.giver.pos.y + 0.1, m.giver.pos.z); P.vel.set(0, 0, 0); g.step(2); M.press('KeyE'); M.release('KeyE'); g.step(10);
+      // stand well back so the slow-motion assist stays off
+      P.flying = true; P.pos.set(m.victim.pos.x + m.f.nx * 60, m.victim.pos.y, m.victim.pos.z + m.f.nz * 60); P.vel.set(0, 0, 0);
+      let k = 0; while (M.phase !== 'fall' && k < 900) { g.step(1); k++; }
+      k = 0; while (M.phase === 'fall' && m.fallV > (matched ? -10 : -13.5) && k < 300) { g.step(1); k++; }
+      if (M.phase !== 'fall') return { spawned: true, phase: M.phase, fallV: m.fallV };
+      const fv = m.fallV; P.slow = false; m.slowOn = true;
+      P.pos.copy(m.victim.pos).add(new V(m.f.nx * 1.3, 0, m.f.nz * 1.3)); P.vel.set(0, matched ? fv : 0, 0); g.step(1);
+      const vic = m.victim, r = { spawned: true, fallV: +fv.toFixed(1), held: vic.mode === 'held', hurt: !!vic.injured, state: M.state, log: lastLog('catch') };
+      g.step(3); clearAll(); g.step(400); return r; };
+    out.washerSoft = washer(true); out.washerHard = washer(false);
+    return out; })()`,
+  check: r => [
+    ['matched faller: auto-assist catches, unhurt', r.matched.held && !r.matched.hurt && !r.matched.after && !!r.matched.log && r.matched.log.cushioned, JSON.stringify(r.matched)],
+    ['soft hands: the cushioned stop stays under 6 g', r.matched.peak < 6, r.matched.peak + ' g'],
+    ['g-meter shows while carrying', r.hud.on && /\bon\b/.test(r.hud.cls), JSON.stringify(r.hud)],
+    ['hard-stop catch at 25 m/s injures (severe)', r.hard.held && r.hard.hurt && r.hard.severe && r.hard.injureEvents === 1, JSON.stringify(r.hard)],
+    ['carry: 4 g ramp leaves them unhurt', !r.ramp.hurt && r.ramp.peak < 5, JSON.stringify(r.ramp)],
+    ['carry: a 10 g turn injures', r.turn.hurt && r.turn.peak >= 9, JSON.stringify(r.turn)],
+    ['P.catchG within 0.5 g of |dv|/dt/g (bot, same window)', r.turn.gErr < 0.5, r.turn.gErr + ' g max error'],
+    ['boost from a standstill with a passenger injures', r.boost.hurt, JSON.stringify(r.boost)],
+    ['Hope from one incident capped at +10', Math.round(r.cap.hopeGain) === 10, JSON.stringify(r.cap)],
+    ['triage counter on the HUD', r.triage.atRisk >= 3 && r.triage.text === r.triage.want, JSON.stringify(r.triage)],
+    ['explosion-thrown person is at risk, tracked and catchable', r.thrown.danger && r.thrown.tracked && r.thrown.caught && !r.thrown.hurt, JSON.stringify(r.thrown)],
+    ['heli caught at matched speed: 0 injuries, lands, success', r.heliSoft.injuries === 0 && !r.heliSoft.occHurt && r.heliSoft.landed && r.heliSoft.success && !!r.heliSoft.log && r.heliSoft.log.cushioned, JSON.stringify(r.heliSoft)],
+    ['heli soft catch: gold and "Everyone home"', r.heliSoft.gold && r.heliSoft.everyoneHome, ''],
+    ['heli grabbed at 20+ m/s: crew hurt, injure event, no gold', r.heliHard.dv >= 20 && r.heliHard.occHurt && r.heliHard.injuries >= 3 && r.heliHard.injureEvents === 1 && !r.heliHard.gold, JSON.stringify(r.heliHard)],
+    ['missions washer, matched catch: unhurt, success', r.washerSoft.held && !r.washerSoft.hurt && r.washerSoft.state === 'success', JSON.stringify(r.washerSoft)],
+    ['missions washer, caught standing still at 13+ m/s: hurt', r.washerHard.held && r.washerHard.hurt && !!r.washerHard.log && r.washerHard.log.dv > 12, JSON.stringify(r.washerHard)]
+  ]
+});
+
+// screenshots of the g-meter mid-catch and a smooth window-washer catch: OUT/catch/*.png
+SCENARIOS.push({
+  name: 'catch-shots', shotsOnly: true,
+  page: async (p) => {
+    const dir = path.join(OUT, 'catch'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [], info = {};
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    // the bot drives every frame from here on: stop the page's own loop so slow screenshots don't advance the sim
+    await p.evaluate(() => { __game.begin(); __game.step(30); window.requestAnimationFrame = () => 0; __game.deferIncident(1e6); if (__game.missions) __game.missions.setSpawnTimer(1e6); });
+    // 1. g-meter mid-catch: a faller met at matched speed, braking at 4 g in his arms
+    info.meter = await p.evaluate(() => { const g = __game, P = g.P, V = THREE.Vector3, C = window.SM_CATCH;
+      const q = g.people.find(r => r.mode === 'free' && !r.thug && !r.msnRole);
+      const at = new V(-60, 120, 120); q.mode = 'phys'; q.pos.copy(at); q.vel.set(0, -24, 0); q.onGround = false; q.sleeping = false; q.danger = true;
+      P.flying = true; P.pos.copy(at).add(new V(1.2, 0, 0)); P.vel.set(0, -23.5, 0); g.setYawPitch(-0.6, -0.25);
+      g.step(1); g.step(5); g.render(); return C.state(); });
+    await snap('g-meter-mid-catch.png');
+    // 2. window washer: closing in at matched speed (match bar green), then the catch
+    info.washer = await p.evaluate(() => { const g = __game, P = g.P, M = g.missions, V = THREE.Vector3, C = window.SM_CATCH;
+      if (P.hold) g.grabOrRelease(); if (!M.spawn('washer')) return { spawned: false }; const m = M.current();
+      P.flying = false; P.pos.set(m.giver.pos.x + 1.5, m.giver.pos.y + 0.1, m.giver.pos.z); P.vel.set(0, 0, 0); g.step(2); M.press('KeyE'); M.release('KeyE'); g.step(60);
+      P.flying = true; P.pos.set(m.victim.pos.x + m.f.nx * 60, m.victim.pos.y, m.victim.pos.z + m.f.nz * 60); P.vel.set(0, 0, 0);
+      let k = 0; while (M.phase !== 'fall' && k < 900) { g.step(1); k++; }
+      k = 0; while (M.phase === 'fall' && m.fallV > -8 && k < 300) { g.step(1); k++; }
+      P.slow = false; m.slowOn = true;
+      const v = m.victim.pos; P.pos.set(v.x + m.f.nx * 4.5, v.y - 0.4, v.z + m.f.nz * 4.5); P.vel.set(0, m.fallV, 0);
+      g.setYawPitch(Math.atan2(m.f.nx, m.f.nz) + 0.5, 0.05); g.step(3); g.render();
+      return { fallV: +m.fallV.toFixed(1), state: C.state() }; });
+    await snap('washer-closing.png');
+    info.caught = await p.evaluate(() => { const g = __game, P = g.P, M = g.missions, C = window.SM_CATCH, m = M.current();
+      if (!m) return null; const v = m.victim.pos; P.pos.set(v.x + m.f.nx * 1.4, v.y, v.z + m.f.nz * 1.4); P.vel.set(0, m.fallV, 0);
+      g.step(1); for (let i = 0; i < 8; i++) g.step(1); g.render();
+      return { held: m.victim.mode === 'held', hurt: !!m.victim.injured, state: M.state, catchLog: C.log[C.log.length - 1], g: C.state() }; });
+    await snap('washer-smooth-catch.png');
+    return { info, shots };
+  },
+  check: r => [['g-meter on mid-catch', r.info.meter.hud, JSON.stringify(r.info.meter)],
+    ['match-speed shown while closing on the washer', r.info.washer.state && r.info.washer.state.faller === 'person' && r.info.washer.state.hud, JSON.stringify(r.info.washer)],
+    ['washer caught smoothly, unhurt', r.info.caught && r.info.caught.held && !r.info.caught.hurt, JSON.stringify(r.info.caught)],
+    ['screenshots written', r.shots.length === 3, r.shots.join(', ')]]
+});
+
+// Set pieces (js/setpieces.js): the runaway bus and the falling airliner, demo steps 7 and 8.
+// SP_DRIVE runs in the page: helpers that drive each outcome with real inputs (positioning,
+// E through setpieces.press/release, Q held in keys, an analog push like a gamepad stick).
+const SP_DRIVE = `(() => {
+  const g = __game, S = g.setpieces || window.SM_SETPIECES, P = g.P, V = THREE.Vector3, D2R = Math.PI / 180;
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const aimAt = (v) => { const d = new V().copy(v).sub(P.pos); d.y -= 0.66; d.normalize(); g.setYawPitch(Math.atan2(-d.x, -d.z), Math.asin(d.y)); };
+  const reset = () => { g.keys.clear(); S.push(null); if (P.hold) g.grabOrRelease(); if (g.currentInc) g.endIncident(false, 'test reset'); g.deferIncident(1e9); P.vel.set(0, 0, 0); };
+  function bus(mode) {
+    reset(); P.flying = true; P.pos.set(-90, 60, 0); g.step(2);
+    const h0 = g.ledger.hope, r0 = g.ledger.resolved; S.start('bus'); const inc = g.currentInc; const lane = S.cfg.bus.x;
+    let t = 0, ms = 0, frames = 0, dist = 0, attached = false, inside = false, nan = false;
+    const step = () => { const a = performance.now(); g.step(1); ms += performance.now() - a; frames++; t++; const b = S.bus; if (b) { inside = inside || b.insideBlock; nan = nan || b.nan || !isFinite(b.s); } };
+    if (mode === 'gentle') {
+      while (S.bus.v < 20 && t < 1800) step();
+      const b = S.bus; dist = S.cfg.bus.stopZ - b.s;
+      P.flying = true; P.pos.set(lane, 1.7, b.s + 2); P.vel.set(0, 0, b.v); g.setYawPitch(0, 0);
+      S.press('KeyE'); attached = S.bus.attached;   // grab and keep holding E
+    } else if (mode === 'hard') {
+      while (S.bus.v < 23.5 && S.bus.s < S.cfg.bus.stopZ - 70 && t < 2400) step();
+      const b = S.bus; dist = S.cfg.bus.stopZ - b.s;
+      P.flying = true; P.pos.set(lane, 1.7, b.s + 3); P.vel.set(0, 0, 0);
+    }
+    while (g.currentInc === inc && t < 60 * 70) { if (mode === 'hard') P.vel.set(0, 0, 0); step(); }
+    S.release('KeyE');
+    return Object.assign({ mode, seconds: +(t / 60).toFixed(1), dist: Math.round(dist), attached, ended: g.currentInc !== inc, resolved: g.ledger.resolved - r0,
+      simMs: +(ms / frames).toFixed(2), insideAny: inside, nanAny: nan, hope: +(g.ledger.hope - h0).toFixed(1) }, S.last || {});
+  }
+  function plane(mode) {
+    reset(); P.flying = true; P.pos.set(-1400, 300, 900); g.step(2);
+    const h0 = g.ledger.hope, med0 = Object.assign({}, g.ledger.medals); S.start('airliner'); const inc = g.currentInc;
+    let t = 0, ms = 0, frames = 0, fire = null;
+    const step = () => { const a = performance.now(); g.step(1); ms += performance.now() - a; frames++; t++; };
+    const eng = new V(), hp = new V();
+    if (mode !== 'none') {
+      // fly alongside the burning engine and hold freeze breath on it
+      g.keys.add('KeyQ');
+      while (S.plane && S.plane.fire > 0 && t < 60 * 15) {
+        const pl = S.plane; S.hardpoint('engine', eng);
+        P.flying = true; P.pos.copy(eng).addScaledVector(pl.vel, -10 / pl.vel.length()).add(new V(0, -4, 0)); P.vel.copy(pl.vel); aimAt(eng); step();
+      }
+      g.keys.delete('KeyQ'); fire = S.plane ? { out: S.plane.fire <= 0, breath: +S.plane.breath.toFixed(2), age: +S.plane.age.toFixed(1) } : null;
+    }
+    if (mode === 'guide') {
+      S.hardpoint('nose', hp); P.pos.copy(hp); P.vel.copy(S.plane.vel); S.press('KeyE'); S.release('KeyE');
+      while (g.currentInc === inc && t < 60 * 90) {
+        const pl = S.plane; const alt = pl.pos.y - 2, vsT = clamp(alt * 0.08, 3, 14);
+        const thDes = clamp(0.025 * (pl.vs - vsT) + 0.05, -0.15, 0.3);
+        S.push(clamp(4 * (thDes - pl.pitch * D2R) - 3 * pl.pitchRate, -1, 1), 0); step();
+      }
+      S.push(null);
+    } else while (g.currentInc === inc && t < 60 * 90) step();
+    const res = Object.assign({ mode, seconds: +(t / 60).toFixed(1), ended: g.currentInc !== inc, fire, simMs: +(ms / frames).toFixed(2) }, S.last || {});
+    const medal = ['gold', 'silver', 'bronze'].find(k => g.ledger.medals[k] > med0[k]) || null;
+    res.medal = medal; res.hopeGain = +(g.ledger.hope - h0).toFixed(1);
+    g.step(360); const pl = S.plane; res.after = pl ? { phase: pl.phase, y: +pl.pos.y.toFixed(2), standers: pl.standers, speed: +Math.hypot(pl.vel.x, pl.vel.z).toFixed(1) } : null;
+    return res;
+  }
+  return { bus, plane };
+})()`;
+SCENARIOS.push(
+  {
+    name: 'setpieces',
+    run: `(() => { const g = __game; g.begin(); g.step(30); const D = ${SP_DRIVE}; const out = {};
+      out.gentle = D.bus('gentle'); out.hard = D.bus('hard'); out.alone = D.bus('none');
+      out.guide = D.plane('guide'); out.wild = D.plane('none');
+      out.reg = { bus: !!(window.SM_INCIDENTS && SM_INCIDENTS.bus), airliner: !!(window.SM_INCIDENTS && SM_INCIDENTS.airliner),
+        rotBus: SM_INCIDENTS.bus.want(5, 400) && !SM_INCIDENTS.bus.want(5, 60), rotPlane: SM_INCIDENTS.airliner.want(6, 400) && !SM_INCIDENTS.airliner.want(6, 60) };
+      return out; })()`,
+    check: r => [
+      ['both set pieces registered and in the late rotation', r.reg.bus && r.reg.airliner && r.reg.rotBus && r.reg.rotPlane, JSON.stringify(r.reg)],
+      ['bus: braced 40 m+ early and held E, it stops before the crosswalk', r.gentle.dist >= 40 && r.gentle.attached && r.gentle.success && r.gentle.short > 0, `${r.gentle.dist} m out, stopped ${(r.gentle.short || 0).toFixed(1)} m short, peak ${r.gentle.maxG} g`],
+      ['bus: gentle stop hurts nobody, 30 step off', r.gentle.hurt === 0 && r.gentle.disembarked === 30, `${r.gentle.hurt} hurt, ${r.gentle.disembarked} off`],
+      ['bus: a stationary block at 25 m/s hurts 10+', r.hard.blocked && r.hard.hurt >= 10, `${r.hard.hurt} hurt (block at ${r.hard.vBlock} m/s)`],
+      ['bus: left alone it fails within its limit (+5 s) with lives lost', r.alone.ended && r.alone.success === false && r.alone.seconds <= 50 && r.alone.lost > 0, `${r.alone.seconds} s, ${r.alone.lost} lost`],
+      ['bus: never inside a live block, no NaN', ![r.gentle, r.hard, r.alone].some(x => x.insideAny || x.nanAny), ''],
+      ['bus: sim cost under 6 ms/frame', r.alone.simMs < 6 && r.gentle.simMs < 6, `${r.gentle.simMs} / ${r.alone.simMs} ms`],
+      ['airliner: freeze breath puts the fire out in 6 s or less', r.guide.fire && r.guide.fire.out && r.guide.fire.breath <= 6, JSON.stringify(r.guide.fire)],
+      ['airliner: guided down within limits (v/s < 6, roll < 15), 140 saved', r.guide.success && r.guide.kind === 'ditch' && r.guide.vs < 6 && r.guide.roll < 15 && r.guide.saved === 140, `v/s ${r.guide.vs}, roll ${r.guide.roll}, ${r.guide.saved} saved at ${r.guide.seconds} s`],
+      ['airliner: floats afterwards, people on the wings', r.guide.after && r.guide.after.phase === 'float' && Math.abs(r.guide.after.y - 0.5) < 1 && r.guide.after.standers > 0, JSON.stringify(r.guide.after)],
+      ['airliner: Hope gain capped (+10 passengers + medal)', r.guide.hopeGain <= 10 + ({ gold: 10, silver: 5, bronze: 1 }[r.guide.medal] || 0), `+${r.guide.hopeGain} (${r.guide.medal})`],
+      ['airliner: uncontrolled it fails before the limit', r.wild.ended && r.wild.success === false && r.wild.age < 75, `${r.wild.kind}/${r.wild.why} at ${r.wild.age} s, v/s ${r.wild.vs}`],
+      ['airliner: sim cost under 6 ms/frame, no NaN', r.guide.simMs < 6 && !r.guide.nan && !r.wild.nan, r.guide.simMs + ' ms']]
+  },
+  {
+    name: 'setpieces-budget', quality: 'high',
+    run: `(() => { const g = __game, S = g.setpieces, P = g.P, out = {}; g.begin(); g.deferIncident(1e9); const info = g.renderer.info; info.autoReset = false;
+      S.start('bus'); g.step(240); const b = S.bus; P.flying = true; P.pos.set(S.cfg.bus.x - 6, 4, b.s + 14); P.vel.set(0, 0, 0); g.setYawPitch(-0.35, -0.12); g.step(3);
+      info.reset(); g.composer.render(); out.bus = { calls: info.render.calls, tris: info.render.triangles, people: S.people };
+      S.start('airliner'); g.step(60); const v = S.hardpoint('left'); P.pos.set(v.x - 10, v.y - 6, v.z + 30); g.setYawPitch(0.3, 0.15); g.step(1);
+      info.reset(); g.composer.render(); out.plane = { calls: info.render.calls, tris: info.render.triangles };
+      return out; })()`,
+    check: r => ['bus', 'plane'].map(k => [`${k} set piece within draw-call budget (400)`, r[k].calls <= 400, `${r[k].calls} calls, ${(r[k].tris / 1e6).toFixed(2)}M tris`])
+      .concat(['bus', 'plane'].map(k => [`${k} set piece triangles within budget (3M)`, r[k].tris <= 3e6, (r[k].tris / 1e6).toFixed(2) + 'M']))
+  }
+);
+SCENARIOS.push({
+  name: 'setpieces-shots', shotsOnly: true, quality: 'high',
+  page: async (p) => {
+    const dir = path.join(OUT, 'setpieces'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [], info = {};
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    info.bus = await p.evaluate(() => { const g = __game, S = g.setpieces, P = g.P; g.begin(); g.deferIncident(1e9); g.step(20);
+      S.start('bus'); while (S.bus.v < 20) g.step(1); const b = S.bus; P.flying = true; P.pos.set(S.cfg.bus.x, 1.7, b.s + 2); P.vel.set(0, 0, b.v); S.press('KeyE');
+      g.step(50); g.setYawPitch(0.55, -0.12); g.step(4); g.render(); return S.bus; });
+    await snap('bus-holding-front.png');
+    info.plane = await p.evaluate(() => { const g = __game, S = g.setpieces, P = g.P; S.release('KeyE'); g.endIncident(true, 'shot'); g.step(2);
+      S.start('airliner'); g.step(30); g.keys.add('KeyQ');
+      for (let i = 0; i < 420 && S.plane.fire > 0; i++) { const e = S.hardpoint('engine'); P.pos.copy(e).add(new THREE.Vector3(-10, -4, 0)); P.vel.copy(S.plane.vel); const d = e.clone().sub(P.pos); d.y -= 0.66; d.normalize(); g.setYawPitch(Math.atan2(-d.x, -d.z), Math.asin(d.y)); g.step(1); }
+      g.keys.delete('KeyQ'); const v = S.hardpoint('left'); P.pos.copy(v); S.press('KeyE'); S.release('KeyE'); S.push(0.6, 0); g.step(40);
+      g.setYawPitch(2.2, 0.12); g.step(3); g.render(); S.push(null); return S.plane; });
+    await snap('airliner-wing-push-sunset.png');
+    return { info, shots };
+  },
+  check: r => [['bus braced in the shot', r.info.bus && r.info.bus.attached, JSON.stringify(r.info.bus && { v: r.info.bus.v, g: r.info.bus.g })],
+    ['Superman on the airliner wing in the shot', r.info.plane && r.info.plane.attached === 'left', JSON.stringify(r.info.plane && { y: r.info.plane.pos.y, attached: r.info.plane.attached })],
+    ['screenshots written', r.shots.length === 2, r.shots.join(', ')]]
+});
+// feel pass (dream-features step 1 and §3): hit-stop, trauma shake, Mach 10 framing, charged takeoff, landing tiers
+SCENARIOS.push({
+  name: 'feel',
+  run: `(() => { const g = __game, F = g.feel, out = {}; g.begin(); g.setPower(3); g.step(30);
+    const sinceEv = (i, type) => g.events.slice(i).filter(e => e.type === type);
+    // 1) a full-charge punch on a parked car: the sim freezes for <= 150 ms of real time, the camera keeps shaking
+    const c = g.bodies.filter(b => b.kind === 'car' && !b.dead && b.pos.y < 3).sort((a, b) => Math.hypot(a.pos.x + 150, a.pos.z - 200) - Math.hypot(b.pos.x + 150, b.pos.z - 200))[0];
+    g.P.flying = true; g.P.vel.set(0, 0, 0); g.P.pos.set(c.pos.x, c.pos.y + 0.5, c.pos.z + 3.2); g.setYawPitch(0, -0.15); g.step(3); F.reset();
+    g.punch(4);
+    let frozen = 0, slow = 0, camMoved = 0; const q = g.camera.quaternion.clone();
+    for (let i = 0; i < 40; i++) { const s0 = g.simT; g.step(1); const ds = g.simT - s0;
+      if (ds < 1e-7) { frozen += 1000 / 60; if (q.angleTo(g.camera.quaternion) > 1e-6) camMoved++; } else if (ds < 1 / 60 - 1e-6) slow += 1000 / 60 - ds * 1000;
+      q.copy(g.camera.quaternion); }
+    out.punch = { ms: F.lastHitStopMs, frozen: Math.round(frozen), frozenMs: Math.round(F.frozenMs), rampLostMs: Math.round(slow), camMoved, carV: +c.vel.length().toFixed(1) };
+    // 2) a sonic boom: trauma rises, the shake is rotational and bounded, and it drains below 0.05 within 1.5 s
+    g.P.pos.set(0, 600, 0); g.P.vel.set(0, 0, 0); g.step(5); F.reset();
+    const p0 = g.camera.position.clone(); g.sonicBoom(); const tr0 = F.trauma;
+    let maxRot = 0, maxRoll = 0, trAt = []; const deg = 180 / Math.PI;
+    for (let i = 1; i <= 90; i++) { g.step(1); maxRot = Math.max(maxRot, Math.abs(F.pitch), Math.abs(F.yaw)) ; maxRoll = Math.max(maxRoll, Math.abs(F.roll)); if (i % 15 === 0) trAt.push(+F.trauma.toFixed(3)); }
+    out.boom = { tr0: +tr0.toFixed(2), tr15: F.trauma, curve: trAt, maxRotDeg: +(maxRot * deg).toFixed(2), maxRollDeg: +(maxRoll * deg).toFixed(2), maxPos: +Math.hypot(F.ox, F.oy, F.oz).toFixed(3) };
+    // shake slider at 0 kills it
+    window.SM_SETTINGS = { get: k => k === 'shake' ? 0 : undefined }; F.reset(); g.sonicBoom(); g.step(3);
+    out.boomOff = +(Math.abs(F.pitch) + Math.abs(F.yaw) + Math.abs(F.roll)).toFixed(6); delete window.SM_SETTINGS;
+    // 3) level 3 top speed (about Mach 10) at 2000 m: the camera stays within the screen-space band
+    g.P.flying = true; g.P.pos.set(0, 2000, 1500); g.P.vel.set(0, 0, 0); g.setYawPitch(0, -0.05); g.keys.clear(); g.keys.add('KeyW'); g.keys.add('ShiftLeft');
+    let dMin = 1e9, dMax = 0, fMin = 1, fMax = 0, bad = 0;
+    for (let i = 0; i < 300; i++) { g.step(1); if (i < 20) continue; const d = g.camera.position.distanceTo(g.P.pos), C = g.camState;
+      dMin = Math.min(dMin, d); dMax = Math.max(dMax, d); fMin = Math.min(fMin, C.heroFrac); fMax = Math.max(fMax, C.heroFrac);
+      if (d > C.maxDist + 0.05 || (g.P.vel.length() > 150 && d < C.minDist - 0.05)) bad++; }
+    const mach = g.P.vel.length() / Math.max(295, 340.3 - 0.0041 * g.P.pos.y); g.keys.clear();
+    out.mach10 = { mach: +mach.toFixed(1), dMin: +dMin.toFixed(2), dMax: +dMax.toFixed(2), fMin: +fMin.toFixed(3), fMax: +fMax.toFixed(3), bad, fov: Math.round(g.camera.fov), limits: [+g.camState.minDist.toFixed(2), +g.camState.maxDist.toFixed(2)] };
+    // 4) launch and land on the avenue
+    const street = () => { g.keys.clear(); g.P.flying = false; g.P.vel.set(0, 0, 0); g.P.pos.set(-150, 0.97, 200); g.setYawPitch(0, -0.1); g.step(20); F.reset(); };
+    street(); let i0 = g.events.length, dmg0 = g.ledger.damage;
+    g.keys.add('Space'); g.step(36); const crouchDrop = +g.P.poseDrop.toFixed(2); g.keys.delete('Space');
+    g.step(1); const vy1 = g.P.vel.y; g.step(1); const vy2 = g.P.vel.y; const tk = sinceEv(i0, 'takeoff')[0];
+    out.takeoff = { vy: +Math.max(vy1, vy2).toFixed(1), ev: tk || null, dmg: g.ledger.damage - dmg0, crouchDrop, tr: +F.peakTrauma.toFixed(2) };
+    const land = (setup, frames) => { street(); setup(); i0 = g.events.length; dmg0 = g.ledger.damage; F.reset(); F.peakTrauma = 0; let ev = null, dmgAt = 0, drop = 0;
+      for (let i = 0; i < frames && !ev; i++) { g.step(1); ev = sinceEv(i0, 'land')[0] || null; if (ev) dmgAt = g.ledger.damage - dmg0; }
+      g.step(12); drop = g.P.poseDrop; g.keys.clear(); return { tier: ev && ev.tier, v: ev && ev.v, dmg: dmgAt, tr: +F.peakTrauma.toFixed(2), stop: F.lastHitStopMs, drop: +drop.toFixed(2), n: sinceEv(i0, 'land').length }; };
+    out.soft = land(() => { g.P.pos.set(-150, 40, 200); g.step(1); g.keys.add('Space'); }, 900);
+    out.hero = land(() => { g.P.pos.set(-150, 5, 200); g.P.vel.set(0, -30, 0); }, 120);
+    out.crater = land(() => { g.P.pos.set(-150, 5, 200); g.P.vel.set(0, -60, 0); }, 120);
+    out.braked = land(() => { g.P.pos.set(-150, 6, 200); g.P.vel.set(0, -60, 0); g.step(1); g.keys.add('Space'); }, 120);
+    return out; })()`,
+  check: r => [
+    ['full-charge punch hit-stop is 100 ms (min(100, 20 + 20 x power))', r.punch.ms === 100, `${r.punch.ms} ms`],
+    ['sim freeze <= 150 ms of real time', r.punch.frozen <= 150 && r.punch.frozen >= 80, `${r.punch.frozen} ms frozen (feel ${r.punch.frozenMs}), ramp lost ${r.punch.rampLostMs} ms`],
+    ['camera shake keeps animating during hit-stop', r.punch.camMoved >= 3, `${r.punch.camMoved} frozen frames with camera motion`],
+    ['boom raises trauma', r.boom.tr0 >= 0.45, r.boom.tr0],
+    ['trauma decays below 0.05 within 1.5 s', r.boom.tr15 < 0.05, r.boom.curve.join(' ')],
+    ['shake is rotational and bounded (2.5 deg pitch/yaw, 4 deg roll, small position)', r.boom.maxRotDeg <= 2.5 && r.boom.maxRollDeg <= 4 && r.boom.maxPos <= 0.16, `${r.boom.maxRotDeg} / ${r.boom.maxRollDeg} deg, ${r.boom.maxPos} m`],
+    ['shake setting 0 removes the shake', r.boomOff === 0, r.boomOff],
+    ['level 3 reaches about Mach 10', r.mach10.mach >= 9, 'Mach ' + r.mach10.mach],
+    ['camera distance stays within the screen-space band at Mach 10', r.mach10.bad === 0, `${r.mach10.bad} frames outside; d ${r.mach10.dMin}-${r.mach10.dMax} m while accelerating, final limits ${r.mach10.limits} m, fov ${r.mach10.fov}`],
+    ['hero stays ~12-18% of screen height at speed', r.mach10.fMin >= 0.115 && r.mach10.fMax <= 0.25, `${r.mach10.fMin}-${r.mach10.fMax}`],
+    ['charged takeoff: vy >= 80 within 2 frames, charge >= 0.9', r.takeoff.vy >= 80 && r.takeoff.ev && r.takeoff.ev.charge >= 0.9, `vy ${r.takeoff.vy}, ${JSON.stringify(r.takeoff.ev)}`],
+    ['full-charge takeoff crouches, cracks the pavement ($5K) and shakes', r.takeoff.crouchDrop > 0.25 && r.takeoff.dmg === 5000 && r.takeoff.tr > 0.2, `drop ${r.takeoff.crouchDrop} m, $${r.takeoff.dmg}, trauma ${r.takeoff.tr}`],
+    ['flared drop from 40 m lands soft, no damage', r.soft.tier === 'soft' && r.soft.dmg === 0 && r.soft.n === 1, JSON.stringify(r.soft)],
+    ['30 m/s lands as a hero landing: kneel, small shake, no damage', r.hero.tier === 'hero' && r.hero.dmg === 0 && r.hero.drop > 0.3 && r.hero.tr > 0.1 && r.hero.tr < 0.4, JSON.stringify(r.hero)],
+    ['60 m/s unbraked lands as a crater: +$25K, big shake, 80 ms hit-stop', r.crater.tier === 'crater' && Math.abs(r.crater.dmg - 25000) <= 1 && r.crater.tr >= 0.3 && r.crater.stop === 80, JSON.stringify(r.crater)],
+    ['60 m/s braked lands as a hero landing, no crater bill', r.braked.tier === 'hero' && r.braked.dmg === 0, JSON.stringify(r.braked)]
+  ]
+});
+// screenshots: the hero landing (gameplay camera and a side view) and the flight framing at Mach 10: OUT/feel/*.png
+SCENARIOS.push({
+  name: 'feel-shots', shotsOnly: true,
+  page: async (p) => {
+    const dir = path.join(OUT, 'feel'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [], info = {};
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    await p.evaluate(() => { __game.begin(); __game.setPower(3); __game.step(30); });
+    info.hero = await p.evaluate(() => { const g = __game; g.keys.clear(); g.P.flying = false; g.P.pos.set(-150, 6, 200); g.P.vel.set(0, -32, 0); g.setYawPitch(0.5, -0.12);
+      let ev = null; const i0 = g.events.length; for (let i = 0; i < 60 && !ev; i++) { g.step(1); ev = g.events.slice(i0).find(e => e.type === 'land'); }
+      g.step(10); g.P.landT = 99; g.render(); return ev; }); // hold the pose while the live loop renders the shot
+    await snap('hero-landing.png');
+    await p.evaluate(() => { const g = __game, P = g.P; g.camState.hold = true; const f = new g.camera.position.constructor(-Math.sin(0.5), 0, -Math.cos(0.5)), r = new g.camera.position.constructor(Math.cos(0.5), 0, -Math.sin(0.5));
+      g.camera.position.copy(P.pos).addScaledVector(f, 3.4).addScaledVector(r, 2.2).setY(1.1); g.camera.lookAt(P.pos.x, 0.55, P.pos.z); g.camera.fov = 55; g.camera.updateProjectionMatrix(); g.render(); });
+    await snap('hero-landing-side.png');
+    await p.evaluate(() => { __game.camState.hold = false; });
+    info.crouch = await p.evaluate(() => { const g = __game; g.P.landT = 0; g.step(30); g.keys.add('Space'); g.step(34); g.render(); return +g.P.jumpCharge.toFixed(2); });
+    await snap('takeoff-crouch.png');
+    info.mach = await p.evaluate(() => { const g = __game; g.keys.clear(); g.step(5); g.P.flying = true; g.P.pos.set(0, 2000, 1500); g.P.vel.set(0, 0, 0); g.setYawPitch(0, -0.05);
+      g.keys.add('KeyW'); g.keys.add('ShiftLeft'); g.step(240); g.render();
+      return { mach: +(g.P.vel.length() / Math.max(295, 340.3 - 0.0041 * g.P.pos.y)).toFixed(1), frac: +g.camState.heroFrac.toFixed(3), d: +g.camera.position.distanceTo(g.P.pos).toFixed(2) }; });
+    await snap('flight-mach10.png');
+    return { info, shots };
+  },
+  check: r => [['hero landing captured', r.info.hero && r.info.hero.tier === 'hero', JSON.stringify(r.info)],
+    ['Mach 10 framing keeps him readable', r.info.mach.mach >= 9 && r.info.mach.frac >= 0.115, JSON.stringify(r.info.mach)],
+    ['screenshots written', r.shots.length === 4, r.shots.join(', ')]]
 });
 
 const RIGS = [
