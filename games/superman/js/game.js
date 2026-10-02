@@ -1369,6 +1369,7 @@ function knock(p, vel, injure) {
   if (p.mode === 'trapped') p.danger = true;
   p.mode = 'phys'; p.vel.copy(vel); p.sleeping = false; p.sleepT = 0; p.onGround = false;
   p.angVel.set(R(-3, 3), R(-1, 1), R(-3, 3)); p.quat.setFromAxisAngle(UP, p.face);
+  if (!p.thug && vel.lengthSq() > 64) p.danger = true;   // thrown hard: catch them before they land
   if (injure) injurePerson(p);
 }
 function injurePerson(p) {
@@ -1677,8 +1678,11 @@ function hopeHit(v) {
   if (ledger.time - hopeWinT > 5) { hopeWinT = ledger.time; hopeWinLoss = 0; }
   const take = Math.max(0, Math.min(v, 10 - hopeWinLoss)); hopeWinLoss += take; hopeAdd(-take);
 }
+const SAVE_HOPE_CAP = 10;   // T5: per-person save Hope is capped per incident; set pieces pay out through the medal
 function addSave(n, pos, why) {
-  ledger.saves += n; hopeAdd(2 * n); SFX.good();
+  let h = 2 * n;
+  if (currentInc) { const got = currentInc.saveHope || 0; h = Math.max(0, Math.min(h, SAVE_HOPE_CAP - got)); currentInc.saveHope = got + h; }
+  ledger.saves += n; hopeAdd(h); SFX.good();
   if (pos) celebrate(pos, 45);
   toast((why || 'Saved') + (n > 1 ? ` ×${n}` : ''), 'good');
   checkUnlocks();
@@ -2436,7 +2440,7 @@ function startHeli() {
         if (rnd() < 0.8) FX.smoke(h.pos.x, h.pos.y + 1, h.pos.z, 1.2, 0.04);
         if (rnd() < 0.3) FX.fire(h.pos.x - 1, h.pos.y + 1, h.pos.z, 0.6);
       }
-      if (h.landed) { addSave(3, h.pos, 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter down safely'); }
+      if (h.landed) { addSave(3, h.pos, h.occHurt ? 'Pilot, reporter and camera operator alive, but hurt' : 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter down safely'); }
       else if (h.crashed) { ledger.lost += 3; this.lost = 3; endIncident(false, 'The helicopter crashed.'); }
     },
     timeout() { if (!h.landed && !h.crashed) { if (h.phase === 'trouble') { h.phase = 'falling'; h.noGrav = false; } } },
@@ -2784,8 +2788,14 @@ function grabOrRelease() {
     return;
   }
   if (t.mass > pw('grab')) { tooHeavy(t.mass); return; }
+  grabBody(t);
+}
+// take hold of a body; the catch rule (js/catch.js) judges the velocity change first
+function grabBody(t) {
+  if (P.hold || t.held) return false;
+  if (t.kind === 'person' && t.mode === 'trapped') return false;
+  if (window.SM_CATCH) SM_CATCH.onGrab(t);
   if (t.kind === 'person') {
-    if (t.mode === 'trapped') return;
     if (t.thug && !t.cuffed) apprehend(t, 'Disarmed');
     t.mode = 'held'; t.prevDanger = t.danger || t.pos.y > 4 || t.injured;
   } else if (t.kind === 'car') disturbCar(t);
@@ -2796,6 +2806,7 @@ function grabOrRelease() {
   if (t.kind === 'person') P.holdRel.setFromAxisAngle(T1.set(1, 0, 0), -Math.PI / 2);
   P.hold = t; SFX.whoosh();
   if (t.mass > 20000) toast(`${Math.round(t.mass / 1000)} tonnes. Easy.`, '');
+  return true;
 }
 function tooHeavy(kg) { toast(`${Math.round(kg / 1000)} tonnes is too heavy at power ${POWER}. Press 3 for full strength.`, ''); }
 function heldPos(h, o) {
@@ -3128,7 +3139,7 @@ function updatePlayer(dt) {
       }
       allowed = Math.max(vmax, sp - Math.max(400, sp * 0.8) * dt); // bleed off quickly, not instantly
       const s2 = P.vel.length(); if (s2 > allowed) P.vel.multiplyScalar(allowed / s2);
-    } else P.vel.multiplyScalar(Math.exp(-2.4 * dt));
+    } else if (!(P.hold && window.SM_CATCH && SM_CATCH.coast(dt))) P.vel.multiplyScalar(Math.exp(-2.4 * dt));
     if (P.kryp > 0.2) P.vel.y -= G * P.kryp * dt * 2;
   } else {
     P.vel.y -= G * dt;
@@ -3214,6 +3225,7 @@ function updatePlayer(dt) {
     if (h.dead || (h.kind === 'person' && h.mode !== 'held')) P.hold = null;
     else {
       heldPos(h, h.pos); h.vel.copy(P.vel); h.quat.copy(P.quat).multiply(P.holdRel);
+      if (window.SM_CATCH) SM_CATCH.carry(h, dt);   // g on the carried body (js/catch.js)
       if (ps > 14 && h.kind !== 'person') buildingCollide(h);
       if (h.kind === 'meteor' && h.kryp) { releaseHeld(); toast('Kryptonite burns. You had to drop it.', 'alert'); }
     }
@@ -4202,7 +4214,7 @@ function update(dt) {
 }
 window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; }, MAP, setMapOpen, drawBigMap, mapPins,
   // power levels + super hearing
-  get POWER() { return POWER; }, setPower, PWR, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson,
+  get POWER() { return POWER; }, setPower, PWR, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson, grabBody, SAVE_HOPE_CAP,
   // street-level missions + NPC dialogue (js/missions.js)
   mapPinHooks, PIN_COL, BEACON_COL, toast, hopeAdd, hopeHit, addSave, SFX, AU, FX, PPL, placePerson, groundY, cars, HOSP, missions: window.SM_MISSIONS || null,
   get heatOn() { return beams[0].visible; }, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };

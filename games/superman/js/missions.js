@@ -992,6 +992,7 @@
     if (d < CFG.types.washer.catchR) {
       // caught: straight into his arms (same hold the E key uses)
       if (P.hold) g.grabOrRelease();
+      p.vel.set(0, m.fallV, 0); if (window.SM_CATCH) window.SM_CATCH.onGrab(p);   // velocity-matching rule (js/catch.js)
       p.mode = 'held'; p.held = true; p.sleeping = false; p.vel.set(0, 0, 0); p.prevDanger = false; p.msnPose = null;
       P.holdRel.setFromAxisAngle(XAX, -Math.PI / 2); P.hold = p;
       bark(p, 'caught', { prio: true }); m.qteResult = 'ok';
