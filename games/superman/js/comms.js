@@ -471,7 +471,7 @@
       who, text: String(text), trigger: o.trigger || 'say', prio: o.prio || (urgent ? 3 : 2), at: clock,
       notBefore: clock + (o.delay || 0), exp: clock + (o.ttl || 60), inc: null,
       incidentType: o.incidentType !== undefined ? o.incidentType : (inc ? inc.type : null),
-      group: null, reaction: true, interrupt: urgent, onEnd: o.onEnd || null
+      group: null, reaction: true, interrupt: urgent, force: !!o.interrupt, onEnd: o.onEnd || null
     });
   }
 
@@ -495,7 +495,7 @@
       const it = queue[0];
       // (a callout for an emergency that has since been replaced counts as stale)
       const stale = cur.inc && cur.inc !== g.currentInc;
-      if (it.prio >= 3 && it.interrupt && (cur.prio < 3 || stale) && clock >= it.notBefore) { hangUp(true); }
+      if (it.prio >= 3 && it.interrupt && (cur.prio < 3 || stale || it.force) && clock >= it.notBefore) { hangUp(true); }
       else return;
     }
     for (let i = 0; i < queue.length; i++) {

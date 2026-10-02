@@ -381,7 +381,8 @@ html, body {
   content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.16;
   background: linear-gradient(100deg, var(--cm), transparent 48%);
 }
-.comms.on { visibility: visible; opacity: 1; transform: none; transition: opacity 0.18s ease, transform 0.34s cubic-bezier(.2, 1.25, .35, 1), visibility 0s; }
+/* opacity snaps to 1 (only the slide animates) so a stalled compositor never hides a call */
+.comms.on { visibility: visible; opacity: 1; transform: none; transition: transform 0.34s cubic-bezier(.2, 1.25, .35, 1), visibility 0s; }
 .comms.out { visibility: visible; opacity: 0; transform: translateX(-16px); transition: opacity 0.35s ease, transform 0.35s ease, visibility 0s linear 0.35s; }
 /* faint CRT lines over the whole card */
 .comms::after {
