@@ -863,7 +863,8 @@ if (aMask > 0.0) {
 }`);
   };
   scene.userData.cityMat = cityMat;
-  const city = new THREE.Mesh(new THREE.PlaneGeometry(480, 480), cityMat);
+  // subdivided: depth interpolated across one 480 m triangle is only good to a few cm, and the crosswalks sit just above it
+  const city = new THREE.Mesh(new THREE.PlaneGeometry(480, 480, 96, 96), cityMat);
   city.rotation.x = -Math.PI / 2; city.position.y = 0.02; city.receiveShadow = true; scene.add(city);
   const land = new THREE.Mesh(new THREE.PlaneGeometry(800000, 400000), new THREE.MeshStandardMaterial({ color: lin(0x5f604c), roughness: 1 }));
   land.rotation.x = -Math.PI / 2; land.position.z = WATER_Z - 200000; land.position.y = -0.4; // well below the streets: depth across an 800 km triangle is only good to a few cm land.receiveShadow = true; scene.add(land);
