@@ -13,7 +13,7 @@ const V3 = THREE.Vector3, Q4 = THREE.Quaternion;
 const G = 9.81, CELL = 5, STORY = 4, LOTS = 7, PITCH = 60, HALF = LOTS * PITCH / 2;
 const WATER_Z = 240, WATER_Y = -0.6, SEAFLOOR = -24, FAR_SHORE = 1800;
 const inBay = z => z > WATER_Z && z < FAR_SHORE;
-const LIVE_CAP = 600, DEBRIS_SLOTS = 3600, MAXP = 200;
+const LIVE_CAP = 450, DEBRIS_SLOTS = 3600, MAXP = 200;
 const T_COL = 0, T_GLASS = 1, T_SLAB = 2;               // block types
 const BREAK_E = [9e6, 5e5, 1.6e6];                        // joules to break each type
 const MASS_T = [62000, 11000, 30000];                     // kg per block type
@@ -494,13 +494,14 @@ function makeFacadeMat(worldUV) {
         '  wq = modelMatrix * wq; vWP = wq.xyz; vWN = normalize(mat3(modelMatrix) * nq); }'
       ].join('\n'));
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vHeat; varying float vFrost; varying float vLit; varying float vStyle; varying float vSeed; varying vec3 vWP; varying vec3 vWN;')
-      .replace('#include <map_fragment>', '#include <map_fragment>\n' + FACADE_GLSL)
-      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(roughness, 0.04, fGlass);')
+      .replace('#include <common>', '#include <common>\nvarying float vHeat; varying float vFrost; varying float vLit; varying float vStyle; varying float vSeed; varying vec3 vWP; varying vec3 vWN;\n' + ((window.SM_FACADE_EXT && window.SM_FACADE_EXT.pars) || ''))
+      .replace('#include <map_fragment>', '#include <map_fragment>\n' + FACADE_GLSL + '\n' + ((window.SM_FACADE_EXT && window.SM_FACADE_EXT.fragment) || ''))
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(roughness, 0.04, fGlass);\n' + ((window.SM_FACADE_EXT && window.SM_FACADE_EXT.roughness) || ''))
       .replace('#include <metalnessmap_fragment>', 'float metalnessFactor = mix(metalness, 0.8, fGlass);')
       .replace('#include <emissivemap_fragment>', [
         '#include <emissivemap_fragment>',
         'totalEmissiveRadiance += vec3(1.0, 0.62, 0.3) * fLit * 0.6 + sc * signGlow * 1.6;',
+        (window.SM_FACADE_EXT && window.SM_FACADE_EXT.emissive) || '',
         HEAT_GLSL
       ].join('\n'));
   };
@@ -872,7 +873,7 @@ const colKey = (i, j) => (i & 2047) | ((j & 2047) << 11);
     THREE, scene, renderer, camera, lin, rnd, srand, R, clamp, pick,
     CONST: { CELL, STORY, LOTS, PITCH, HALF, WATER_Z, WATER_Y, FAR_SHORE, SEAFLOOR },
     lotInfo, buildings, HOSP, inBay, instancedFacade, makeFacadeMat, STYLE_COLORS,
-    isLowQuality: LOWQ
+    isLowQuality: LOWQ, composer, bloom, grade, sun, hemi, SUN_DIR, skyMat, sky, getPlayer: () => P
   };
   for (const plug of (window.SM_PLUGINS || [])) {
     try {
@@ -1071,11 +1072,18 @@ function rubbleNear(p, rad, cb) {
 }
 
 // ============================================================ cars
-const CAR_COLORS = [0xa3141c, 0x1a3f80, 0xe6e2d8, 0x1d1e21, 0x8f989e, 0xd59b14, 0x245e3c, 0x5a2569, 0xc95f1a];
+const CAR_COLORS = [0xa3141c, 0x1a3f80, 0xe6e2d8, 0x1d1e21, 0x8f989e, 0xf2b90f, 0xf2b90f, 0x245e3c, 0x5a2569, 0xc95f1a, 0x3a3f46, 0xd8d6d0];
+// sedan built from side-profile extrusions: lower body to the beltline, a glass greenhouse, a roof panel
+function extrudeProfile(pts, width, bevel) {
+  const sh = new THREE.Shape(); sh.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) sh.lineTo(pts[i][0], pts[i][1]); sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, { depth: width - 2 * bevel, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 4 });
+  g.translate(0, 0, -(width - 2 * bevel) / 2); g.computeVertexNormals(); return g;
+}
 const carGeo = {
-  body: new THREE.BoxGeometry(4.4, 0.72, 1.86), hood: new THREE.BoxGeometry(1.1, 0.12, 1.8),
-  cabin: new THREE.BoxGeometry(2.3, 0.6, 1.66), glass: new THREE.BoxGeometry(2.34, 0.42, 1.7),
-  wheel: new THREE.CylinderGeometry(0.36, 0.36, 0.26, 14), light: new THREE.BoxGeometry(0.06, 0.16, 0.4)
+  body: extrudeProfile([[-2.18, -0.52], [2.18, -0.52], [2.24, -0.12], [2.08, 0.14], [0.95, 0.27], [-1.62, 0.3], [-2.16, 0.22], [-2.24, -0.1]], 1.8, 0.06),
+  cabin: extrudeProfile([[0.25, 0.76], [-0.92, 0.76], [-0.96, 0.81], [0.21, 0.81]], 1.56, 0.02),
+  glass: extrudeProfile([[0.98, 0.25], [0.24, 0.78], [-0.93, 0.78], [-1.66, 0.27]], 1.6, 0.02),
+  wheel: new THREE.CylinderGeometry(0.36, 0.36, 0.24, 16), light: new THREE.BoxGeometry(0.06, 0.14, 0.42)
 };
 carGeo.wheel.rotateX(Math.PI / 2);
 const glassMat = new THREE.MeshStandardMaterial({ color: lin(0x1c2633), roughness: 0.05, metalness: 0.9 });
@@ -1102,12 +1110,12 @@ const CARI = (() => {
     if (mat === paintMat) for (let i = 0; i < m.count; i++) m.setColorAt(i, new THREE.Color(1, 1, 1));
     scene.add(m); parts.push({ m, perCar, locals: locals.map(([x, y, z]) => new THREE.Matrix4().makeTranslation(x, y, z)), paint: mat === paintMat });
   };
-  mk(carGeo.body, paintMat, 1, [[0, -0.14, 0]], true);
-  mk(carGeo.cabin, paintMat, 1, [[-0.25, 0.52, 0]], true);
-  mk(carGeo.glass, glassMat, 1, [[-0.25, 0.55, 0]], false);
-  mk(carGeo.wheel, tireMat, 4, [[-1.4, -0.49, -0.86], [-1.4, -0.49, 0.86], [1.4, -0.49, -0.86], [1.4, -0.49, 0.86]], false);
-  mk(carGeo.light, headMat, 2, [[2.2, -0.05, 0.6], [2.2, -0.05, -0.6]], false);
-  mk(carGeo.light, tailMat, 2, [[-2.2, -0.02, 0.62], [-2.2, -0.02, -0.62]], false);
+  mk(carGeo.body, paintMat, 1, [[0, 0, 0]], true);
+  mk(carGeo.cabin, paintMat, 1, [[0, 0, 0]], true);
+  mk(carGeo.glass, glassMat, 1, [[0, 0, 0]], false);
+  mk(carGeo.wheel, tireMat, 4, [[-1.38, -0.49, -0.84], [-1.38, -0.49, 0.84], [1.38, -0.49, -0.84], [1.38, -0.49, 0.84]], true);
+  mk(carGeo.light, headMat, 2, [[2.2, -0.02, 0.58], [2.2, -0.02, -0.58]], false);
+  mk(carGeo.light, tailMat, 2, [[-2.22, 0.02, 0.6], [-2.22, 0.02, -0.6]], false);
   return { parts, free: Array.from({ length: MAXC }, (_, i) => MAXC - 1 - i) };
 })();
 function makeCarMesh(color) {
@@ -1733,7 +1741,9 @@ function explode(pos, energy, opts) {
   const pd = P.pos.distanceTo(c);
   if (pd < R2) { P.vel.addScaledVector(T1.copy(P.pos).sub(c).normalize(), 22 * (1 - pd / R2)); P.hitT = 0.4; }
 }
-function forBlocksInSphere(c, r, cb) {
+const _fbsC = new V3();
+function forBlocksInSphere(c0, r, cb) {
+  const c = _fbsC.copy(c0); // callbacks reuse T1..T6, so work from a private copy
   for (const b of buildings) {
     if (c.x + r < b.x0 || c.x - r > b.x1 || c.z + r < b.z0 || c.z - r > b.z1 || c.y - r > b.h) continue;
     const x0 = clamp(Math.floor((c.x - r - b.x0) / CELL), 0, b.nx - 1), x1 = clamp(Math.floor((c.x + r - b.x0) / CELL), 0, b.nx - 1);
@@ -1941,16 +1951,25 @@ function buildingCollide(b) {
   }
 }
 function staticCollide(b) {
-  rubbleNear(b.pos, b.rad + 3, r => {
-    const dx = b.pos.x - r.pos.x, dy = b.pos.y - r.pos.y, dz = b.pos.z - r.pos.z, rs2 = b.rad + r.rad;
-    const d2 = dx * dx + dy * dy + dz * dz; if (d2 >= rs2 * rs2) return;
-    const d = Math.sqrt(d2) || 1e-4, nx = dx / d, ny = dy / d, nz = dz / d, pen = rs2 - d;
-    const vn = b.vel.x * nx + b.vel.y * ny + b.vel.z * nz;
-    if (vn < -14 && 0.5 * b.mass * vn * vn > 3e6) { const rb = reviveRubble(r, T4.copy(b.vel).multiplyScalar(0.5)); if (rb) return; }
-    b.pos.x += nx * pen * 0.8; b.pos.y += ny * pen * 0.8; b.pos.z += nz * pen * 0.8;
-    if (vn < 0) { b.vel.x -= nx * vn * 1.1; b.vel.y -= ny * vn * 1.1; b.vel.z -= nz * vn * 1.1; b.vel.multiplyScalar(0.9); b.angVel.multiplyScalar(0.9); }
-    if (ny > 0.5) b.onGround = true;
-  });
+  // only the cells the body overlaps; no closure allocation (this runs per awake body per substep)
+  const p = b.pos, rr = b.rad + 2.6;
+  const x0 = Math.floor((p.x - rr) / SH), x1 = Math.floor((p.x + rr) / SH);
+  const y0 = Math.floor((p.y - rr) / SH), y1 = Math.floor((p.y + rr) / SH);
+  const z0 = Math.floor((p.z - rr) / SH), z1 = Math.floor((p.z + rr) / SH);
+  for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) for (let cz = z0; cz <= z1; cz++) {
+    const a = staticHash.get(skey(cx, cy, cz)); if (!a) continue;
+    for (let i = a.length - 1; i >= 0; i--) {
+      const r = a[i];
+      const dx = p.x - r.pos.x, dy = p.y - r.pos.y, dz = p.z - r.pos.z, rs2 = b.rad + r.rad;
+      const d2 = dx * dx + dy * dy + dz * dz; if (d2 >= rs2 * rs2) continue;
+      const d = Math.sqrt(d2) || 1e-4, nx = dx / d, ny = dy / d, nz = dz / d, pen = rs2 - d;
+      const vn = b.vel.x * nx + b.vel.y * ny + b.vel.z * nz;
+      if (vn < -14 && 0.5 * b.mass * vn * vn > 3e6 && reviveRubble(r, T4.copy(b.vel).multiplyScalar(0.5))) continue;
+      p.x += nx * pen * 0.8; p.y += ny * pen * 0.8; p.z += nz * pen * 0.8;
+      if (vn < 0) { b.vel.x -= nx * vn * 1.1; b.vel.y -= ny * vn * 1.1; b.vel.z -= nz * vn * 1.1; b.vel.multiplyScalar(0.9); b.angVel.multiplyScalar(0.9); }
+      if (ny > 0.5) b.onGround = true;
+    }
+  }
 }
 function onImpact(b, sp, kind) {
   b.impact = Math.max(b.impact, sp);
@@ -2250,6 +2269,11 @@ function startMeteor(kryp) {
     title: kryp ? 'A green meteor is falling on ' + L.name + '. Kryptonite! Deal with it from range.' : 'Meteor inbound on ' + L.name + '. Impact in about 25 seconds.',
     marker() { return m.pos.clone(); },
     update(dt) {
+      // resolve outcomes first: every ending removes the body, so check before the dead early-out
+      if (m.done === 'space') { endIncident(true, 'Meteor hurled back into space'); return; }
+      if (m.done === 'shattered') { endIncident(true, 'Meteor shattered'); return; }
+      if (m.done === 'hit') { endIncident(false, 'The meteor hit the city.'); return; }
+      if (m.done === 'vapor') { endIncident(true, 'Meteor vaporized'); return; }
       if (m.dead) return;
       if (!m.held && m.noGrav) {
         const p = m.pos;
@@ -2257,10 +2281,7 @@ function startMeteor(kryp) {
         FX.smoke(p.x, p.y, p.z, 1.5, 0.05);
       }
       if (kryp) for (let k = 0; k < 2; k++) FX.kryp(m.pos.x, m.pos.y, m.pos.z);
-      if (m.heat >= 1) { vaporize(m); endIncident(true, 'Meteor vaporized'); return; }
-      if (m.done === 'space') { endIncident(true, 'Meteor hurled back into space'); return; }
-      if (m.done === 'shattered') { endIncident(true, 'Meteor shattered'); return; }
-      if (m.done === 'hit') { endIncident(false, 'The meteor hit the city.'); return; }
+      if (m.heat >= 1) { vaporize(m); return; }
       if (m.thrown && m.pos.y > 1500 && m.vel.y > 0) { m.done = 'space'; removeBody(m); }
     },
     timeout() { },
@@ -2793,6 +2814,7 @@ function updatePlayer(dt) {
     const wish = T1.copy(fwd).multiplyScalar(mz).addScaledVector(right, mx).addScaledVector(UP, my);
     if (wish.lengthSq() > 1) wish.normalize();
     const sp = P.vel.length();
+    let allowed = 75;
     if (wish.lengthSq() > 0.01) {
       const vmaxBase = unlocked.has('speed') ? 1020 : 480;
       const vmax = (boost ? (alt < 150 ? 300 : Math.min(9000, vmaxBase * Math.sqrt(1.225 / rho))) : 75) * weak;
@@ -2804,7 +2826,8 @@ function updatePlayer(dt) {
         P.vel.addScaledVector(side, -Math.min(1, dt * (boost ? 2.6 : 3.5)));
         P.vel.addScaledVector(wish, side.length() * Math.min(1, dt * (boost ? 2.6 : 3.5)) * 0.85);
       }
-      const s2 = P.vel.length(); if (s2 > vmax) P.vel.multiplyScalar(lerp(1, vmax / s2, Math.min(1, dt * 2.5)));
+      allowed = Math.max(vmax, sp - 400 * dt);
+      const s2 = P.vel.length(); if (s2 > allowed) P.vel.multiplyScalar(allowed / s2);
     } else P.vel.multiplyScalar(Math.exp(-2.4 * dt));
     if (P.kryp > 0.2) P.vel.y -= G * P.kryp * dt * 2;
   } else {
@@ -2968,8 +2991,7 @@ function updateCars(dt) {
       const ahead = T2.copy(c.pos).addScaledVector(dirV, 9);
       if (ahead.distanceToSquared(P.pos) < 36 && P.pos.y < 4) target = 0;
       for (const o of cars) if (o !== c && !o.dead && !o.parked && o.pos.distanceToSquared(ahead) < 30) { target = 0; break; }
-      if (target > 0) rubbleNear(ahead, 4, () => { target = 0; });
-      if (target > 0) for (const b of bodies) if (b.kind === 'debris' && !b.dead && b.pos.distanceToSquared(ahead) < 25) { target = 0; break; }
+      if (target > 0) { const k = skey(Math.floor(ahead.x / SH), Math.floor(1 / SH), Math.floor(ahead.z / SH)); const ra = staticHash.get(k), ha = hash.get(k); if ((ra && ra.length) || (ha && ha.some(o => o.kind === 'debris'))) target = 0; }
       if (target === 0 && rnd() < dt * 0.3 && sfxOK('horn', 1.5)) sfxTone(0.05 * distVol(c.pos), 0.35, 'square', 392);
       d.v = lerp(d.v, target, 1 - Math.exp(-1.6 * dt));
       if (d.axis === 'x') { c.pos.x += d.dir * d.v * dt; c.pos.z = d.lane; if (c.pos.x > 245) c.pos.x = -245; if (c.pos.x < -245) c.pos.x = 245; }
@@ -3254,6 +3276,8 @@ function frame(now) {
   if (!paused) update(dt);
   composer.render();
 }
+// lightweight section profiler: __game.prof() returns ms per section since the last reset
+const PROF = { on: false, last: 0, acc: {}, t(name) { if (!this.on) return; const n = performance.now(); if (name !== '-') this.acc[name] = (this.acc[name] || 0) + n - this.last; this.last = n; } };
 function update(dt) {
   if (hitStopT > 0) { hitStopT -= dt; dt *= 0.08; }
   const wdt = dt * (P.slow ? 0.12 : 1);
@@ -3264,21 +3288,23 @@ function update(dt) {
     yaw += dt * 0.12; pitch = -0.12 + Math.sin(simT * 0.3) * 0.05;
     P.pos.y = 45 + Math.sin(simT * 0.8) * 0.4; updateHeroPose(dt, aimDir(T1));
   }
-  updateCars(wdt);
-  updatePeople(wdt);
-  updateIncident(wdt);
-  updateFires(wdt);
-  updateBullets(wdt);
+  PROF.t('-'); updateCars(wdt); PROF.t('cars'); updatePeople(wdt); PROF.t('people'); updateIncident(wdt); updateFires(wdt); PROF.t('fires'); updateBullets(wdt);
   physAcc += wdt; let n = 0;
-  while (physAcc >= 1 / 90 && n < 4) { physStep(1 / 90); physAcc -= 1 / 90; n++; }
-  if (n === 4) physAcc = 0;
-  bodiesVsPeople();
-  for (const b of dirtyBuildings) structuralCheck(b); dirtyBuildings.clear();
-  processFallQueue(wdt);
+  PROF.t('-'); while (physAcc >= 1 / 60 && n < 3) { physStep(1 / 60); physAcc -= 1 / 60; n++; } PROF.t('physics');
+  if (n === 3) physAcc = 0;
+  PROF.t('-'); bodiesVsPeople();
+  PROF.t('bodiesVsPeople'); for (const b of dirtyBuildings) structuralCheck(b); dirtyBuildings.clear(); PROF.t('structural');
+  processFallQueue(wdt); PROF.t('fallQueue');
   // settled debris merges into static rubble; live chunks update their instances
   for (const b of bodies) {
     if (b.dead || b.kind !== 'debris') continue;
-    if (b.sleeping && !b.held && b.heat < 0.3) settleToRubble(b); else if (!b.sleeping || b.held) writeDebris(b);
+    // settle to static rubble once still, or once slow and old, so piles free their physics slots
+    if (!b.held) {
+      const slow = b.vel.lengthSq() < 6 && b.angVel.lengthSq() < 9;
+      b.slowT = slow ? (b.slowT || 0) + wdt : Math.max(0, (b.slowT || 0) - wdt);
+      if ((b.sleeping || b.slowT > 0.5 || (b.age > 12 && b.vel.lengthSq() < 25) || (fallQueue.length && b.age > 2.5 && slow && b.onGround)) && b.heat < 0.3) { settleToRubble(b); continue; }
+    }
+    if (!b.sleeping || b.held) writeDebris(b);
   }
   if (bodiesDirty) { for (let i = bodies.length - 1; i >= 0; i--) if (bodies[i].dead) bodies.splice(i, 1); bodiesDirty = false; }
   for (let t = 0; t < 3; t++) {
@@ -3286,17 +3312,17 @@ function update(dt) {
     if (attrDirty[t]) { typeMesh[t].userData.aH.needsUpdate = true; typeMesh[t].userData.aF.needsUpdate = true; attrDirty[t] = false; }
     if (dDirty[t]) { debrisMeshes[t].instanceMatrix.needsUpdate = true; dDirty[t] = false; }
   }
-  cool(wdt);
+  PROF.t('settle+upload'); cool(wdt); PROF.t('cool');
   for (const u of pluginUpdates) u(wdt, camera);
   if (window.__waterN) { window.__waterN.offset.x += wdt * 0.004; window.__waterN.offset.y += wdt * 0.0025; }
   updateBirds(wdt);
   updateRings(dt);
-  ADD.update(wdt); SMK.update(wdt);
+  PROF.t('-'); ADD.update(wdt); SMK.update(wdt); PROF.t('particles');
   updateCape(dt, simT);
   updateCamera(dt);
   updateAtmosphere(dt);
   if (started) updateHUD(dt);
 }
-window.__game = { camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; } };
+window.__game = { prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; } };
 requestAnimationFrame(frame);
 })();
