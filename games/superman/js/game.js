@@ -867,7 +867,8 @@ if (aMask > 0.0) {
   const city = new THREE.Mesh(new THREE.PlaneGeometry(480, 480, 96, 96), cityMat);
   city.rotation.x = -Math.PI / 2; city.position.y = 0.02; city.receiveShadow = true; scene.add(city);
   const land = new THREE.Mesh(new THREE.PlaneGeometry(800000, 400000), new THREE.MeshStandardMaterial({ color: lin(0x5f604c), roughness: 1 }));
-  land.rotation.x = -Math.PI / 2; land.position.z = WATER_Z - 200000; land.position.y = -0.4; // well below the streets: depth across an 800 km triangle is only good to a few cm land.receiveShadow = true; scene.add(land);
+  land.rotation.x = -Math.PI / 2; land.position.z = WATER_Z - 200000; land.position.y = -0.4; // well below the streets: depth across an 800 km triangle is only good to a few cm
+  land.receiveShadow = true; scene.add(land);
   const waterN = (() => {
     const S = 256, [c, x] = cnv(S, S), img = x.createImageData(S, S), H = new Float32Array(S * S);
     const waves = [[3, 1, 0.5, 0.2], [1, 4, 0.35, 1.3], [5, -2, 0.25, 2.1], [-2, 7, 0.18, 0.7], [9, 3, 0.1, 3.3], [-6, -11, 0.07, 4.1]];
