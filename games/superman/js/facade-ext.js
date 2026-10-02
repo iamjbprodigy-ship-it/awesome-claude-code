@@ -27,7 +27,7 @@
     INT_FADE1: 600.0,   // m: interior mapping fully off
     ROOM_DEPTH: 4.0,    // m
     STORE_DEPTH: 8.0,   // m
-    DAYLIGHT: 0.2,      // radiance of window-side interior surfaces per unit albedo
+    DAYLIGHT: 0.13,     // radiance of window-side interior surfaces per unit albedo
     WIN_MAX: 0.6,       // art bible cap for window light in daylight
     GRIME: 1.0,         // global weathering strength (0 disables streaks / grime band / edge dirt)
     AO: 1.0,            // procedural AO strength
@@ -49,7 +49,7 @@ float x_vn(vec2 p) {
 }
 // Interior mapping: p = entry point in room space (m), d = view ray in room space, R = room size.
 // rnd = per-room randoms, kind.x = office, kind.y = store, lit = ceiling light on.
-vec3 x_room(vec3 p, vec3 d, vec3 R, vec4 rnd, vec2 kind, float lit) {
+vec3 x_room(vec3 p, vec3 d, vec3 R, vec4 rnd, vec2 kind, float lit, float detail) {
   vec3 dd = vec3(d.x >= 0.0 ? max(d.x, 1e-4) : min(d.x, -1e-4), d.y >= 0.0 ? max(d.y, 1e-4) : min(d.y, -1e-4), d.z);
   vec3 tb = (step(0.0, dd) * R - p) / dd;
   float t = min(min(tb.x, tb.y), tb.z);
@@ -75,14 +75,15 @@ vec3 x_room(vec3 p, vec3 d, vec3 R, vec4 rnd, vec2 kind, float lit) {
     float sy = h.y * 2.2, walls = mZ + mX;
     float band = step(0.3, h.y) * step(h.y, 2.4) * walls;
     float shelf = step(0.82, fract(sy));
-    vec3 prod = 0.42 + 0.22 * cos(6.2831 * (x_h12(floor(vec2((h.x + h.z) * 3.0, sy))) + vec3(0.0, 0.33, 0.67)));
-    alb = mix(alb, mix(prod, vec3(0.55, 0.52, 0.48), shelf), band * 0.85);
+    vec3 prod = 0.44 + 0.1 * cos(6.2831 * (x_h12(floor(vec2((h.x + h.z) * 1.6, sy))) + vec3(0.0, 0.33, 0.67)));
+    prod = mix(vec3(0.46, 0.44, 0.41), prod, detail);
+    alb = mix(alb, mix(prod, vec3(0.52, 0.5, 0.46), shelf), band * 0.6);
   }
   // room-corner AO: distance to the nearest edge of the hit face
   vec3 q = min(h, R - h) + vec3(mX, mY, mZ) * 9.0;
   float ao = 0.55 + 0.45 * smoothstep(0.0, 0.7, min(q.x, min(q.y, q.z)));
   // window daylight falls off with depth; floor near the window catches the most, ceiling the least
-  float day = X_DAYLIGHT * (1.0 + 0.5 * kind.y) * mix(1.0, 0.35, dz) * (1.0 + 0.7 * flo * (1.0 - dz)) * (1.0 - 0.4 * cei);
+  float day = X_DAYLIGHT * (1.0 + 0.5 * kind.y) * mix(1.0, 0.25, dz) * (1.0 + 0.9 * flo * (1.0 - dz)) * (1.0 - 0.55 * cei);
   // ceiling light (lamp for homes, uniform panels for offices / shops)
   vec3 lp = vec3(R.x * 0.5, R.y - 0.1, R.z * 0.5);
   vec3 lv = lp - h;
@@ -158,26 +159,26 @@ vec2 x_bu = 2.0 * x_pp - 1.0;
 vec2 x_tilt = x_gm * ((x_h22(vec2(x_pid * 91.0, seedW * 17.0)) - 0.5) * 2.0 * X_GLASS_TILT
             - 0.012 * vec2(x_bu.x * (1.0 - x_bu.y * x_bu.y), x_bu.y * (1.0 - x_bu.x * x_bu.x)));
 // ---- interior: far LOD reproduces the original flat glow, near replaces it with the room
-vec3 x_roomE = vec3(1.0, 0.62, 0.3) * X_WIN_MAX * (litW + x_store * 0.55) + vec3(0.07, 0.065, 0.06) * (1.0 - x_flush * 0.3);
+vec3 x_roomE = vec3(1.0, 0.62, 0.3) * X_WIN_MAX * (litW + x_store * 0.55) + vec3(0.045, 0.042, 0.038) * (1.0 - x_flush * 0.3);
 if (x_near > 0.001 && fGlass > 0.001) {
   vec4 x_rnd = vec4(x_h22(vec2(seedW * 937.1, 3.7)), x_h22(vec2(seedW * 311.7, 8.1)));
   float x_lit = max(vLit * step(0.55, x_h11(seedW * 577.3)), x_store);
   float x_D = mix(X_ROOM_DEPTH, X_STORE_DEPTH, x_store);
   vec3 x_d = vec3(dot(x_V, x_T), x_V.y, max(-dot(x_V, x_N), 0.02));
   vec3 x_p = vec3(clamp(fu.x, 0.002, 0.998) * 5.0, clamp(fu.y, 0.002, 0.998) * 4.0, 0.0);
-  vec3 x_r = x_room(x_p, x_d, vec3(5.0, 4.0, x_D), x_rnd, vec2(x_flush, x_store), x_lit);
+  vec3 x_r = x_room(x_p, x_d, vec3(5.0, 4.0, x_D), x_rnd, vec2(x_flush, x_store), x_lit, 1.0 - smoothstep(15.0, 45.0, x_dist));
   x_r *= 1.0 - 0.72 * step(x_rnd.w, 0.14) * (1.0 - x_lit);                // a few dark rooms
   // blinds (top-down, slatted) or curtains (side drapes) per window, sitting right behind the glass
   float x_bh = x_h12(vec2(seedW * 413.0, wi + 0.5));
   float x_bc = x_h11(x_bh * 91.7);
-  float x_blind = step(x_bh, 0.3) * step(1.0 - (0.15 + 0.75 * x_bc), x_pp.y);
-  float x_curt = step(0.3, x_bh) * step(x_bh, 0.48) * (1.0 - x_flush);
+  float x_blind = step(x_bh, 0.22) * step(1.0 - (0.15 + 0.75 * x_bc), x_pp.y);
+  float x_curt = step(0.22, x_bh) * step(x_bh, 0.36) * (1.0 - x_flush);
   float x_cwd = 0.12 + 0.25 * x_bc;
   x_curt *= max(step(x_pp.x, x_cwd), step(1.0 - x_cwd, x_pp.x));
   float x_slat = mix(1.0, 0.82 + 0.18 * step(0.35, fract(fu.y * 4.0 * 22.0)), smoothstep(80.0, 25.0, x_dist));
   float x_fold = 0.82 + 0.18 * sin(x_pp.x * 55.0 + x_bc * 6.0);
   vec3 x_cc = mix(vec3(0.62, 0.55, 0.45), vec3(0.45, 0.50, 0.55), x_rnd.y);
-  vec3 x_cover = x_blind * vec3(0.72, 0.70, 0.64) * x_slat + x_curt * (1.0 - x_blind) * x_cc * x_fold;
+  vec3 x_cover = x_blind * vec3(0.6, 0.58, 0.53) * x_slat + x_curt * (1.0 - x_blind) * x_cc * x_fold;
   float x_cm = clamp(x_blind + x_curt, 0.0, 1.0) * (1.0 - x_store);
   x_r = mix(x_r, x_cover * (X_DAYLIGHT * 1.1 + x_lit * vec3(0.42, 0.33, 0.22)), x_cm);
   x_roomE = mix(x_roomE, x_r, x_near);

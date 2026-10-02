@@ -57,8 +57,8 @@ const SCENARIOS = [
       const afterPunch = g.liveDebrisCount + g.rubble.length;
       for (let z = 0; z < b.nz; z++) for (let x = 0; x < b.nx; x++) for (let y = 0; y < 2; y++) g.breakBlock(g.cellIndex(b, x, y, z), new THREE.Vector3(), 4, 'blast');
       let peakLive = 0, nan = 0, t0 = performance.now(), worstFrame = 0;
-      for (let i = 0; i < 900; i++) { const a = performance.now(); g.update(1 / 60); worstFrame = Math.max(worstFrame, performance.now() - a); peakLive = Math.max(peakLive, g.liveDebrisCount); }
-      const ms = (performance.now() - t0) / 900;
+      for (let i = 0; i < 1800; i++) { const a = performance.now(); g.update(1 / 60); worstFrame = Math.max(worstFrame, performance.now() - a); peakLive = Math.max(peakLive, g.liveDebrisCount); }
+      const ms = (performance.now() - t0) / 1800;
       for (const o of g.bodies) if (!isFinite(o.pos.x + o.pos.y + o.pos.z)) nan++;
       return { afterPunch, peakLive, live: g.liveDebrisCount, rubble: g.rubble.length, queue: g.fallQueue.length, nan, ms, worstFrame, damage: g.ledger.damage }; })()`,
     check: r => [['punch breaks the wall', r.afterPunch > 0, r.afterPunch + ' pieces'],
