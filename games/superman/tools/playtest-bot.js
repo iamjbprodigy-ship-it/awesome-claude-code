@@ -885,6 +885,10 @@ const METALLO_LIB = `const g = __game, M = g.metallo, P = g.P;
   // put Superman d m from Metallo (horizontally, on the side away from the crowd), hovering at height h
   const place = (d, h, side) => { const s = S(); const ax = s.pos.x - s.crowdC.x, az = s.pos.z - s.crowdC.z, a = Math.atan2(az, ax) + (side || 0);
     P.flying = true; P.pos.set(s.pos.x + Math.cos(a) * d, (h === undefined ? 2.2 : h), s.pos.z + Math.sin(a) * d); P.vel.set(0, 0, 0); };
+  // a scripted camera for the screenshots (camState.hold): d m from Metallo at angle side, h m up, looking at height ly
+  const cam = (d, h, side, ly, fov, lx, lz) => { const s = S(); const a = Math.atan2(s.pos.z - s.crowdC.z, s.pos.x - s.crowdC.x) + (side || 0);
+    g.camState.hold = true; g.camera.position.set(s.pos.x + Math.cos(a) * d, h, s.pos.z + Math.sin(a) * d);
+    g.camera.lookAt(s.pos.x + (lx || 0), s.pos.y + ly, s.pos.z + (lz || 0)); g.camera.fov = fov || 50; g.camera.updateProjectionMatrix(); };
   const heartD = () => P.pos.distanceTo(S().pos.clone().setY(S().pos.y + 2.2));
   const catchCar = () => { const c = S().flying[0]; if (!c) return false; P.pos.copy(c.pos); P.pos.x += 1.6; P.pos.y += 0.4; P.vel.copy(c.vel); M.aim('car');
     g.grabOrRelease(); const ok = P.hold === c; g.step(2); if (P.hold === c) { P.vel.set(0, 0, 0); g.grabOrRelease(); } place(30, 3); return ok; }; // set it down, back out of the aura
@@ -911,6 +915,9 @@ SCENARIOS.push({
     P.solar = 1; M.calm(0); M.forceAttack('toss'); let n = 0; while (!S().flying.length && n++ < 200) g.step(1);
     g.step(20); const hurt0 = I().hurt; out.caughtCar = catchCar(); M.calm(5); g.step(180); out.hurtAfterCatch = I().hurt - hurt0; out.caught = I().caught;
     M.calm(0); M.forceAttack('toss'); n = 0; while (!S().flying.length && n++ < 200) g.step(1); place(40, 30); M.calm(5); g.step(240); out.hurtUncaught = I().hurt - hurt0;
+    // debris: once the armour is failing, every third throw is a paving slab torn out of the plaza; it is caught the same way
+    P.solar = 1; place(30, 3); S().phase = Math.max(S().phase, 4); M.calm(0); out.slabAtk = M.forceAttack('slab'); out.slabHeld = S().atk && S().atk.car ? S().atk.car.kind + (S().atk.car.mSlab ? ':slab' : '') : null; n = 0; while (!S().flying.length && n++ < 200) g.step(1);
+    out.slabKind = S().flying[0] ? S().flying[0].kind + (S().flying[0].mSlab ? ':slab' : '') : null; const hurt1 = I().hurt; out.slabCaught = catchCar(); M.calm(5); g.step(120); out.hurtSlab = I().hurt - hurt1;
     // telegraphs: every attack has a telegraph >= 1.0 s earlier (10.6)
     const ev = M.events; out.badTele = ev.filter(e => e.type === 'attack').filter(a => !ev.some(t => t.type === 'telegraph' && t.kind === a.kind && t.t <= a.t - 0.999 && t.t > a.t - 3)).length;
     out.attacks = ev.filter(e => e.type === 'attack').length;
@@ -949,6 +956,7 @@ SCENARIOS.push({
     ['unfrozen armour shrugs off a punch', r.platesNoFreeze === 6, r.platesNoFreeze],
     ['freeze then a charged punch cracks a plate', r.platesAfter === r.platesNoFreeze - 1, `frozen in ${r.freezeS} s ${JSON.stringify(r.frost)}; plates ${r.platesNoFreeze} -> ${r.platesAfter}`],
     ['a thrown car is intercepted: no bystander hit', r.caughtCar && r.caught >= 1 && r.hurtAfterCatch === 0, `caught ${r.caught}, hurt +${r.hurtAfterCatch}`],
+    ['debris: a torn-up paving slab is thrown and caught', r.slabKind === 'debris:slab' && r.slabCaught && r.hurtSlab === 0, `${r.slabKind} (picked ${r.slabHeld}), caught ${r.slabCaught}, hurt +${r.hurtSlab}`],
     ['an uncaught car does hit the crowd', r.hurtUncaught >= 1, `hurt +${r.hurtUncaught}`],
     ['every attack telegraphed >= 1.0 s earlier', r.attacks > 0 && r.badTele === 0, `${r.attacks} attacks, ${r.badTele} untelegraphed`],
     ['scripted win: armour stripped, heart exposed', r.platesWin === 0 && r.phaseWin === 5, `plates ${r.platesWin}, phase ${r.phaseWin}, solar ${r.solarWin}`],
@@ -967,13 +975,17 @@ SCENARIOS.push({
     const shots = [];
     const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
     const info = {};
-    info.reveal = await p.evaluate(`(() => { ${METALLO_LIB} g.begin(); g.step(5); M.start(); g.step(330); M.calm(60); place(15, 1.6, 0.5); M.aim('chest', 1.2); g.step(40); M.aim('chest', 1.2); g.step(2); g.render(); return I(); })()`);
+    // framed with a scripted camera (camState.hold): Metallo fills about a third of the frame height
+    info.reveal = await p.evaluate(`(() => { ${METALLO_LIB} g.begin(); g.step(5); M.start(); g.step(330); M.calm(600); place(5.5, 1.3, 0.45); M.aim('chest', 1.0); g.step(40); cam(9.5, 1.8, 0.6, 1.6, 50); g.step(2); g.render(); return I(); })()`);
     await snap('metallo-reveal.png');
-    info.freeze = await p.evaluate(`(() => { ${METALLO_LIB} M.calm(60); place(13, 2.6, 0.35); M.aim('chest', 0.66); g.keys.add('KeyQ'); g.step(70); M.aim('chest', 0.66); g.step(2); g.render(); g.keys.delete('KeyQ'); return I().frost; })()`);
+    // pre-freeze from range (the Kryptonite shortens the breath up close), then keep breathing from 7 m for the shot
+    info.freeze = await p.evaluate(`(() => { ${METALLO_LIB} g.camState.hold = false; place(26, 2.4); M.aim('chest', 0.66); g.keys.add('KeyQ'); for (let f = 0; f < 400 && Math.min(...I().frost) <= 0.9; f++) g.step(1);
+      place(7, 2.0, 0.3); M.aim('chest', 0.66); g.step(30); M.aim('chest', 0.66); cam(10.5, 2.8, -0.35, 1.8, 52); g.step(2); g.render(); g.keys.delete('KeyQ'); return I().frost; })()`);
     await snap('metallo-freeze.png');
-    info.heart = await p.evaluate(`(() => { ${METALLO_LIB} for (const pl of S().plates) pl.alive = false; g.step(5);
-      grabLead(); place(3.2, 1.8, 0.7); M.aim('heart'); g.step(1); g.grabOrRelease(); g.step(50); place(5.5, 2.4, 0.9); M.aim('heart', 0.2); g.step(10); g.render(); return I(); })()`);
+    info.heart = await p.evaluate(`(() => { ${METALLO_LIB} g.camState.hold = false; for (const pl of S().plates) pl.alive = false; g.step(5);
+      grabLead(); place(3.2, 1.8, 0.7); M.aim('heart'); g.step(1); g.grabOrRelease(); g.step(80); place(3.5, 1.6, 0.6); M.aim('heart', 0.2); g.step(10); cam(8.5, 1.8, 1.0, 1.5, 55); g.step(2); g.render(); return I(); })()`);
     await snap('metallo-heart.png');
+    await p.evaluate(() => { __game.camState.hold = false; });
     return { info, shots };
   },
   check: r => [['Metallo revealed', r.info.reveal.visible && r.info.reveal.phase >= 2, ''], ['plates frozen in the shot', Math.max(...r.info.freeze) > 0.5, JSON.stringify(r.info.freeze)],

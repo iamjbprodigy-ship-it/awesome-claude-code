@@ -24,7 +24,7 @@
  * calls __game.metallo.start(), or press F8, or add ?metallo to the URL.
  * Power hooks used: __game.hooks.{kryp, punch, grab, clap, heat, freeze}.
  * Budget: 6 draw calls for his body (instanced chrome, joints, pistons, plates, eyes; the heart),
- * +2 shadow, +2 only while an attack telegraph or wave is visible, +1 for the lead plate.
+ * +1 the radiation aura shell, +2 shadow, +2 only while an attack telegraph or wave is visible, +1 for the lead plate.
  * No allocations in the per-frame paths (scratch vectors and matrices are preallocated).
  */
 (function () {
@@ -72,7 +72,7 @@
 
   // ================================================================ rig
   const bones = {};
-  let rig, body, chromeM, jointM, pistonM, plateM, eyeM, heart, heartLight, beam, teleRing, waveRing, leadMesh, chromeMat, plateMat;
+  let shell, rig, body, chromeM, jointM, pistonM, plateM, eyeM, heart, heartLight, beam, teleRing, waveRing, leadMesh, chromeMat, plateMat;
   const SEG = [], JOINTS = [], PIST = [], PLATES = [], EYES = [];
   const pose = { lean: 0, crouch: 0, hipL: 0, hipR: 0, knL: 0, knR: 0, shL: 0, shR: 0, shLz: 0.12, shRz: -0.12, elL: -0.2, elR: -0.2, headP: 0, headY: 0, twist: 0, bob: 0, fall: 0 };
   const tgt = Object.assign({}, pose);
@@ -141,6 +141,14 @@
     chromeM.castShadow = plateM.castShadow = true;
     for (const m of [chromeM, jointM, pistonM, plateM, eyeM]) { m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); body.add(m); }
     body.add(heart);
+    // the radiation aura: a faint fresnel shell around the heart (local glow, so the screen grade can stay light)
+    shell = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.ShaderMaterial({
+      uniforms: { uCol: { value: new THREE.Color(0.35, 2.4, 0.55) }, uAmt: { value: 0.35 } },
+      vertexShader: 'varying vec3 vN, vV; void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+      fragmentShader: 'uniform vec3 uCol; uniform float uAmt; varying vec3 vN, vV; void main(){ float f = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.2); gl_FragColor = vec4(uCol * (f * 0.9 + 0.05) * uAmt, 1.0); }',
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false
+    }));
+    shell.matrixAutoUpdate = false; shell.frustumCulled = false; shell.renderOrder = 3; body.add(shell);
     // attack visuals: one beam, a telegraph ring and a shock-wave ring (each visible only while in use)
     const beamG = new THREE.CylinderGeometry(1, 1, 1, 10, 1, true); beamG.translate(0, 0.5, 0); beamG.rotateX(Math.PI / 2);
     beam = new THREE.Mesh(beamG, new THREE.MeshBasicMaterial({ color: new THREE.Color(0.8, 7, 1.4), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
@@ -199,6 +207,8 @@
       HEARTW.set(0, 0, 0).applyMatrix4(TM).applyMatrix4(body.matrixWorld);
       const s = 1 + (S.phase >= 5 ? 0.35 : 0) + Math.max(0, Math.sin(S.t * 7.5)) ** 8 * 0.18;
       heart.matrix.copy(TM).multiply(TM2.makeRotationY(S.t * 1.3)).multiply(TM2.makeScale(s, s, s));
+      const a = S.atk, ch = a && !a.fired && (a.kind === 'pulse' || a.kind === 'beam') ? clamp(a.t / a.tele, 0, 1) : 0, r = (S.phase >= 5 ? 1.9 : 1.45) * (0.96 + 0.08 * s) + ch * 0.6;
+      shell.matrix.copy(TM).multiply(TM2.makeScale(r, r, r));
     }
     T1.set(0, 0, 0); for (const s of ['L', 'R']) T1.add(T2.set(0, -0.12, 0).applyMatrix4(bones['ha' + s].matrixWorld)); HANDW.copy(T1.multiplyScalar(0.5)).applyMatrix4(body.matrixWorld);
     EYEW.set(0, 0.17, 0.2).applyMatrix4(bones.head.matrixWorld).applyMatrix4(body.matrixWorld);
@@ -393,7 +403,7 @@
       c.drive = null; c.parked = false; c.sleeping = true; c.vel.set(0, 0, 0); c.angVel.set(0, 0, 0);
       c.pos.set(pz.x + Math.cos(a) * r, 0.85, pz.z + Math.sin(a) * r); c.quat.setFromAxisAngle(UP, R(0, 6.28)); c.mProp = true; S.props.push(c);
     });
-    if (!heartLight) { heartLight = new THREE.PointLight(ctx.lin(0x4dff6a), 3, 90, 2); }
+    if (!heartLight) { heartLight = new THREE.PointLight(ctx.lin(0x4dff6a), 1.2, 14, 2); } // a local pool of green, not the whole plaza
     if (!heartLight.parent) scene.add(heartLight);
     body.visible = true; S.visible = true; S.active = true; heart.visible = true;
     const env = g.cityEnv || scene.environment; if (env) { chromeMat.envMap = env; plateMat.envMap = env; chromeMat.needsUpdate = plateMat.needsUpdate = true; }
@@ -514,7 +524,7 @@
     if (kind === 'beam' && dh > CFG.beam.range) kind = 'pulse';
     const a = { kind, t: 0, fired: false, tele: CFG[kind === 'toss' ? 'toss' : kind].tele, dur: 0, car: null, aim: new THREE.Vector3().copy(P.pos), target: new THREE.Vector3(), from: new THREE.Vector3() };
     if (kind === 'toss') {
-      const slab = ph >= 4 && S.tossN % 3 === 2; S.tossN++;
+      const slab = S.forceSlab || (ph >= 4 && S.tossN % 3 === 2); S.tossN++; S.forceSlab = false;
       a.car = (slab ? tearSlab() : null) || tossCar() || tearSlab();
       if (!a.car) { S.atk = null; S.atkCD = 1; return; }
       a.car.held = true; a.car.sleeping = true; a.from.copy(a.car.pos);
@@ -760,7 +770,8 @@
     const beat = Math.max(0, Math.sin(S.t * 7.5)) ** 8;
     const glow = S.contained ? 0.25 : (S.phase >= 5 ? 1.8 : 1) * (1 + beat * 0.6 + charge * 1.5);
     heart.material.emissiveIntensity = glow;
-    if (heartLight) { heartLight.position.copy(HEARTW); heartLight.intensity = S.contained ? 0.4 : (S.phase >= 5 ? 6 : 3) * (0.8 + beat * 0.4 + charge); }
+    if (heartLight) { heartLight.position.copy(HEARTW); heartLight.intensity = S.contained ? 0.25 : (S.phase >= 5 ? 2.2 : 1.2) * (0.8 + beat * 0.4 + charge); }
+    shell.visible = !S.contained && !S.down; shell.material.uniforms.uAmt.value = (S.phase >= 5 ? 0.5 : 0.32) * (0.85 + beat * 0.3 + charge * 0.8);
     eyeM.material.color.setRGB(S.down || S.leaving > 0 ? 0.08 : 9 + charge * 6, S.down ? 0.01 : 0.5, S.down ? 0.01 : 0.3);
     // shock wave
     if (waveRing.visible) {
@@ -903,7 +914,7 @@
       return true;
     },
     calm(sec) { cancelAttack(); S.atk = null; beam.visible = teleRing.visible = false; S.beamHit = false; S.spike = 0; S.atkCD = sec; S.tossCD = Math.max(S.tossCD, sec); },
-    forceAttack(kind) { if (!S.active) return false; cancelAttack(); S.atk = null; S.alt = kind === 'pulse' ? 1 : 0; S.tossCD = kind === 'toss' ? 0 : 99; if (kind === 'pound') S.phase = Math.max(S.phase, 4); chooseAttack(); return S.atk && S.atk.kind; },
+    forceAttack(kind) { if (!S.active) return false; S.forceSlab = kind === 'slab'; if (kind === 'slab') kind = 'toss'; cancelAttack(); S.atk = null; S.alt = kind === 'pulse' ? 1 : 0; S.tossCD = kind === 'toss' ? 0 : 99; if (kind === 'pound') S.phase = Math.max(S.phase, 4); chooseAttack(); return S.atk && S.atk.kind; },
     meshes() { let n = 0; body.traverse(o => { if (o.isMesh && o.visible) n++; }); return n + (beam.visible ? 1 : 0) + (teleRing.visible ? 1 : 0) + (waveRing.visible ? 1 : 0); },
     medalOf
   };

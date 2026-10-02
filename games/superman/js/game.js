@@ -89,11 +89,12 @@ const GradeShader = {
   uniforms: {
     tDiffuse: { value: null }, uExposure: { value: 1.0 }, uSat: { value: 1.08 }, uVig: { value: 0.55 },
     uAberr: { value: 0 }, uTime: { value: 0 }, uTint: { value: new THREE.Color(1, 1, 1) }, uTintAmt: { value: 0 },
-    uLift: { value: new THREE.Color(0.012, 0.01, 0.02) }
+    uLift: { value: new THREE.Color(0.012, 0.01, 0.02) },
+    uEdge: { value: new THREE.Color(0.25, 1.0, 0.3) }, uEdgeAmt: { value: 0 } // Kryptonite: a green edge vignette, not a full-screen wash
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
   fragmentShader: [
-    'uniform sampler2D tDiffuse; uniform float uExposure,uSat,uVig,uAberr,uTime,uTintAmt; uniform vec3 uTint,uLift; varying vec2 vUv;',
+    'uniform sampler2D tDiffuse; uniform float uExposure,uSat,uVig,uAberr,uTime,uTintAmt,uEdgeAmt; uniform vec3 uTint,uLift,uEdge; varying vec2 vUv;',
     'vec3 aces(vec3 x){ return clamp((x*(2.51*x+0.03))/(x*(2.43*x+0.59)+0.14),0.0,1.0); }',
     'void main(){',
     ' vec2 cc=vUv-0.5; float r2=dot(cc,cc); vec3 col;',
@@ -105,6 +106,7 @@ const GradeShader = {
     ' float l=dot(col,vec3(0.299,0.587,0.114)); col=mix(vec3(l),col,uSat);',
     ' col=mix(col,col*uTint,uTintAmt);',
     ' col*=1.0-uVig*r2*1.4;',
+    ' if(uEdgeAmt>0.0){ float e=smoothstep(0.06,0.42,r2)*uEdgeAmt; col=mix(col,col*0.35+uEdge*0.32,e); }',
     ' float n=fract(sin(dot(vUv*vec2(1234.5,987.1)+uTime,vec2(12.9898,78.233)))*43758.5453);',
     ' col+=(n-0.5)*0.018;',
     ' gl_FragColor=vec4(col,1.0);',
@@ -112,6 +114,7 @@ const GradeShader = {
   ].join('\n')
 };
 const grade = new THREE.ShaderPass(GradeShader);
+let aberrBase = 0;
 composer.addPass(grade);
 
 // ============================================================ lights, sky, env
@@ -3464,7 +3467,7 @@ function updateHeroPose(dt, fwd) {
   hero.armL.rotation.x = lerp(hero.armL.rotation.x, aL, k); hero.armR.rotation.x = lerp(hero.armR.rotation.x, aR, k);
   hero.armL.rotation.z = lerp(hero.armL.rotation.z, aLz, k); hero.armR.rotation.z = lerp(hero.armR.rotation.z, aRz, k);
   hero.legL.rotation.x = lerp(hero.legL.rotation.x, lL, k); hero.legR.rotation.x = lerp(hero.legR.rotation.x, lR, k);
-  hero.suit.emissive.setRGB(P.hitT > 0 ? 1.2 : 0, P.hitT > 0 ? 1.0 : P.kryp * 0.6, P.hitT > 0 ? 0.6 : 0);
+  hero.suit.emissive.setRGB(P.hitT > 0 ? 1.2 : 0, P.hitT > 0 ? 1.0 : P.kryp * 0.22, P.hitT > 0 ? 0.6 : 0); // a sickly sheen, not a green glow
 }
 
 // ============================================================ world updates
@@ -3620,7 +3623,8 @@ function updateCamera(dt) {
   if (C.hold) return; // a scripted or photo camera owns the lens
   const fwd = aimDir(T1), right = T2.set(Math.cos(yaw), 0, -Math.sin(yaw));
   const sp = P.vel.length();
-  const combat = currentInc && currentInc.type === 'robbery' && currentInc.marker().distanceTo(P.pos) < 70;
+  // close fights frame tighter: a robbery, or Metallo within 60 m (a 3 m boss read too small at the flight distance)
+  const combat = currentInc && ((currentInc.type === 'robbery' && currentInc.marker().distanceTo(P.pos) < 70) || (currentInc.type === 'metallo' && currentInc.marker().distanceTo(P.pos) < 60));
   const walking = !P.flying;
   const run = walking ? P.runK : 0;
   const mach = sp / soundSpeed(P.pos.y);
@@ -3941,7 +3945,7 @@ function updateAtmosphere(dt) {
   const gu = grade.uniforms;
   gu.uTime.value = simT % 100;
   const run = P.flying ? 0 : P.runK;
-  gu.uAberr.value = lerp(gu.uAberr.value, clamp((mach - 0.6) * 0.012, 0, 0.02) + clamp((mach - 3) * 0.0015, 0, 0.01) + run * 0.01 + (P.hitT > 0 ? 0.01 : 0), 1 - Math.exp(-5 * dt));
+  aberrBase = lerp(aberrBase, clamp((mach - 0.6) * 0.012, 0, 0.02) + clamp((mach - 3) * 0.0015, 0, 0.01) + run * 0.01 + (P.hitT > 0 ? 0.01 : 0), 1 - Math.exp(-5 * dt));
   // post.js blurs from Mach 0.5; a 180 m/s sprint is Mach 0.53, so slide its window down while running
   const PT = window.__post && window.__post.tuning;
   if (PT) { if (!postBase) postBase = [PT.machLo, PT.machHi]; PT.machLo = lerp(postBase[0], 0.04, run); PT.machHi = lerp(postBase[1], 0.75, run); }
@@ -3950,10 +3954,15 @@ function updateAtmosphere(dt) {
   let tint = 0;
   if (P.xray) { gu.uTint.value.setRGB(0.75, 1.0, 1.2); tint = 0.6; }
   else if (under) { gu.uTint.value.setRGB(0.3, 0.6, 0.8); tint = 0.85; }
-  else if (P.kryp > 0.1) { gu.uTint.value.setRGB(0.6, 1.3, 0.6); tint = P.kryp * 0.7; }
+  // Kryptonite: a light screen-wide tint (capped at 0.22) so the scene stays readable; the weakening
+  // reads through a pulsing green edge vignette and a chromatic pulse instead
+  else if (P.kryp > 0.1) { gu.uTint.value.setRGB(0.82, 1.18, 0.82); tint = Math.min(0.22, P.kryp * 0.3); }
   else if (P.slow) { gu.uTint.value.setRGB(0.8, 0.9, 1.15); tint = 0.4; }
   gu.uTintAmt.value = lerp(gu.uTintAmt.value, tint, 1 - Math.exp(-6 * dt));
-  gu.uVig.value = 0.5 + (P.slow ? 0.4 : 0) + P.kryp * 0.5;
+  gu.uVig.value = 0.5 + (P.slow ? 0.4 : 0) + P.kryp * 0.3;
+  const kPulse = 0.5 + 0.5 * Math.sin(simT * 7.5);
+  gu.uEdgeAmt.value = lerp(gu.uEdgeAmt.value, P.kryp > 0.05 ? P.kryp * (0.5 + 0.25 * kPulse) : 0, 1 - Math.exp(-6 * dt));
+  gu.uAberr.value = aberrBase + (P.kryp > 0.05 ? P.kryp * 0.006 * kPulse : 0); // the chromatic pulse rides on top, not into the lerp
   bloom.strength = 0.55 + (P.slow ? 0.15 : 0);
   if (AU.ctx) {
     const sp = P.vel.length();
