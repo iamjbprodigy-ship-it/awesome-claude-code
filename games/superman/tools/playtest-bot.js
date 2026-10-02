@@ -299,6 +299,7 @@ SCENARIOS.push(
       await snap('qte-pinned-hold.png');
       // 3. dialogue: a request waving him down, the talk card and street barks
       const talk = await p.evaluate(() => { const g = __game, M = g.missions, P = g.P; M.release('KeyE'); M.cancel(); g.ledger.hope = 80;
+        M.cfg.bark.dur = 60; // the page keeps running while a slow software-GL screenshot is taken
         if (!M.spawn('crime')) return false; const m = M.current(), v = m.giver.pos;
         P.flying = false; P.pos.set(v.x + 3.5, 1, v.z + 2.5); P.vel.set(0, 0, 0); const d = v.clone().sub(P.pos); g.setYawPitch(Math.atan2(-d.x, -d.z) + 0.4, -0.05);
         g.step(30); M.press('KeyE'); g.step(20); M.bark('passHigh'); g.step(100); M.bark('photo'); g.step(10); g.render(); return M.visibleBarks(); });
