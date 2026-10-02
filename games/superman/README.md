@@ -7,7 +7,14 @@ A fan-made physics sandbox for PC: the whole power set in a destructible, golden
 
 **From the repo:** open `index.html` with the `js/`, `vendor/` and `style.css` files beside it.
 
-On the title screen, press **Enter** or click **Start**. **Quality** cycles Low / Medium / High / Ultra and remembers your choice. Press `` ` `` or **F3** in game to show the frame rate.
+On the title screen, press **Enter** or click **Start** for free play.
+
+**Play the Demo** runs the curated 20-minute arc. You play all of it:
+1. 90 seconds of free flight.
+2. Six emergencies in order, each 25–40 s after you finish the previous one: the falling helicopter, the tenement fire, the bank robbery, the runaway bus, the Metro Air 207 airliner, and the Metallo finale.
+3. The Daily Planet front page, whose headline reflects how you did.
+
+You can also add `?demo` to the address to start the demo directly, or `?metallo` to jump straight to the finale. **Quality** cycles Low / Medium / High / Ultra and remembers your choice. Press `` ` `` or **F3** in game to show the frame rate.
 
 **Graphics on Ultra:**
 - Screen-space ambient occlusion: contact shadow where walls meet the street and cars sit on the road.

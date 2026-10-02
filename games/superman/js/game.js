@@ -3973,8 +3973,11 @@ function updateAtmosphere(dt) {
 }
 
 // ============================================================ front page
+// modules can claim the front page (js/demo.js: the Metallo finale); first non-null [h1, h2] wins
+const HEADLINE_HOOKS = [];
 function headline() {
   const L = ledger;
+  for (const f of HEADLINE_HOOKS) { try { const h = f(L); if (h) return h; } catch (e) { console.warn('headline hook', e); } }
   const dmg = money(L.damage);
   if (L.saves === 0 && L.damage < 1e6) return ['A QUIET SKY', 'Metropolis looks up and waits'];
   if (L.hope >= 80) return [`SUPERMAN SAVES ${L.saves}`, L.damage > 5e6 ? `Even with ${dmg} in damage, the city cheers` : 'City hails a near-flawless day'];
@@ -4419,6 +4422,8 @@ window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, ren
   // set pieces (js/setpieces.js)
   endIncident, aimDir: (o) => aimDir(o), registerIncident(type, def) { INC_REG[type] = def; }, setpieces: window.SM_SETPIECES || null, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
 // power hooks + helpers for js/metallo.js
+Object.assign(window.__game, { setPaused, renderFrontPage, headline, headlineHooks: HEADLINE_HOOKS });
+Object.defineProperty(window.__game, 'paused', { get() { return paused; }, configurable: true }); // a live getter (Object.assign would copy the value once)
 Object.assign(window.__game, { metallo: window.SM_METALLO || null, hooks: HOOKS, kryptoniteNear, ring, makeBody, removeBody, spawnDebris, T_SLAB });
 // a live getter (Object.assign would copy the value once, and the city probe re-bakes and disposes it)
 Object.defineProperty(window.__game, 'cityEnv', { get() { return cityProbe ? cityProbe.env : null; }, configurable: true });

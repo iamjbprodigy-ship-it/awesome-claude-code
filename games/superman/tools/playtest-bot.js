@@ -1141,6 +1141,36 @@ SCENARIOS.push({
     ['screenshots written', r.shots.length === 2, r.shots.join(', ')]]
 });
 
+// flagship demo sequencer (js/demo.js): 90 s of free flight, then the six chapters in order, 25-40 s apart,
+// then the front page with a Metallo headline. Chapters are ended by the test as soon as they start.
+SCENARIOS.push({
+  name: 'demo',
+  run: `(() => { const g = __game, D = g.demo, out = { starts: [], gaps: [], early: null };
+    if (!D) return { missing: true };
+    g.begin(); D.start(); const dt = 1 / 30;
+    for (let i = 0; i < 85 * 30; i++) { g.step(1, dt); if (g.currentInc && out.early === null) out.early = g.currentInc.type + '@' + D.state.t.toFixed(1); }
+    let lastEnd = null;
+    for (let k = 0; k < 6; k++) {
+      let n = 0; while (!g.currentInc && n++ < 60 * 30) g.step(1, dt);
+      const inc = g.currentInc; if (!inc) break;
+      out.starts.push({ type: inc.type, t: +D.state.t.toFixed(1) });
+      if (lastEnd !== null) out.gaps.push(+(D.state.t - lastEnd).toFixed(1));
+      g.step(30, dt);
+      if (inc.type === 'metallo' && g.metallo) g.metallo.state.result = { win: true, medal: 'gold', time: 140, hurt: 0 };
+      g.endIncident(true, 'demo test'); g.step(2, dt); lastEnd = D.state.t;
+    }
+    for (let i = 0; i < 10 * 30 && !g.paused; i++) g.step(1, dt);
+    const paper = document.getElementById('paper');
+    out.done = D.done; out.paused = g.paused; out.headline = paper ? (paper.querySelector('h2') || {}).textContent : '';
+    out.log = D.log; return out; })()`,
+  check: r => r.missing ? [['demo module loaded', false, 'no __game.demo']] : [
+    ['no emergency in the first 85 s of free flight', r.early === null, String(r.early)],
+    ['chapters run in order: heli, fire, robbery, bus, airliner, metallo', r.starts.map(s => s.type).join(',') === 'heli,fire,robbery,bus,airliner,metallo', r.starts.map(s => s.type + '@' + s.t).join(' ')],
+    ['each chapter starts 25-40 s after the previous one ends', r.gaps.length === 5 && r.gaps.every(x => x >= 25 && x <= 41), r.gaps.join(', ')],
+    ['demo completes and opens the front page', r.done && r.paused, `done ${r.done}, paused ${r.paused}`],
+    ['front page leads with a Metallo headline', /METALLO/.test(r.headline || ''), r.headline]]
+});
+
 const RIGS = [
   ['title', null],
   ['aerial', `g.P.flying = true; g.P.pos.set(0, 260, 380); g.setYawPitch(0, -0.18);`],
