@@ -169,6 +169,28 @@ const SCENARIOS = [
       .concat([['ledger sane', r.ledger.hope >= 0 && r.ledger.hope <= 100, JSON.stringify(r.ledger)]])
   },
   {
+    name: 'emergency-endings',
+    // every emergency must end: a chopper set down on a roof or in the bay, a meteor dropped in the bay, and
+    // a meteor carried around past its limit all used to leave the incident running forever (no new alerts)
+    run: `(() => { const g = __game, P = g.P; g.begin(); g.deferIncident(1e6); g.step(5); const out = {};
+      const aimAt = v => { const d = v.clone().sub(P.pos); g.setYawPitch(Math.atan2(-d.x, -d.z), Math.atan2(d.y, Math.hypot(d.x, d.z))); };
+      const grab = body => { P.flying = true; P.vel.set(0, 0, 0); P.pos.copy(body.pos).add(new THREE.Vector3(0, 0, 4)); aimAt(body.pos); g.grabOrRelease(); return P.hold === body; };
+      const run = (name, setup, place, maxS) => {
+        const r0 = g.ledger.resolved, m0 = JSON.stringify(g.ledger.medals), h0 = g.ledger.hope;
+        g.startIncident(setup); const inc = g.currentInc; const body = inc.h || inc.m; const res = { grabbed: grab(body) };
+        place(body); let t = 0; while (g.currentInc === inc && t < 60 * maxS) { g.step(10); t += 10; }
+        Object.assign(res, { ended: g.currentInc !== inc, seconds: Math.round(t / 60), limit: inc.limit, resolved: g.ledger.resolved - r0, medals: m0 !== JSON.stringify(g.ledger.medals), hope: Math.round(g.ledger.hope - h0) });
+        if (P.hold) g.grabOrRelease(); g.deferIncident(1e6); out[name] = res; };
+      const roof = g.buildings.filter(b => b.ny > 6 && b.ny < 20)[0];
+      run('heliOnRoof', 'heli', h => { P.pos.set((roof.x0 + roof.x1) / 2, roof.h + 1.2, (roof.z0 + roof.z1) / 2); P.vel.set(0, 0, 0); g.step(2); g.grabOrRelease(); }, 60);
+      run('heliInBay', 'heli', h => { P.pos.set(0, 4, 420); P.vel.set(0, 0, 0); g.step(2); g.grabOrRelease(); }, 60);
+      run('meteorInBay', 'meteor', m => { P.pos.set(40, 5, 420); P.vel.set(0, 0, 0); g.step(2); g.grabOrRelease(); }, 60);
+      run('meteorHeld', 'meteor', m => { P.pos.set(0, 300, 0); P.vel.set(0, 0, 0); }, 120);
+      return out; })()`,
+    check: r => ['heliOnRoof', 'heliInBay', 'meteorInBay', 'meteorHeld'].map(k => [`${k}: grabbed, then the emergency ends`, r[k].grabbed && r[k].ended && r[k].seconds <= r[k].limit + 35, `${r[k].seconds} s (limit ${r[k].limit})`])
+      .concat(['heliOnRoof', 'heliInBay', 'meteorInBay', 'meteorHeld'].map(k => [`${k}: counted as a save (medal, Hope up)`, r[k].resolved === 1 && r[k].medals && r[k].hope > 0, `resolved ${r[k].resolved}, Hope ${r[k].hope >= 0 ? '+' : ''}${r[k].hope}`]))
+  },
+  {
     name: 'render-budget', quality: 'high',
     // GPU work per frame in the heaviest views (draw calls and triangles, all passes incl. shadows and post)
     run: `(() => { const g = __game, out = {}; g.begin(); const info = g.renderer.info; info.autoReset = false;

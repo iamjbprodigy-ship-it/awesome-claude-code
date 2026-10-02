@@ -2359,10 +2359,19 @@ function startHeli() {
         if (rnd() < 0.8) FX.smoke(h.pos.x, h.pos.y + 1, h.pos.z, 1.2, 0.04);
         if (rnd() < 0.3) FX.fire(h.pos.x - 1, h.pos.y + 1, h.pos.z, 0.6);
       }
+      // landing is otherwise only detected inside a ground impact over 2.5 m/s, so a chopper set down gently,
+      // parked on a roof (block impacts run before onGround is set) or floating in the bay never counted as
+      // down and the incident ran forever, blocking every later emergency. At rest and free = down safely.
+      if (!h.landed && !h.crashed && h.phase === 'falling' && !h.held && (h.sleeping || ((h.onGround || h.wet) && h.vel.lengthSq() < 2.25))) h.landed = true;
       if (h.landed) { addSave(3, h.pos, 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter down safely'); }
       else if (h.crashed) { ledger.lost += 3; this.lost = 3; endIncident(false, 'The helicopter crashed.'); }
     },
-    timeout() { if (!h.landed && !h.crashed) { if (h.phase === 'trouble') { h.phase = 'falling'; h.noGrav = false; } } },
+    timeout() {
+      if (h.landed || h.crashed) return;
+      if (h.phase === 'trouble') { h.phase = 'falling'; h.noGrav = false; }
+      // hard stop so the incident always ends: still in his arms 30 s after the limit means he has them
+      if (this.age > this.limit + 30) { if (h.held) { addSave(3, h.pos, 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter carried to safety'); } else endIncident(false, 'Lost contact with the helicopter.'); }
+    },
     cleanup() { setTimeout(() => removeBody(h), 25000); }
   };
 }
@@ -2400,9 +2409,15 @@ function startMeteor(kryp) {
       }
       if (kryp) for (let k = 0; k < 2; k++) FX.kryp(m.pos.x, m.pos.y, m.pos.z);
       if (m.heat >= 1) { vaporize(m); return; }
-      if (m.thrown && m.pos.y > 1500 && m.vel.y > 0) { m.done = 'space'; removeBody(m); }
+      if (m.thrown && m.pos.y > 1500 && m.vel.y > 0) { m.done = 'space'; removeBody(m); return; }
+      // once he has handled it (gravity on), a meteor that ends up at rest never "impacts": set down gently it
+      // sleeps on the street, dropped in the bay it floats. Both are defused; without this the incident never ended.
+      if (!m.held && !m.noGrav && (m.sleeping || (m.wet && m.vel.lengthSq() < 4))) { m.done = m.wet ? 'bay' : 'down'; endIncident(true, m.wet ? 'Meteor dumped in the bay' : 'Meteor set down safely'); }
     },
-    timeout() { },
+    timeout() {
+      // hard stop so the incident always ends (e.g. carried around indefinitely): held means contained
+      if (this.age > this.limit + 30) endIncident(!!m.held, m.held ? 'Meteor contained' : 'The meteor was lost track of.');
+    },
     cleanup() { if (!m.dead && m.done !== 'hit') removeBody(m); }
   };
 }
