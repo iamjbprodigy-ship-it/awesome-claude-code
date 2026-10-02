@@ -153,7 +153,13 @@ const skyMat = new THREE.ShaderMaterial({
   uniforms: { uSun: { value: SUN_DIR }, uSpace: { value: 0 } },
   vertexShader: SKY_VS, fragmentShader: SKY_FS, side: THREE.BackSide, depthWrite: false, fog: false
 });
-const sky = new THREE.Mesh(new THREE.SphereGeometry(380000, 48, 24), skyMat);
+// The dome rides on the camera and never writes depth, so its radius is free; it must just sit well inside
+// the far plane. At 380 km (far 450 km, near 0.1) the clip-space margin to the far plane, 2n(R-f)/(f-n),
+// was 0.031: one float32 ulp at 380000. Rounding pushed whole dome triangles past the far plane, so they
+// were clipped and left black holes (the clear colour) fanning out from the zenith whenever the player
+// looked up, at every altitude and quality. At 40 km the margin is ~0.18, about 45 ulps.
+const SKY_R = 40000;
+const sky = new THREE.Mesh(new THREE.SphereGeometry(SKY_R, 48, 24), skyMat);
 sky.renderOrder = -10; sky.frustumCulled = false;
 scene.add(sky);
 { // image-based lighting from the sky so glass, paint and water reflect the sunset
@@ -170,7 +176,7 @@ scene.add(sky);
 const stars = (() => {
   const n = 2600, p = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
-    T1.set(R(-1, 1), R(-0.3, 1), R(-1, 1)).normalize().multiplyScalar(300000);
+    T1.set(R(-1, 1), R(-0.3, 1), R(-1, 1)).normalize().multiplyScalar(SKY_R * 0.8); // same far-plane margin as the dome
     p[i * 3] = T1.x; p[i * 3 + 1] = T1.y; p[i * 3 + 2] = T1.z;
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(p, 3));

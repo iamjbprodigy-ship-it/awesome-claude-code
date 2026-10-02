@@ -264,6 +264,33 @@ const SCENARIOS = [
       .concat([['ledger sane', r.ledger.hope >= 0 && r.ledger.hope <= 100, JSON.stringify(r.ledger)]])
   },
   {
+    name: 'look-up', minutes: 10,
+    // looking straight up must show sky, not holes: the 380 km sky dome sat one float32 ulp inside the far
+    // plane, so dome triangles near the zenith were clipped and the clear colour showed as black shards
+    // one render + readback per evaluate, yielding in between: long synchronous render loops can wedge SwiftShader
+    page: async (p) => {
+      if (process.env.BOT_DEBUG) console.log('  look-up: page ready');
+      await p.evaluate(() => { __game.begin(); __game.deferIncident(1e6); });
+      const out = {};
+      for (const alt of [100, 400, 2000]) for (const pitch of [1.45, Math.PI / 2]) {
+        out[alt + 'm@' + pitch.toFixed(2)] = await p.evaluate(([alt, pitch]) => { const g = __game;
+          g.keys.clear(); g.P.flying = true; g.P.pos.set(-30, alt, 120); g.P.vel.set(0, 0, 0); g.setYawPitch(0.4, pitch); g.step(30);
+          // render the scene into an 8-bit target and read that back (reading the default framebuffer
+          // between frames could wedge headless SwiftShader); clear to magenta so a hole in the dome is unmistakable
+          const w = 480, h = 270, r = g.renderer, rt = window.__lookRT = window.__lookRT || new THREE.WebGLRenderTarget(w, h, { stencilBuffer: true }), px = new Uint8Array(w * h * 4);
+          const cc = r.getClearColor(new THREE.Color()), ca = r.getClearAlpha(); r.setClearColor(0xff00ff, 1);
+          r.setRenderTarget(rt); r.clear(); r.render(g.scene, g.camera); r.setRenderTarget(null); r.setClearColor(cc, ca); r.readRenderTargetPixels(rt, 0, 0, w, h, px);
+          let n = 0, tot = 0; for (let y = h >> 2; y < h * 3 >> 2; y++) for (let x = w >> 2; x < w * 3 >> 2; x++) { const i = (y * w + x) * 4; tot++; if (px[i] > 200 && px[i + 1] < 40 && px[i + 2] > 200) n++; }
+          return n / tot; }, [alt, pitch]);
+        if (process.env.BOT_DEBUG) console.log('  look-up', alt, pitch.toFixed(2), out[alt + 'm@' + pitch.toFixed(2)]);
+        await p.waitForTimeout(30);
+      }
+      if (SHOTS) await p.screenshot({ path: path.join(OUT, 'look-up.png'), timeout: 300000 });
+      return out;
+    },
+    check: r => [['no holes in the sky dome looking up (clear colour < 0.05% of centre)', Object.values(r).every(v => v < 0.0005), Object.entries(r).map(([k, v]) => k + ' ' + (v * 100).toFixed(2) + '%').join(', ')]]
+  },
+  {
     name: 'depth-buffer', quality: 'high',
     // the scene targets must have a 24-bit depth buffer: three r128 gives 16-bit depth to any render target
     // without a stencil buffer, which made stacked road layers z-fight away at range
