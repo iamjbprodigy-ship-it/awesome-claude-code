@@ -220,6 +220,7 @@
           bus.dmg += 180000; g.ledger.damage += 180000; if (g.currentInc === bus.inc) bus.inc.damage += 180000;
           g.SFX.punch(P.pos, 1.5); for (let k = 0; k < 18; k++) g.FX.spark(P.pos.x, P.pos.y, P.pos.z, (Math.random() - 0.5) * 12, Math.random() * 6, -Math.random() * 8);
           bus.gS = Math.max(bus.gS, (v0 - bus.v) / 0.1 / G0); bus.maxG = Math.max(bus.maxG, bus.gS);
+          if (g.hitStop) g.hitStop(0.09); if (g.addShake) g.addShake(0.8); if (g.emit) g.emit('impact', { what: 'bus', v: v0 });
           if (bus.v <= 0.01) { bus.v = 0; bus.phase = 'stopped'; }
         } else attachBus(g);
       }
@@ -445,7 +446,7 @@
       const hurt = Math.min(C.pax, (o.hurt || 0) + (pl.wing ? 0 : C.wingHurt));
       res.hurt = hurt; res.saved = C.pax - hurt; res.success = true;
       pl.phase = 'float'; pl.pos.y = Math.max(pl.pos.y, WY + 1.0);
-      splash(g, pl.pos, 160);
+      splash(g, pl.pos, 160); if (g.addShake) g.addShake(0.6);
       const inc = pl.inc; inc.injuries += hurt; if (hurt) g.hopeHit(Math.min(10, hurt * 0.25));
       g.addSave(res.saved, pl.pos.clone(), 'Airliner passengers safe');
       API.last = res; API.results.push(res);
@@ -539,7 +540,7 @@
     wingL.matrixWorld.decompose(T1, TQ, T2);
     planeMesh.remove(wingL); scene.add(wingL); wingL.position.copy(T1); wingL.quaternion.copy(TQ);
     pl.fall = { pos: T1.clone(), vel: pl.vel.clone().add(T2.set(0, 3, 0)).addScaledVector(pl.right, -6), quat: TQ.clone(), axis: pl.f.clone(), spin: 1.5, splashed: false };
-    g.toast('The burning wing failed! It\'s rolling. 40 hurt aboard.', 'alert'); g.SFX.crumble(pl.pos); g.SFX.boom(pl.pos, 0.6);
+    g.toast('The burning wing failed! It\'s rolling. 40 hurt aboard.', 'alert'); if (g.addShake) g.addShake(0.5); g.SFX.crumble(pl.pos); g.SFX.boom(pl.pos, 0.6);
     for (let k = 0; k < 40; k++) g.FX.spark(T1.x, T1.y, T1.z, (Math.random() - 0.5) * 20, Math.random() * 10, (Math.random() - 0.5) * 20);
   }
   function planeKey(g) {
