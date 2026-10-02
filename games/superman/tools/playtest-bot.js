@@ -941,9 +941,11 @@ SCENARIOS.push({
     out.play = await p.evaluate(() => {
       const g = __game, C = SM_COMMS, s0 = window.__ct, dt = 1 / 30;
       g.keys.clear(); g.setMouse(false, false);
-      // let the last call finish: the card must go away
-      for (let i = 0; i < 900 && C.current; i++) g.step(1, dt);
-      g.step(20, dt);
+      // let the radio go quiet: end the running emergency and drop queued calls so a follow-up can't
+      // start in the gap (that race made this check flaky), then the card must go away
+      if (g.deferIncident) g.deferIncident(1e9);
+      if (g.currentInc && g.endIncident) g.endIncident(true, 'test');
+      for (let i = 0, quiet = 0; i < 3000 && quiet < 20; i++) { if (C.queue && C.queue.length) C.queue.length = 0; g.step(1, dt); quiet = C.current ? 0 : quiet + 1; }
       const hiddenAfter = !C.cardVisible() && C.cardState() !== 'on';
       const H = C.history.filter(h => h.t0 >= s0.t0 - 1e-6).map(h => ({ who: h.who, trigger: h.trigger, prio: h.prio, t0: h.t0, t1: h.t1, it: h.incidentType, vi: h.vi, cut: h.cut }));
       const lineEv = (g.events || []).filter(e => e.type === 'line').length;

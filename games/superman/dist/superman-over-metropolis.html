@@ -12039,8 +12039,9 @@ function updateCars(dt) {
       if (blockAt(m.pos.x, m.pos.y, m.pos.z) >= 0 || m.pos.y < 3) meteorImpact(m);
     }
   }
-  for (const m of meteors) if (m.dead && m.mesh.parent) scene.remove(m.mesh);
-  for (const h of helis) if (h.dead && h.mesh.parent) scene.remove(h.mesh);
+  // drop finished helicopters and meteors entirely so the lists don't grow by one per incident
+  for (let i = meteors.length - 1; i >= 0; i--) if (meteors[i].dead) { if (meteors[i].mesh.parent) scene.remove(meteors[i].mesh); meteors.splice(i, 1); }
+  for (let i = helis.length - 1; i >= 0; i--) if (helis[i].dead) { if (helis[i].mesh.parent) scene.remove(helis[i].mesh); helis.splice(i, 1); }
 }
 const MAT_UP = new THREE.Matrix4();
 function updatePeople(dt) {
