@@ -420,6 +420,164 @@ SCENARIOS.push({
     ['screenshots written', r.shots.length === 5, r.shots.join(', ')]]
 });
 
+// The Catch (js/catch.js): velocity matching, the g rule, the g-meter, triage and the Hope cap
+const CATCH_LIB = `
+  const g = __game, C = window.SM_CATCH, P = g.P, V = THREE.Vector3;
+  // let go; a test passenger is taken off the board so they can't land on a later test
+  const clearAll = () => { g.keys.clear(); P.slow = false; const h = P.hold; if (h) g.grabOrRelease(); if (h && h.kind === 'person') { h.mode = 'gone'; h.danger = false; } };
+  // a fresh, unhurt pedestrian turned into a free body at pos with velocity vel
+  const body = (pos, vel) => { const p = g.people.find(q => q.mode === 'free' && !q.thug && !q.msnRole && !q.injured);
+    p.mode = 'phys'; p.pos.copy(pos); p.vel.copy(vel); p.onGround = false; p.sleeping = false; p.sleepT = 0; p.danger = true; p.injured = false; p.severe = false; return p; };
+  const air = new V(-90, 220, 150);
+  const lastLog = k => { for (let i = C.log.length - 1; i >= 0; i--) if (C.log[i].kind === k) return C.log[i]; return null; };
+  const injCount = () => C.log.filter(e => e.kind === 'injure').length;
+  // carry the helicopter down to a street, let go 2 m up and wait for it to settle
+  const landHeli = (h) => { const gy = Math.max(0, g.groundY(-90, 150)); P.vel.set(0, 0, 0); P.pos.set(-90, gy + 2 + 1.5 - 2.45, 150); g.step(3);
+    g.grabOrRelease(); P.pos.x += 12; let n = 0; while (!h.landed && !h.crashed && n < 900) { g.step(3); n += 3; } g.step(3); return { landed: h.landed, crashed: h.crashed }; };
+`;
+SCENARIOS.push({
+  name: 'catch',
+  run: `(() => { ${CATCH_LIB} g.begin(); g.setPower(3); g.deferIncident(1e6); g.step(30); const out = {};
+    if (g.missions) g.missions.setSpawnTimer(1e6);
+    // 1. a faller met at matched velocity: auto-assist catches, cushioned, unhurt
+    clearAll(); P.flying = true; P.pos.copy(air); P.vel.set(0, -19.5, 0);
+    let p = body(new V(air.x + 1.2, air.y, air.z), new V(0, -20, 0)); g.step(2);
+    out.matched = { held: p.mode === 'held', hurt: p.injured, log: lastLog('catch') };
+    let pk = 0; for (let i = 0; i < 150; i++) { g.step(1); pk = Math.max(pk, C.g); }
+    out.matched.peak = +pk.toFixed(2); out.matched.after = p.injured; out.matched.speed = +P.vel.length().toFixed(2);
+    out.hud = { on: C.state().hud, cls: document.getElementById('catch-hud').className, read: document.querySelector('#catch-hud .cg-read b').textContent };
+    clearAll(); g.step(2);
+    // 2. a hard-stop catch: hovering still, the faller arrives at 25 m/s
+    P.pos.copy(air); P.vel.set(0, 0, 0); p = body(new V(air.x + 1.2, air.y, air.z), new V(0, -25, 0));
+    let i0 = injCount(); g.grabBody(p); g.step(2);
+    out.hard = { held: P.hold === p, hurt: p.injured, severe: !!p.severe, log: lastLog('catch'), injureEvents: injCount() - i0 };
+    clearAll(); g.step(2);
+    // 3. carry: a 4 g ramp is fine, a 10 g turn is not; P.catchG matches |dv|/dt/g over the 0.1 s window
+    P.pos.copy(air); P.vel.set(0, 0, 0); p = body(new V(air.x + 1, air.y, air.z), new V(0, 0, 0)); g.grabBody(p); g.step(2);
+    const dt = 1 / 60, hist = []; let maxErr = 0, rampPeak = 0;
+    const rec = () => { hist.push(P.vel.clone()); if (hist.length > 6) { const a = hist[hist.length - 1], b = hist[hist.length - 7];
+      const bot = a.distanceTo(b) / (6 * dt) / 9.81; maxErr = Math.max(maxErr, Math.abs(bot - P.catchG)); } };
+    let v = 0; for (let i = 0; i < 60; i++) { v += 4 * 9.81 * dt * 0.98; P.vel.set(v, 0, 0); g.step(1); rec(); rampPeak = Math.max(rampPeak, C.g); }
+    out.ramp = { speed: +v.toFixed(1), peak: +rampPeak.toFixed(2), hurt: p.injured };
+    const sp = v, w = 10 * 9.81 / sp; let ang = 0, turnPeak = 0;
+    for (let i = 0; i < 40; i++) { ang += w * dt; P.vel.set(Math.cos(ang) * sp, 0, Math.sin(ang) * sp); g.step(1); rec(); turnPeak = Math.max(turnPeak, C.g); }
+    out.turn = { peak: +turnPeak.toFixed(2), hurt: p.injured, severe: !!p.severe, gErr: +maxErr.toFixed(3) };
+    clearAll(); g.step(2);
+    // 3b. boosting from a standstill with a passenger hurts them
+    P.pos.copy(air); P.vel.set(0, 0, 0); g.setYawPitch(0, 0.3); p = body(new V(air.x + 1, air.y, air.z), new V(0, 0, 0)); g.grabBody(p); g.step(2);
+    g.keys.add('KeyW'); g.keys.add('ShiftLeft'); let bp = 0; for (let i = 0; i < 60 && !p.injured; i++) { g.step(1); bp = Math.max(bp, C.g); }
+    out.boost = { hurt: p.injured, peak: +bp.toFixed(1), speed: Math.round(P.vel.length()) };
+    clearAll(); g.step(2);
+    // 4. T5: per-person save Hope from one incident is capped at +10; the triage counter is on screen
+    g.startIncident('fire'); let inc = g.currentInc; g.ledger.hope = 40; for (let i = 0; i < 12; i++) g.addSave(1, null, 'test'); const hopeGain = g.ledger.hope - 40;
+    g.step(4); const tri = document.getElementById('triage');
+    out.cap = { hopeGain, cap: g.SAVE_HOPE_CAP, saveHope: inc.saveHope };
+    out.triage = { atRisk: inc.atRisk, safe: inc.safe, text: tri && !tri.hidden ? tri.textContent : '', want: 'Saved ' + inc.safe + ' / ' + inc.atRisk + ' at risk' };
+    // explosion-thrown people are at risk and catchable
+    const gx = -90, gz = 150, gy = Math.max(0, g.groundY(gx, gz)); const q = g.people.find(r => r.mode === 'free' && !r.thug && !r.msnRole && !r.injured);
+    q.pos.set(gx + 15, gy + 0.9, gz); g.explode(new V(gx, gy + 1, gz), 2.5e7);
+    const thrown = { mode: q.mode, danger: q.danger, injured: q.injured, vy: +q.vel.y.toFixed(1), risk0: inc.atRisk };
+    g.step(15); thrown.tracked = inc.atRisk > thrown.risk0;
+    let ok = false; for (let i = 0; i < 120 && !ok; i++) { if (q.mode === 'phys' && !q.onGround && q.vel.y < 0) { P.flying = true; P.pos.copy(q.pos).add(new V(1.2, 0, 0)); P.vel.copy(q.vel); g.step(1); ok = q.mode === 'held'; } else g.step(1); }
+    thrown.caught = ok; thrown.hurt = q.injured; out.thrown = thrown; clearAll(); g.step(2);
+    // let everyone the blast threw come down before the next emergency starts counting who is at risk
+    let settle = 0; while (g.people.some(r => r.danger && r.mode === 'phys') && settle < 900) { g.step(10); settle += 10; }
+    // 5. the helicopter, caught at matched speed, then set down: no injuries, success
+    g.startIncident('heli'); inc = g.currentInc; let h = inc.h; let n = 0;
+    while (h.phase !== 'falling' && n < 900) { g.step(5); n += 5; } for (let i = 0; i < 90; i++) g.step(1);
+    P.flying = true; P.pos.copy(h.pos).add(new V(2.6, 0, 0)); P.vel.copy(h.vel); const hv = +h.vel.length().toFixed(1); g.grabBody(h); g.step(1);
+    let hp = 0; for (let i = 0; i < 240; i++) { g.step(1); hp = Math.max(hp, C.g); }
+    const res0 = g.ledger.resolved, gold0 = g.ledger.medals.gold, eh0 = C.state().everyoneHome;
+    out.heliSoft = { fallSpeed: hv, injuries: inc.injuries, occHurt: !!h.occHurt, peak: +hp.toFixed(2), log: lastLog('catch'), atRisk: inc.atRisk };
+    Object.assign(out.heliSoft, landHeli(h)); g.step(20);
+    out.heliSoft.ended = g.currentInc !== inc; out.heliSoft.success = g.ledger.resolved > res0; out.heliSoft.gold = g.ledger.medals.gold > gold0;
+    out.heliSoft.everyoneHome = C.state().everyoneHome > eh0; out.heliSoft.age = Math.round(inc.age); out.heliSoft.damage = Math.round(inc.damage);
+    clearAll(); g.step(2);
+    // 6. the helicopter grabbed by a hovering hero at 20+ m/s: the crew are hurt, no gold
+    g.startIncident('heli'); inc = g.currentInc; h = inc.h; n = 0;
+    while (h.phase !== 'falling' && n < 900) { g.step(5); n += 5; } n = 0; while (h.vel.length() < 21 && n < 900 && !h.crashed) { g.step(1); n++; }
+    P.flying = true; P.pos.copy(h.pos).add(new V(2.6, 0, 0)); P.vel.set(0, 0, 0); const hv2 = +h.vel.length().toFixed(1);
+    i0 = injCount(); g.grabBody(h); g.step(3);
+    out.heliHard = { dv: hv2, injuries: inc.injuries, occHurt: !!h.occHurt, injureEvents: injCount() - i0 };
+    const r1 = g.ledger.resolved, g1 = g.ledger.medals.gold; g.step(60); Object.assign(out.heliHard, landHeli(h)); g.step(20);
+    out.heliHard.success = g.ledger.resolved > r1; out.heliHard.gold = g.ledger.medals.gold > g1;
+    clearAll(); g.step(2);
+    // 7. missions: the window washer goes through the same rule (matched: unhurt; hovering at 13+ m/s: hurt)
+    const M = g.missions, washer = (matched) => {
+      if (M.current()) M.cancel(); clearAll(); if (!M.spawn('washer')) return { spawned: false }; const m = M.current();
+      P.flying = false; P.pos.set(m.giver.pos.x + 1.5, m.giver.pos.y + 0.1, m.giver.pos.z); P.vel.set(0, 0, 0); g.step(2); M.press('KeyE'); M.release('KeyE'); g.step(10);
+      // stand well back so the slow-motion assist stays off
+      P.flying = true; P.pos.set(m.victim.pos.x + m.f.nx * 60, m.victim.pos.y, m.victim.pos.z + m.f.nz * 60); P.vel.set(0, 0, 0);
+      let k = 0; while (M.phase !== 'fall' && k < 900) { g.step(1); k++; }
+      k = 0; while (M.phase === 'fall' && m.fallV > (matched ? -10 : -13.5) && k < 300) { g.step(1); k++; }
+      if (M.phase !== 'fall') return { spawned: true, phase: M.phase, fallV: m.fallV };
+      const fv = m.fallV; P.slow = false; m.slowOn = true;
+      P.pos.copy(m.victim.pos).add(new V(m.f.nx * 1.3, 0, m.f.nz * 1.3)); P.vel.set(0, matched ? fv : 0, 0); g.step(1);
+      const vic = m.victim, r = { spawned: true, fallV: +fv.toFixed(1), held: vic.mode === 'held', hurt: !!vic.injured, state: M.state, log: lastLog('catch') };
+      g.step(3); clearAll(); g.step(400); return r; };
+    out.washerSoft = washer(true); out.washerHard = washer(false);
+    return out; })()`,
+  check: r => [
+    ['matched faller: auto-assist catches, unhurt', r.matched.held && !r.matched.hurt && !r.matched.after && !!r.matched.log && r.matched.log.cushioned, JSON.stringify(r.matched)],
+    ['soft hands: the cushioned stop stays under 6 g', r.matched.peak < 6, r.matched.peak + ' g'],
+    ['g-meter shows while carrying', r.hud.on && /\bon\b/.test(r.hud.cls), JSON.stringify(r.hud)],
+    ['hard-stop catch at 25 m/s injures (severe)', r.hard.held && r.hard.hurt && r.hard.severe && r.hard.injureEvents === 1, JSON.stringify(r.hard)],
+    ['carry: 4 g ramp leaves them unhurt', !r.ramp.hurt && r.ramp.peak < 5, JSON.stringify(r.ramp)],
+    ['carry: a 10 g turn injures', r.turn.hurt && r.turn.peak >= 9, JSON.stringify(r.turn)],
+    ['P.catchG within 0.5 g of |dv|/dt/g (bot, same window)', r.turn.gErr < 0.5, r.turn.gErr + ' g max error'],
+    ['boost from a standstill with a passenger injures', r.boost.hurt, JSON.stringify(r.boost)],
+    ['Hope from one incident capped at +10', Math.round(r.cap.hopeGain) === 10, JSON.stringify(r.cap)],
+    ['triage counter on the HUD', r.triage.atRisk >= 3 && r.triage.text === r.triage.want, JSON.stringify(r.triage)],
+    ['explosion-thrown person is at risk, tracked and catchable', r.thrown.danger && r.thrown.tracked && r.thrown.caught && !r.thrown.hurt, JSON.stringify(r.thrown)],
+    ['heli caught at matched speed: 0 injuries, lands, success', r.heliSoft.injuries === 0 && !r.heliSoft.occHurt && r.heliSoft.landed && r.heliSoft.success && !!r.heliSoft.log && r.heliSoft.log.cushioned, JSON.stringify(r.heliSoft)],
+    ['heli soft catch: gold and "Everyone home"', r.heliSoft.gold && r.heliSoft.everyoneHome, ''],
+    ['heli grabbed at 20+ m/s: crew hurt, injure event, no gold', r.heliHard.dv >= 20 && r.heliHard.occHurt && r.heliHard.injuries >= 3 && r.heliHard.injureEvents === 1 && !r.heliHard.gold, JSON.stringify(r.heliHard)],
+    ['missions washer, matched catch: unhurt, success', r.washerSoft.held && !r.washerSoft.hurt && r.washerSoft.state === 'success', JSON.stringify(r.washerSoft)],
+    ['missions washer, caught standing still at 13+ m/s: hurt', r.washerHard.held && r.washerHard.hurt && !!r.washerHard.log && r.washerHard.log.dv > 12, JSON.stringify(r.washerHard)]
+  ]
+});
+
+// screenshots of the g-meter mid-catch and a smooth window-washer catch: OUT/catch/*.png
+SCENARIOS.push({
+  name: 'catch-shots', shotsOnly: true,
+  page: async (p) => {
+    const dir = path.join(OUT, 'catch'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [], info = {};
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    // the bot drives every frame from here on: stop the page's own loop so slow screenshots don't advance the sim
+    await p.evaluate(() => { __game.begin(); __game.step(30); window.requestAnimationFrame = () => 0; __game.deferIncident(1e6); if (__game.missions) __game.missions.setSpawnTimer(1e6); });
+    // 1. g-meter mid-catch: a faller met at matched speed, braking at 4 g in his arms
+    info.meter = await p.evaluate(() => { const g = __game, P = g.P, V = THREE.Vector3, C = window.SM_CATCH;
+      const q = g.people.find(r => r.mode === 'free' && !r.thug && !r.msnRole);
+      const at = new V(-60, 120, 120); q.mode = 'phys'; q.pos.copy(at); q.vel.set(0, -24, 0); q.onGround = false; q.sleeping = false; q.danger = true;
+      P.flying = true; P.pos.copy(at).add(new V(1.2, 0, 0)); P.vel.set(0, -23.5, 0); g.setYawPitch(-0.6, -0.25);
+      g.step(1); g.step(5); g.render(); return C.state(); });
+    await snap('g-meter-mid-catch.png');
+    // 2. window washer: closing in at matched speed (match bar green), then the catch
+    info.washer = await p.evaluate(() => { const g = __game, P = g.P, M = g.missions, V = THREE.Vector3, C = window.SM_CATCH;
+      if (P.hold) g.grabOrRelease(); if (!M.spawn('washer')) return { spawned: false }; const m = M.current();
+      P.flying = false; P.pos.set(m.giver.pos.x + 1.5, m.giver.pos.y + 0.1, m.giver.pos.z); P.vel.set(0, 0, 0); g.step(2); M.press('KeyE'); M.release('KeyE'); g.step(60);
+      P.flying = true; P.pos.set(m.victim.pos.x + m.f.nx * 60, m.victim.pos.y, m.victim.pos.z + m.f.nz * 60); P.vel.set(0, 0, 0);
+      let k = 0; while (M.phase !== 'fall' && k < 900) { g.step(1); k++; }
+      k = 0; while (M.phase === 'fall' && m.fallV > -8 && k < 300) { g.step(1); k++; }
+      P.slow = false; m.slowOn = true;
+      const v = m.victim.pos; P.pos.set(v.x + m.f.nx * 4.5, v.y - 0.4, v.z + m.f.nz * 4.5); P.vel.set(0, m.fallV, 0);
+      g.setYawPitch(Math.atan2(m.f.nx, m.f.nz) + 0.5, 0.05); g.step(3); g.render();
+      return { fallV: +m.fallV.toFixed(1), state: C.state() }; });
+    await snap('washer-closing.png');
+    info.caught = await p.evaluate(() => { const g = __game, P = g.P, M = g.missions, C = window.SM_CATCH, m = M.current();
+      if (!m) return null; const v = m.victim.pos; P.pos.set(v.x + m.f.nx * 1.4, v.y, v.z + m.f.nz * 1.4); P.vel.set(0, m.fallV, 0);
+      g.step(1); for (let i = 0; i < 8; i++) g.step(1); g.render();
+      return { held: m.victim.mode === 'held', hurt: !!m.victim.injured, state: M.state, catchLog: C.log[C.log.length - 1], g: C.state() }; });
+    await snap('washer-smooth-catch.png');
+    return { info, shots };
+  },
+  check: r => [['g-meter on mid-catch', r.info.meter.hud, JSON.stringify(r.info.meter)],
+    ['match-speed shown while closing on the washer', r.info.washer.state && r.info.washer.state.faller === 'person' && r.info.washer.state.hud, JSON.stringify(r.info.washer)],
+    ['washer caught smoothly, unhurt', r.info.caught && r.info.caught.held && !r.info.caught.hurt, JSON.stringify(r.info.caught)],
+    ['screenshots written', r.shots.length === 3, r.shots.join(', ')]]
+});
+
 const RIGS = [
   ['title', null],
   ['aerial', `g.P.flying = true; g.P.pos.set(0, 260, 380); g.setYawPitch(0, -0.18);`],
