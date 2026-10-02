@@ -361,3 +361,62 @@ html, body {
 .mk.help::after { content: '!'; transform: none; border-radius: 50%; width: 12px; height: 12px; font: 900 10px/12px var(--f-num); text-align: center; }
 .lg.help { background: #ff7ad9; border-radius: 50%; }
 @media (prefers-reduced-motion: reduce) { .bark.on, #msn-qte.miss { animation: none; } }
+
+/* ---------------------------------------------------------------- radio comms card (js/comms.js) */
+.comms {
+  --cm: #5aa9ff;
+  position: absolute; left: 16px; top: calc(env(safe-area-inset-top, 0px) + 206px);
+  width: min(380px, calc(100% - 32px)); box-sizing: border-box;
+  display: grid; grid-template-columns: 76px 1fr; gap: 12px; padding: 12px 14px 10px 12px;
+  background: rgba(6, 10, 24, 0.84);
+  border: 1px solid rgba(160, 190, 255, 0.18); border-left: 4px solid var(--cm); border-radius: 4px 10px 10px 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06), -6px 0 22px -10px var(--cm);
+  backdrop-filter: blur(8px) saturate(1.2); -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  visibility: hidden; opacity: 0; transform: translateX(-28px) skewX(-4deg);
+  transition: opacity 0.28s ease, transform 0.34s cubic-bezier(.2, 1.25, .35, 1), visibility 0s linear 0.34s;
+  overflow: hidden;
+}
+/* a wash of the speaker's colour from the portrait side */
+.comms::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.16;
+  background: linear-gradient(100deg, var(--cm), transparent 48%);
+}
+.comms.on { visibility: visible; opacity: 1; transform: none; transition: opacity 0.18s ease, transform 0.34s cubic-bezier(.2, 1.25, .35, 1), visibility 0s; }
+.comms.out { visibility: visible; opacity: 0; transform: translateX(-16px); transition: opacity 0.35s ease, transform 0.35s ease, visibility 0s linear 0.35s; }
+/* faint CRT lines over the whole card */
+.comms::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px);
+}
+.cm-port { position: relative; width: 76px; height: 76px; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.5); align-self: start; }
+.cm-port canvas { width: 76px; height: 76px; display: block; }
+.cm-ini {
+  position: absolute; right: 3px; bottom: 3px; min-width: 16px; height: 16px; padding: 0 3px; box-sizing: border-box; border-radius: 3px;
+  background: var(--cm); color: #070a14; font: 800 11px/16px var(--f-num); text-align: center;
+}
+.comms.ring .cm-port { animation: cmring 0.45s ease-out; }
+@keyframes cmring { 0% { box-shadow: 0 0 0 0 var(--cm); } 100% { box-shadow: 0 0 0 10px transparent; } }
+.cm-body { position: relative; min-width: 0; }
+.cm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cm-chan { font: 600 10px var(--f-num); letter-spacing: 0.14em; color: var(--cm); opacity: 0.9; white-space: nowrap; }
+.cm-live { display: inline-flex; align-items: center; gap: 5px; font: 700 10px var(--f-num); letter-spacing: 0.14em; color: var(--dim); }
+.cm-live i { width: 7px; height: 7px; border-radius: 50%; background: #ff3b3b; box-shadow: 0 0 8px #ff3b3b; animation: cmblink 1s steps(2, start) infinite; }
+@keyframes cmblink { to { opacity: 0.25; } }
+.cm-name {
+  margin-top: 1px; font-family: var(--f-display); font-weight: 800; font-size: 21px; line-height: 1.05;
+  letter-spacing: 0.06em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
+}
+.cm-role { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.cm-sub { margin: 6px 0 4px; font: 600 16px/1.28 var(--f-ui); color: #f4f7ff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); min-height: 2.56em; }
+.cm-rest { color: rgba(244, 247, 255, 0.22); }
+.cm-wave { width: 100%; max-width: 260px; height: 22px; display: block; opacity: 0.95; }
+/* police: a light bar strobes along the top edge */
+.cm-lights { position: absolute; left: 0; right: 0; top: 0; height: 2px; display: none; z-index: 1; }
+.cm-lights i { position: absolute; top: 0; width: 50%; height: 100%; }
+.cm-lights i:first-child { left: 0; background: #ff2e3e; box-shadow: 0 0 10px #ff2e3e; animation: cmpol 0.5s steps(2, start) infinite; }
+.cm-lights i:last-child { right: 0; background: #2e7bff; box-shadow: 0 0 10px #2e7bff; animation: cmpol 0.5s steps(2, end) infinite; }
+@keyframes cmpol { to { opacity: 0.15; } }
+.comms.cm-dispatch .cm-lights { display: block; }
+.comms.cm-dispatch .cm-sub, .comms.cm-pilot .cm-sub { font-family: var(--f-num); font-size: 13.5px; font-weight: 500; letter-spacing: 0.01em; line-height: 1.35; }
+@media (max-width: 900px) { .comms { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 250px); } }
+@media (prefers-reduced-motion: reduce) { .comms, .comms.on, .comms.out { transition: opacity 0.2s; transform: none; } .cm-lights i, .cm-live i, .comms.ring .cm-port { animation: none; } }
