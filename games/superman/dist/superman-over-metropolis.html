@@ -369,6 +369,66 @@ html, body {
 .lg.help { background: #ff7ad9; border-radius: 50%; }
 @media (prefers-reduced-motion: reduce) { .bark.on, #msn-qte.miss { animation: none; } }
 
+/* ---------------------------------------------------------------- radio comms card (js/comms.js) */
+.comms {
+  --cm: #5aa9ff;
+  position: absolute; left: 16px; top: calc(env(safe-area-inset-top, 0px) + 206px);
+  width: min(380px, calc(100% - 32px)); box-sizing: border-box;
+  display: grid; grid-template-columns: 76px 1fr; gap: 12px; padding: 12px 14px 10px 12px;
+  background: rgba(6, 10, 24, 0.84);
+  border: 1px solid rgba(160, 190, 255, 0.18); border-left: 4px solid var(--cm); border-radius: 4px 10px 10px 4px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06), -6px 0 22px -10px var(--cm);
+  backdrop-filter: blur(8px) saturate(1.2); -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  visibility: hidden; opacity: 0; transform: translateX(-28px) skewX(-4deg);
+  transition: opacity 0.28s ease, transform 0.34s cubic-bezier(.2, 1.25, .35, 1), visibility 0s linear 0.34s;
+  overflow: hidden;
+}
+/* a wash of the speaker's colour from the portrait side */
+.comms::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0.16;
+  background: linear-gradient(100deg, var(--cm), transparent 48%);
+}
+/* opacity snaps to 1 (only the slide animates) so a stalled compositor never hides a call */
+.comms.on { visibility: visible; opacity: 1; transform: none; transition: transform 0.34s cubic-bezier(.2, 1.25, .35, 1), visibility 0s; }
+.comms.out { visibility: visible; opacity: 0; transform: translateX(-16px); transition: opacity 0.35s ease, transform 0.35s ease, visibility 0s linear 0.35s; }
+/* faint CRT lines over the whole card */
+.comms::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px);
+}
+.cm-port { position: relative; width: 76px; height: 76px; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6), 0 4px 14px rgba(0, 0, 0, 0.5); align-self: start; }
+.cm-port canvas { width: 76px; height: 76px; display: block; }
+.cm-ini {
+  position: absolute; right: 3px; bottom: 3px; min-width: 16px; height: 16px; padding: 0 3px; box-sizing: border-box; border-radius: 3px;
+  background: var(--cm); color: #070a14; font: 800 11px/16px var(--f-num); text-align: center;
+}
+.comms.ring .cm-port { animation: cmring 0.45s ease-out; }
+@keyframes cmring { 0% { box-shadow: 0 0 0 0 var(--cm); } 100% { box-shadow: 0 0 0 10px transparent; } }
+.cm-body { position: relative; min-width: 0; }
+.cm-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.cm-chan { font: 600 10px var(--f-num); letter-spacing: 0.14em; color: var(--cm); opacity: 0.9; white-space: nowrap; }
+.cm-live { display: inline-flex; align-items: center; gap: 5px; font: 700 10px var(--f-num); letter-spacing: 0.14em; color: var(--dim); }
+.cm-live i { width: 7px; height: 7px; border-radius: 50%; background: #ff3b3b; box-shadow: 0 0 8px #ff3b3b; animation: cmblink 1s steps(2, start) infinite; }
+@keyframes cmblink { to { opacity: 0.25; } }
+.cm-name {
+  margin-top: 1px; font-family: var(--f-display); font-weight: 800; font-size: 21px; line-height: 1.05;
+  letter-spacing: 0.06em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 10px rgba(0, 0, 0, 0.6);
+}
+.cm-role { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.cm-sub { margin: 6px 0 4px; font: 600 16px/1.28 var(--f-ui); color: #f4f7ff; text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8); min-height: 2.56em; }
+.cm-rest { color: rgba(244, 247, 255, 0.22); }
+.cm-wave { width: 100%; max-width: 260px; height: 22px; display: block; opacity: 0.95; }
+/* police: a light bar strobes along the top edge */
+.cm-lights { position: absolute; left: 0; right: 0; top: 0; height: 2px; display: none; z-index: 1; }
+.cm-lights i { position: absolute; top: 0; width: 50%; height: 100%; }
+.cm-lights i:first-child { left: 0; background: #ff2e3e; box-shadow: 0 0 10px #ff2e3e; animation: cmpol 0.5s steps(2, start) infinite; }
+.cm-lights i:last-child { right: 0; background: #2e7bff; box-shadow: 0 0 10px #2e7bff; animation: cmpol 0.5s steps(2, end) infinite; }
+@keyframes cmpol { to { opacity: 0.15; } }
+.comms.cm-dispatch .cm-lights { display: block; }
+.comms.cm-dispatch .cm-sub, .comms.cm-pilot .cm-sub { font-family: var(--f-num); font-size: 13.5px; font-weight: 500; letter-spacing: 0.01em; line-height: 1.35; }
+@media (max-width: 900px) { .comms { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 250px); } }
+@media (prefers-reduced-motion: reduce) { .comms, .comms.on, .comms.out { transition: opacity 0.2s; transform: none; } .cm-lights i, .cm-live i, .comms.ring .cm-port { animation: none; } }
+
 </style>
 </head>
 <body>
@@ -5031,6 +5091,7 @@ window.SM_PLUGINS.push(function skyline(ctx) {
     if (d < CFG.types.washer.catchR) {
       // caught: straight into his arms (same hold the E key uses)
       if (P.hold) g.grabOrRelease();
+      p.vel.set(0, m.fallV, 0); if (window.SM_CATCH) window.SM_CATCH.onGrab(p);   // velocity-matching rule (js/catch.js)
       p.mode = 'held'; p.held = true; p.sleeping = false; p.vel.set(0, 0, 0); p.prevDanger = false; p.msnPose = null;
       P.holdRel.setFromAxisAngle(XAX, -Math.PI / 2); P.hold = p;
       bark(p, 'caught', { prio: true }); m.qteResult = 'ok';
@@ -6172,6 +6233,2318 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
   }
 
   window.SM_HERO = { build, capeMaterial, CAPE: { CW: 10, CH: 14 } };
+})();
+
+</script>
+<script>/* js/catch.js */
+/* The Catch and Save Everyone (dream features 2 and 9).
+ *
+ * Catching is a skill: match their speed and absorb it gently, and everyone walks away.
+ *   - Grab rule: the instant velocity change |target.vel - P.vel| at the grab hurts people above
+ *     12 m/s (vehicle occupants above 18 m/s). Absorbed over ~0.1 s, more than 15 g (30 g for
+ *     vehicles) is a severe injury.
+ *   - Carry rule: the g on the carried body (|dv| over a 0.1 s window) above 6 g for 0.25 s hurts a
+ *     person (15 g for vehicle occupants); above 15 g (30 g) it is severe at once. Hard turns, boosts,
+ *     walls and stops all count. Coasting with a passenger brakes at 4 g at most ("soft hands").
+ *   - Auto-assist: within 2 m of a faller with the relative speed under the limit, the catch happens
+ *     on its own (or on E) and is cushioned: Superman takes their velocity, then brakes at 4 g.
+ *   - Slow time (V, and the missions' slow-motion assist) compares on-screen velocities.
+ *   - HUD: a g-arc around the crosshair (green < 3 g, amber 3-6 g, red > 6 g, thicker with "!" in the
+ *     red), a mono readout, and a "match speed" bar while closing on a faller (within 30 m).
+ *   - Triage: during an emergency, "Saved X / Y at risk" under the timer; everyone saved unhurt with
+ *     gold earns an "Everyone home" ribbon.
+ *
+ * Contract: game.js calls SM_CATCH.onGrab(t) from grabBody (missions.js calls it for its fallers),
+ * SM_CATCH.carry(h, dt) from the held-object block and SM_CATCH.coast(dt) from the coasting branch
+ * of flight. The rest runs as a plugin, reading window.__game lazily. No per-frame allocations.
+ */
+(function () {
+  'use strict';
+  const CFG = {
+    dvPerson: 12,        // m/s instant change a person survives unhurt
+    gPerson: 6,          // sustained g a carried person survives
+    gSevere: 15,         // above this a person's injury is severe
+    dvVehicle: 18,       // looser: vehicle occupants are belted in a crumple zone
+    gVehicle: 15,
+    gVehicleSevere: 30,
+    sustain: 0.25,       // s above the g limit before it hurts
+    window: 0.1,         // s smoothing window for the g sample
+    absorbT: 0.1,        // s an arm-catch spreads an instant dv over (dv -> g)
+    softG: 4,            // coasting brake with a passenger
+    assistR: 2,          // m catch window (to the body's surface)
+    hudR: 30,            // m: show the meter when this close to a faller
+    gMax: 12,            // arc full scale
+    slowScale: 0.12,     // must match game.js wdt scale in slow time
+    heliCrew: 3,
+    regrabT: 1.5         // s after letting go before auto-assist will catch again
+  };
+  const G0 = 9.81;
+  const G = () => window.__game;
+
+  // ---- velocity history of the carried body (ring buffer, no allocations)
+  const N = 64, RV = new Float64Array(N * 3), RT = new Float64Array(N);
+  let head = 0, count = 0, clock = 0;
+  function seed(v) { head = 0; count = 0; push(v); }
+  function push(v) {
+    head = (head + 1) % N; RV[head * 3] = v.x; RV[head * 3 + 1] = v.y; RV[head * 3 + 2] = v.z; RT[head] = clock;
+    if (count < N) count++;
+  }
+  // |v_now - v_then| / (t_now - t_then) / g, with "then" the newest sample at least one window old
+  function sampleG() {
+    if (count < 2) return 0;
+    let k = -1;
+    for (let i = 1; i < count; i++) { const j = (head - i + N) % N; k = j; if (clock - RT[j] >= CFG.window - 1e-6) break; }
+    const age = clock - RT[k]; if (age <= 1e-6) return 0;
+    const dx = RV[head * 3] - RV[k * 3], dy = RV[head * 3 + 1] - RV[k * 3 + 1], dz = RV[head * 3 + 2] - RV[k * 3 + 2];
+    return Math.sqrt(dx * dx + dy * dy + dz * dz) / age / G0;
+  }
+
+  const st = {
+    held: null, g: 0, peak: 0, overT: 0,
+    faller: null, fallerDv: 0, fallerD: 0, fallerVel: null, fallerClose: false,
+    lastHeld: null, releasedT: -99, log: [], catches: 0, softCatches: 0, hardCatches: 0
+  };
+  const ts = () => (G().P.slow ? CFG.slowScale : 1);
+  function occupied(t) {
+    if (!t) return false;
+    if (t.kind === 'person') return !t.thug;
+    if (t.kind === 'heli') return !t.crashed;
+    if (t.kind === 'car') return !!t.occupied && !t.exploded;
+    return false;
+  }
+  function rule(t) {
+    return t.kind === 'person' ? { dv: CFG.dvPerson, g: CFG.gPerson, sev: CFG.gSevere }
+      : { dv: CFG.dvVehicle, g: CFG.gVehicle, sev: CFG.gVehicleSevere };
+  }
+  function log(e) { e.t = +clock.toFixed(3); st.log.push(e); if (st.log.length > 60) st.log.shift(); }
+
+  function injure(t, sev, why, dv, g) {
+    const game = G(), inc = game.currentInc;
+    if (t.kind === 'person') {
+      if (t.injured) return false;
+      game.injurePerson(t);
+      if (!t.injured) return false;
+      if (sev > 1) { t.severe = true; if (inc) inc.injuries++; game.hopeHit(3); }
+    } else {
+      if (t.occHurt) return false;
+      const n = t.kind === 'heli' ? CFG.heliCrew : 1;
+      t.occHurt = sev;
+      if (inc) inc.injuries += n * sev;
+      game.ledger.occInjuries = (game.ledger.occInjuries || 0) + n;
+      game.hopeHit(4 * sev);
+    }
+    const who = t.kind === 'person' ? 'They' : t.kind === 'heli' ? 'The crew' : 'The driver';
+    const what = why === 'catch' ? `Caught too hard (${dv.toFixed(0)} m/s).` : `${g.toFixed(0)} g is too much.`;
+    game.toast(`${what} ${who} ${sev > 1 ? 'are badly hurt' : 'are hurt'}. Match their speed.`, 'alert');
+    log({ kind: 'injure', why, who: t.kind, sev, dv: dv && +dv.toFixed(2), g: g && +g.toFixed(2) });
+    return true;
+  }
+
+  // called by game.js grabBody (and missions.js fallers) before the body is attached
+  function onGrab(t) {
+    const game = G(); if (!game) return false;
+    const P = game.P, s = ts();
+    if (t.kind === 'car' && t.drive && !t.exploded) t.occupied = true;
+    const tvx = t.vel.x * s, tvy = t.vel.y * s, tvz = t.vel.z * s;
+    const dv = Math.hypot(tvx - P.vel.x, tvy - P.vel.y, tvz - P.vel.z);
+    const d = t.pos.distanceTo(P.pos), close = d <= CFG.assistR + (t.kind === 'person' ? 0.6 : t.rad);
+    const moving = Math.hypot(tvx, tvy, tvz) > 4;
+    let hurt = false, cushioned = false;
+    if (occupied(t)) {
+      const r = rule(t);
+      if (dv > r.dv) {
+        const gEq = dv / CFG.absorbT / G0;
+        hurt = injure(t, gEq > r.sev ? 2 : 1, 'catch', dv, gEq);
+        st.hardCatches++;
+      } else if (close) {
+        // cushioned: he takes their velocity and the brake does the rest at <= 4 g
+        P.vel.set(tvx, tvy, tvz); cushioned = true;
+        if (moving) { st.softCatches++; game.toast(`Soft catch · ${dv.toFixed(1)} m/s`, 'good'); }
+      }
+    }
+    st.catches++; st.held = t; st.overT = 0; st.g = 0; st.peak = 0;
+    seed(P.vel); P.catchG = 0;
+    log({ kind: 'catch', who: t.kind, dv: +dv.toFixed(2), close, cushioned, hurt });
+    return hurt;
+  }
+
+  // called each frame while holding, after the hero's move and collisions (real dt)
+  function carry(h, dt) {
+    const P = G().P;
+    clock += dt;
+    if (h !== st.held) { st.held = h; seed(P.vel); st.overT = 0; st.peak = 0; }
+    else push(P.vel);
+    const g = sampleG(); st.g = g; P.catchG = g; if (g > st.peak) st.peak = g;
+    if (!occupied(h)) return;
+    const r = rule(h);
+    if (g > r.sev) injure(h, 2, 'carry', 0, g);
+    else if (g > r.g) { st.overT += dt; if (st.overT >= CFG.sustain) injure(h, 1, 'carry', 0, g); }
+    else st.overT = 0;
+  }
+
+  // soft hands: coasting with a passenger never brakes harder than 4 g
+  function coast(dt) {
+    const P = G().P;
+    if (!occupied(P.hold)) return false;
+    const sp = P.vel.length(); if (sp < 1e-6) return true;
+    const drop = Math.min(sp * (1 - Math.exp(-2.4 * dt)), CFG.softG * G0 * dt);
+    P.vel.multiplyScalar((sp - drop) / sp);
+    return true;
+  }
+
+  // ---- fallers: who can be caught right now
+  let V3, TV, TV2;
+  function scanFallers(game) {
+    const P = game.P, s = ts();
+    let best = null, bd = CFG.hudR, bvx = 0, bvy = 0, bvz = 0, mission = false;
+    const consider = (b, vx, vy, vz, isMsn) => {
+      const d = b.pos.distanceTo(P.pos); if (d >= bd) return;
+      bd = d; best = b; bvx = vx; bvy = vy; bvz = vz; mission = isMsn;
+    };
+    for (const p of game.people) {
+      if (p.mode !== 'phys' || p.onGround || p.thug || p.held) continue;
+      if (!(p.danger || p.vel.y < -3)) continue;
+      if (p.pos.y - Math.max(0, game.groundY(p.pos.x, p.pos.z)) < 1.5) continue;
+      if (p === st.lastHeld && clock - st.releasedT < 3) continue;
+      consider(p, p.vel.x * s, p.vel.y * s, p.vel.z * s, false);
+    }
+    const M = game.missions, m = M && M.current && M.current();
+    if (m && m.phase === 'fall' && m.victim) consider(m.victim, 0, (m.fallV || 0) * s, 0, true);
+    const inc = game.currentInc;
+    if (inc && inc.type === 'heli' && inc.h && inc.h.phase === 'falling' && !inc.h.held && !inc.h.landed && !inc.h.crashed) {
+      const h = inc.h; consider(h, h.vel.x * s, h.vel.y * s, h.vel.z * s, false);
+    }
+    st.faller = best; st.fallerMission = mission;
+    if (best) {
+      st.fallerD = bd; TV.set(bvx, bvy, bvz); st.fallerVel = TV;
+      st.fallerDv = Math.hypot(bvx - P.vel.x, bvy - P.vel.y, bvz - P.vel.z);
+      st.fallerClose = bd <= CFG.assistR + (best.kind === 'person' ? 0.6 : best.rad);
+    } else { st.fallerDv = 0; st.fallerD = 0; st.fallerClose = false; }
+  }
+
+  // ---- triage: who is still in danger during an emergency
+  const risk = [];   // { p, st: 'risk' | 'saved' | 'lost' } or { heli, n, st }
+  let trInc = null, gold0 = 0, scanT = 0;
+  function tracked(p) { for (const e of risk) if (e.p === p) return true; return false; }
+  function trackIncident(game, dt) {
+    const inc = game.currentInc;
+    if (inc !== trInc) {
+      if (trInc) finishIncident(game, trInc);
+      trInc = inc; risk.length = 0; scanT = 0;
+      if (!inc) return;
+      gold0 = game.ledger.medals.gold;
+      if (inc.trapped) for (const p of inc.trapped) risk.push({ p, st: 'risk' });
+      if (inc.type === 'heli' && inc.h) risk.push({ heli: inc.h, n: CFG.heliCrew, st: 'risk' });
+    }
+    if (!inc) return;
+    scanT -= dt;
+    if (scanT <= 0) {
+      scanT = 0.2;
+      // newly endangered people (thrown, knocked off a roof); trapped ones belong to their own fire's list
+      for (const p of game.people) if (p.danger && !p.thug && p.mode !== 'gone' && p.mode !== 'trapped' && !tracked(p)) risk.push({ p, st: 'risk' });
+    }
+    let total = 0, saved = 0, lost = 0, hurt = 0;
+    for (const e of risk) {
+      if (e.heli) {
+        const h = e.heli;
+        if (e.st === 'risk') e.st = h.landed ? 'saved' : h.crashed ? 'lost' : 'risk';
+        total += e.n; if (e.st === 'saved') saved += e.n; if (e.st === 'lost') lost += e.n; if (h.occHurt) hurt += e.n;
+        continue;
+      }
+      const p = e.p;
+      if (e.st !== 'lost') {
+        if (p.mode === 'safe') e.st = 'saved';
+        else if (p.mode === 'gone') { if (e.st === 'risk') e.st = 'lost'; }
+        else if (p.danger || p.mode === 'trapped' || p.mode === 'held' || (p.mode === 'phys' && !p.onGround)) e.st = 'risk';
+        else e.st = 'saved';
+      }
+      total++; if (e.st === 'saved') saved++; if (e.st === 'lost') lost++; if (p.injured && e.st !== 'lost') hurt++;
+    }
+    inc.atRisk = total; inc.safe = saved; inc.riskLeft = total - saved - lost; inc.riskLost = lost; inc.riskHurt = hurt;
+  }
+  function finishIncident(game, inc) {
+    const gold = game.ledger.medals.gold > gold0;
+    if (gold && inc.atRisk > 0 && inc.safe === inc.atRisk && !inc.injuries) {
+      inc.everyoneHome = true; st.everyoneHome = (st.everyoneHome || 0) + 1;
+      setTimeout(() => game.toast(`Everyone home · ${inc.atRisk} of ${inc.atRisk} saved unhurt`, 'good'), 900);
+    }
+  }
+
+  // ---- HUD
+  const UI = {};
+  const R_ARC = 50, CIRC = 2 * Math.PI * R_ARC, SWEEP = CIRC * 240 / 360, K = SWEEP / CFG.gMax;
+  function band(cls, g0, g1) {
+    return `<circle class="cg-band ${cls}" cx="60" cy="60" r="${R_ARC}" stroke-dasharray="${((g1 - g0) * K).toFixed(2)} ${CIRC.toFixed(2)}" stroke-dashoffset="${(-g0 * K).toFixed(2)}" transform="rotate(150 60 60)"/>`;
+  }
+  function buildDOM() {
+    const hud = document.getElementById('hud'); if (!hud || UI.root) return;
+    const css = document.createElement('style');
+    css.textContent = `
+#catch-hud { position: absolute; left: 50%; top: 50%; width: 120px; height: 120px; margin: -60px 0 0 -60px; pointer-events: none; opacity: 0; transition: opacity 0.18s; }
+#catch-hud.on { opacity: 1; }
+#catch-hud svg { position: absolute; inset: 0; overflow: visible; }
+#catch-hud .cg-band { fill: none; stroke-width: 3; opacity: 0.35; }
+#catch-hud .cg-ok { stroke: var(--ok); } #catch-hud .cg-warn { stroke: var(--sun); } #catch-hud .cg-bad { stroke: var(--cape); }
+#catch-hud .cg-val { fill: none; stroke-width: 4; stroke-linecap: round; stroke: var(--ok); filter: drop-shadow(0 0 2px rgba(0,0,0,0.6)); }
+#catch-hud.warn .cg-val { stroke: var(--sun); } #catch-hud.bad .cg-val { stroke: var(--cape); stroke-width: 7; }
+#catch-hud .cg-read { position: absolute; left: 0; right: 0; top: 92px; text-align: center; font-family: var(--f-num); font-size: 13px; font-weight: 600;
+  color: var(--text); text-shadow: 0 1px 2px rgba(0,0,0,0.8); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#catch-hud .cg-read i { font-style: normal; color: var(--cape); font-weight: 800; margin-left: 4px; display: none; }
+#catch-hud.bad .cg-read i { display: inline; }
+#catch-hud .cg-match { position: absolute; left: -20px; right: -20px; top: 112px; display: none; text-align: center; }
+#catch-hud.closing .cg-match { display: block; }
+#catch-hud .cg-bar { position: relative; height: 5px; margin: 0 14px 3px; border-radius: 3px; background: var(--panel); border: 1px solid var(--edge); overflow: hidden; }
+#catch-hud .cg-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--ok); }
+#catch-hud.fast .cg-bar i { background: var(--cape); }
+#catch-hud .cg-bar u { position: absolute; left: 50%; top: -1px; bottom: -1px; width: 2px; background: var(--text); }
+#catch-hud .cg-match span { font-family: var(--f-ui); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8); white-space: nowrap; }
+#catch-hud .cg-match em { font-style: normal; font-family: var(--f-num); letter-spacing: 0; }
+#catch-hud .cg-match b { font-family: var(--f-num); color: var(--text); font-weight: 600; letter-spacing: 0; }
+#catch-hud.ready .cg-match span { color: var(--ok); }
+#triage { color: var(--text); }
+#triage b { font-family: var(--f-num); color: var(--sun); }
+#triage.all b { color: var(--ok); }`;
+    document.head.appendChild(css);
+    const root = document.createElement('div'); root.id = 'catch-hud'; root.setAttribute('aria-hidden', 'true');
+    root.innerHTML = `<svg viewBox="0 0 120 120">${band('cg-ok', 0, 3)}${band('cg-warn', 3, 6)}${band('cg-bad', 6, CFG.gMax)}
+<circle class="cg-val" cx="60" cy="60" r="${R_ARC}" stroke-dasharray="0 ${CIRC.toFixed(2)}" transform="rotate(150 60 60)"/></svg>
+<div class="cg-read"><b>0.0</b> g<i>!</i></div>
+<div class="cg-match"><div class="cg-bar"><i></i><u></u></div><span>Match speed <b>0.0</b> / <em>${CFG.dvPerson}</em> m/s</span></div>`;
+    hud.appendChild(root);
+    UI.root = root; UI.val = root.querySelector('.cg-val'); UI.read = root.querySelector('.cg-read b');
+    UI.bar = root.querySelector('.cg-bar i'); UI.match = root.querySelector('.cg-match span');
+    UI.mdv = root.querySelector('.cg-match b'); UI.lim = root.querySelector('.cg-match em');
+    const tri = document.createElement('div'); tri.id = 'triage'; tri.className = 'mode'; tri.hidden = true;
+    const mode = document.getElementById('mode');
+    if (mode && mode.parentNode) mode.parentNode.insertBefore(tri, mode.nextSibling); else hud.appendChild(tri);
+    UI.tri = tri; UI.last = {};
+  }
+  function set(key, el, prop, v) { if (UI.last[key] !== v) { UI.last[key] = v; el[prop] = v; } }
+  function cls(name, on) { if (!!UI.last['c' + name] !== on) { UI.last['c' + name] = on; UI.root.classList.toggle(name, on); } }
+  let hudT = 0;
+  function updateHUD(game, dt) {
+    if (!UI.root) return;
+    hudT -= dt; if (hudT > 0) return; hudT = 1 / 30;
+    const P = game.P, carrying = occupied(P.hold), closing = !P.hold && !!st.faller;
+    const show = carrying || closing;
+    cls('on', show);
+    // carrying: the g on them; closing: what the catch would cost, if made now
+    const lim = st.faller ? rule(st.faller).dv : CFG.dvPerson;
+    const g = carrying ? st.g : closing ? st.fallerDv / CFG.absorbT / G0 : 0;
+    // arc position on the person scale: the red band starts at the body's own limit (6 g, or the dv limit)
+    const gs = carrying ? g * CFG.gPerson / rule(P.hold).g : closing ? st.fallerDv / lim * CFG.gPerson : 0;
+    const warn = gs >= 3 && gs <= 6, bad = gs > 6;
+    cls('warn', show && warn); cls('bad', show && bad);
+    const dash = `${(Math.min(gs, CFG.gMax) * K).toFixed(1)} ${CIRC.toFixed(1)}`;
+    if (UI.last.dash !== dash) { UI.last.dash = dash; UI.val.setAttribute('stroke-dasharray', dash); }
+    set('read', UI.read, 'textContent', show ? g.toFixed(1) : '0.0');
+    cls('closing', closing);
+    if (closing) {
+      const dv = st.fallerDv, ok = dv <= lim;
+      set('mdv', UI.mdv, 'textContent', dv.toFixed(1));
+      set('lim', UI.lim, 'textContent', String(lim));
+      const w = Math.min(100, dv / (2 * lim) * 100).toFixed(0) + '%';
+      if (UI.last.w !== w) { UI.last.w = w; UI.bar.style.width = w; }
+      cls('fast', !ok); cls('ready', ok && st.fallerD < 8);
+    } else { cls('fast', false); cls('ready', false); }
+    // triage counter
+    const inc = game.currentInc, n = inc && inc.atRisk;
+    UI.tri.hidden = !n;
+    if (n) {
+      set('tri', UI.tri, 'innerHTML', `Saved <b>${inc.safe} / ${n}</b> at risk${inc.riskHurt ? ` · ${inc.riskHurt} hurt` : ''}${inc.riskLost ? ` · ${inc.riskLost} lost` : ''}`);
+      if (!!UI.last.triAll !== (inc.safe === n)) { UI.last.triAll = inc.safe === n; UI.tri.classList.toggle('all', inc.safe === n); }
+    }
+  }
+
+  function update(dt) {
+    const game = G(); if (!game || !game.started) return;
+    if (!UI.root) buildDOM();
+    const P = game.P;
+    if (P.hold) st.lastHeld = P.hold;
+    else {
+      if (st.held) { st.releasedT = clock; st.held = null; st.g = 0; P.catchG = 0; }
+      clock += dt;   // carry() advances the clock while holding
+    }
+    scanFallers(game);
+    // auto-assist: close and matched means caught, gently
+    if (!P.hold && st.faller && !st.fallerMission && st.fallerClose && clock - st.releasedT > CFG.regrabT
+        && st.fallerDv <= rule(st.faller).dv && game.grabBody) game.grabBody(st.faller);
+    trackIncident(game, dt);
+    updateHUD(game, dt);
+  }
+
+  window.SM_CATCH = {
+    cfg: CFG, onGrab, carry, coast, occupied,
+    get g() { return st.g; }, get peak() { return st.peak; },
+    state() {
+      return { g: +st.g.toFixed(3), peak: +st.peak.toFixed(3), overT: st.overT, faller: st.faller ? st.faller.kind : null, fallerDv: +st.fallerDv.toFixed(2),
+        fallerD: +st.fallerD.toFixed(2), close: st.fallerClose, catches: st.catches, soft: st.softCatches, hard: st.hardCatches,
+        everyoneHome: st.everyoneHome || 0, hud: !!(UI.root && UI.root.classList.contains('on')), tri: UI.tri && !UI.tri.hidden ? UI.tri.textContent : '' };
+    },
+    log: st.log,
+    triage() { return risk.map(e => (e.heli ? 'heli×' + e.n : e.p.mode) + ':' + e.st); }
+  };
+  window.SM_PLUGINS = window.SM_PLUGINS || [];
+  window.SM_PLUGINS.push(function catchPlugin(c) {
+    V3 = c.THREE.Vector3; TV = new V3(); TV2 = new V3();
+    return { update };
+  });
+})();
+
+</script>
+<script>/* js/setpieces.js */
+/* Set pieces for "Superman Over Metropolis": the runaway bus (dream feature 12) and the falling
+ * airliner (dream feature 4), demo steps 7 and 8.
+ *
+ * Runaway bus: a packed city bus loses its brakes on Centennial St and runs downhill toward the
+ * waterfront crosswalk. Superman is more powerful than a locomotive, but the 15 standing passengers
+ * (30 aboard) are hurt above about 1 g, so a dead stop hurts them. Get in front early (~40 m of
+ * stopping distance at 25 m/s), press E on the front to brace, and HOLD E for a smooth "soft hands"
+ * stop at 0.85 g (or W to push harder, S to ease off; the meter shows the deceleration). Tap E to
+ * let go. Grabbing it from the side or punching it hurts the passengers and damages the bus.
+ *
+ * Falling airliner: an 80-tonne airliner with an engine fire glides down over the bay. Freeze breath
+ * (Q) on the burning left engine for ~5 s puts it out; left burning, the wing fails at 25 s (roll rate
+ * x2.5, 40 hurt). Four push points (nose, both wingtips, tail): E attaches, then W/Space push up,
+ * S/C push down, A/D push sideways (up to 2.5 MN at that point: enough to steer pitch and roll, not
+ * to hold 80 t up). Set it down on the water with vertical speed under 6 m/s and roll under 15 deg.
+ * 140 passengers are counted, not modelled; 40 stand on the wings while it floats.
+ *
+ * Contract: registers 'bus' and 'airliner' in window.SM_INCIDENTS (consulted by game.js
+ * startIncident), pushes a plugin onto window.SM_PLUGINS, reads everything else lazily from
+ * window.__game. Test / demo API: window.SM_SETPIECES (= __game.setpieces).
+ * Draw calls: bus 3 (body, glass, passengers), airliner 2 (+1 instanced wing standers).
+ * No per-frame allocations in the sim loops.
+ */
+(function () {
+  'use strict';
+
+  // ================================================================== tuning
+  const CFG = {
+    bus: {
+      x: -33.5,            // lane centre on Centennial St (road x = -30, northbound lane)
+      z0: -228,            // front of the bus at the start
+      stopZ: 199,          // crosswalk stop line (front of the bus must stay short of it)
+      crowd: 10,           // people waiting on the crosswalk
+      v0: 9, vmax: 25,     // m/s
+      slope: 0.62,         // m/s^2 downhill run-away acceleration
+      len: 12, w: 2.5, h: 3.0, mass: 15000,
+      aboard: 30, standing: 15,
+      hurtG: 1.0,          // standing passengers are hurt above this (sustained)
+      softG: 0.85,         // hold E: controlled deceleration
+      pushMaxG: 3.2, pushRamp: 1.1, jerk: 1.6,
+      blockInj: 12,        // a stationary block at 25 m/s
+      sideInj: 8, punchInj: 4,
+      limit: 45
+    },
+    plane: {
+      start: [-1500, 450, 1100], heading: -Math.PI / 2, v0: 105,
+      mass: 80000, S: 200, rho: 1.225, cd0: 0.032, k: 0.055, cl: 0.12, clMax: 1.6, alphaTrim: 4,
+      ka: 0.9, cq: 1.4, Ith: 1.9e8, Iph: 1.06e8, Ips: 2.5e8, drift: 0.035, kr: 0.12, cp: 1.6, kbeta: 1.2,
+      push: 2.5e6, pushLin: 0.15, attachR: 9,
+      fireBreath: 5,       // s of freeze breath on the engine
+      wingFailT: 25,       // s: the wing fails if the fire is still burning
+      limit: 75, pax: 140, wingHurt: 40,
+      vsOK: 6, vsHard: 12, rollOK: 15, rollHard: 30
+    },
+    rotation: { busAfter: 180, planeAfter: 300, every: 6 }
+  };
+  const D2R = Math.PI / 180, G0 = 9.81;
+
+  let THREE, V3, ready = false, scene = null;
+  const G = () => window.__game;
+  let T1, T2, T3, T4, TM, TM2, TQ, TE;
+  const held = { KeyE: false };
+  let eDownAt = 0, ignoreUp = false, clock = 0;
+  const API_PUSH = { on: false, u: 0, s: 0 };
+
+  // ================================================================== geometry helpers
+  function col(hex) { return new THREE.Color(hex).convertSRGBToLinear(); }
+  function merge(parts) {
+    let n = 0; const gs = [];
+    for (const [geo, c] of parts) { const g = geo.index ? geo.toNonIndexed() : geo; n += g.attributes.position.count; gs.push([g, c]); }
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), cl = new Float32Array(n * 3);
+    let o = 0;
+    for (const [g, c] of gs) {
+      const k = g.attributes.position.count;
+      pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3);
+      for (let i = 0; i < k; i++) { cl[(o + i) * 3] = c.r; cl[(o + i) * 3 + 1] = c.g; cl[(o + i) * 3 + 2] = c.b; }
+      o += k;
+    }
+    const out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.setAttribute('color', new THREE.BufferAttribute(cl, 3));
+    out.computeBoundingSphere(); return out;
+  }
+  const box = (w, h, d, x, y, z) => new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+  function zcyl(r0, r1, len, seg, x, y, z) { const g = new THREE.CylinderGeometry(r1, r0, len, seg); g.rotateX(Math.PI / 2); g.translate(x, y, z); return g; }
+
+  // ---- people: one instanced mesh for bus passengers and wing standers
+  const PCAP = 64;
+  let pplMesh = null, pplN = 0;
+  function makePeople() {
+    const skin = col(0xd9a07a), shirt = col(0xe8e8e8), pants = col(0x2c3240);
+    const legs = new THREE.CylinderGeometry(0.17, 0.14, 0.85, 7).translate(0, 0.43, 0);
+    const body = new THREE.CylinderGeometry(0.2, 0.18, 0.65, 7).translate(0, 1.18, 0);
+    const head = new THREE.SphereGeometry(0.12, 8, 6).translate(0, 1.64, 0);
+    const geo = merge([[legs, pants], [body, shirt], [head, skin]]);
+    pplMesh = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }), PCAP);
+    pplMesh.castShadow = true; pplMesh.frustumCulled = false; pplMesh.count = 0;
+    const shirts = [0x7a2b2b, 0x2b4a7a, 0x3c3c3c, 0x6b5a3a, 0x2f6b55, 0x8a6d9c, 0xb0a07a, 0xd8d4c8, 0xa8322d, 0x404d60];
+    for (let i = 0; i < PCAP; i++) pplMesh.setColorAt(i, col(shirts[i % shirts.length]).lerp(new THREE.Color(1, 1, 1), 0.25));
+    pplMesh.instanceColor.needsUpdate = true;
+    scene.add(pplMesh);
+  }
+
+  // ================================================================== the bus
+  let bus = null;           // state while a bus exists (running, stopped or wrecked)
+  let busMesh = null;
+  const PAX = [];           // standing passenger local poses: {x, z, f (fallen)}
+  function makeBusMesh() {
+    const cream = col(0xdcd6c6), blue = col(0x2a4f8f), dark = col(0x1a1b1e), amber = col(0xffb030), lamp = col(0xfff3d0), grey = col(0x5a5d63);
+    const parts = [
+      [box(2.5, 1.25, 12, 0, 0.975, 0), cream], [box(2.52, 0.18, 12.02, 0, 1.45, 0), blue],
+      [box(2.5, 0.3, 12, 0, 2.95, 0), cream], [box(2.52, 0.12, 12.02, 0, 2.78, 0), blue],
+      [box(2.5, 1.4, 0.1, 0, 2.1, -5.95), cream], [box(2.5, 0.3, 0.1, 0, 2.65, 5.97), dark],
+      [box(1.8, 0.22, 0.05, 0, 2.65, 6.03), amber], [box(2.56, 0.3, 0.25, 0, 0.5, 6.05), grey], [box(2.56, 0.3, 0.25, 0, 0.5, -6.05), grey],
+      [box(0.35, 0.18, 0.05, -0.85, 0.95, 6.03), lamp], [box(0.35, 0.18, 0.05, 0.85, 0.95, 6.03), lamp]
+    ];
+    for (const sx of [-1.21, 1.21]) for (let z = -5.8; z <= 5.85; z += 1.93) parts.push([box(0.1, 1.2, 0.16, sx, 2.2, z), cream]);
+    for (const sx of [-1.15, 1.15]) for (const z of [-4, 4]) { const w = new THREE.CylinderGeometry(0.5, 0.5, 0.3, 12); w.rotateZ(Math.PI / 2); w.translate(sx, 0.5, z); parts.push([w, dark]); }
+    const body = new THREE.Mesh(merge(parts), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.25 }));
+    body.castShadow = true; body.receiveShadow = true;
+    const glassGeo = merge([[box(0.04, 1.15, 11.7, -1.2, 2.18, 0), new THREE.Color(1, 1, 1)], [box(0.04, 1.15, 11.7, 1.2, 2.18, 0), new THREE.Color(1, 1, 1)], [box(2.35, 1.05, 0.04, 0, 2.05, 5.98), new THREE.Color(1, 1, 1)]]);
+    const glass = new THREE.Mesh(glassGeo, new THREE.MeshStandardMaterial({ color: 0x2a3a4a, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.6, depthWrite: false }));
+    glass.renderOrder = 2;
+    const g = new THREE.Group(); g.add(body, glass); g.visible = false; scene.add(g);
+    for (let i = 0; i < CFG.bus.standing; i++) PAX.push({ x: (i % 2 ? 0.55 : -0.55) + (Math.random() - 0.5) * 0.3, z: -5 + i * 0.66, f: 0 });
+    return g;
+  }
+
+  function busStart() {
+    const g = G(), B = CFG.bus;
+    if (!THREE || !g) return null;
+    if (!ready) firstRun(g);
+    if (!busMesh) busMesh = makeBusMesh();
+    const crowd = [];
+    for (let i = 0; i < B.crowd; i++) {
+      const x = i < 3 ? B.x - 1 + i : B.x + (i % 2 ? -1 : 1) * (3 + (i * 1.7) % 4.5);
+      const p = g.placePerson('free', new V3(x, 0.9, B.stopZ + 2.5 + (i * 1.3) % 3.5), { spd: 0.05 });
+      if (p) crowd.push(p);
+    }
+    bus = { s: B.z0, sPrev: B.z0, v: B.v0, vPrev: B.v0, gS: 0, aboveT: 0, hurt: 0, hurtToast: 0, hurtT: -9, attached: false, push: 0,
+      phase: 'run', stopT: 0, dmg: 0, maxG: 0, crowd, removeT: -1, insideBlock: false, nan: false, lost: 0, disembarked: 0, blocked: false };
+    for (const q of PAX) q.f = 0;
+    // clear our lane ahead of the bus
+    for (const c of g.cars) if (!c.dead && c.drive && c.drive.axis === 'z' && Math.abs(c.drive.lane - B.x) < 0.6 && c.pos.z > B.z0 - 16) c.pos.z = -244;
+    busMesh.visible = true;
+    const inc = {
+      type: 'bus', label: 'Runaway bus', limit: B.limit, where: 'Centennial St',
+      title: 'Runaway bus on Centennial St! Brakes gone, heading for the waterfront crosswalk. Get in front early and hold E.',
+      marker() { return T4.set(B.x, 4, bus ? bus.s - 6 : 0).clone(); },
+      update() {
+        if (!bus || bus.inc !== this) return;
+        if (bus.phase === 'crash' && !bus.ended) finishBus(false);
+        else if (bus.phase === 'stopped' && bus.stopT > 1 && !bus.ended) finishBus(true);
+      },
+      timeout() { if (bus && !bus.ended) { bus.phase = 'stopped'; bus.v = 0; finishBus(false, 'Out of time: the bus is still loose.'); } },
+      cleanup() { if (bus) { if (bus.phase === 'run') { bus.v = 0; bus.phase = 'stopped'; } bus.attached = false; bus.ended = true; if (bus.removeT < 0) bus.removeT = 25; for (const p of bus.crowd) if (p.spd < 0.1) p.spd = 1.2 + Math.random() * 0.4; } }
+    };
+    bus.inc = inc;
+    return inc;
+  }
+
+  function busPaySaves(g, n, why) { if (n > 0) g.addSave(n, T1.set(CFG.bus.x, 1, bus.s - 6).clone(), why); }
+  function finishBus(success, msg) {
+    const g = G(), B = CFG.bus; if (!bus || bus.ended) return;
+    bus.ended = true; bus.attached = false;
+    // passengers step off at the doors (right-hand side); the hurt ones need the hospital
+    const hurt = Math.min(B.aboard, bus.hurt);
+    for (let i = 0; i < B.aboard; i++) {
+      const p = g.placePerson('free', new V3(B.x - 2.6 - (i % 3) * 0.8, 0.9, bus.s - 1.5 - (i * 0.37) % 10));
+      if (!p) continue; bus.disembarked++;
+      if (i < hurt) { g.injurePerson(p); p.mode = 'down'; }
+    }
+    const res = { type: 'bus', success, hurt, saved: B.aboard - hurt, lost: bus.lost, stopZ: bus.s, short: B.stopZ - bus.s, maxG: +bus.maxG.toFixed(2), blocked: bus.blocked, vBlock: bus.vBlock || 0, disembarked: bus.disembarked, insideBlock: bus.insideBlock, nan: bus.nan };
+    API.last = res; API.results.push(res);
+    if (success) {
+      busPaySaves(g, B.aboard - hurt, 'Bus passengers safe');
+      g.endIncident(true, msg || `Bus stopped ${Math.max(0, Math.round(B.stopZ - bus.s))} m short of the crosswalk${hurt ? ` · ${hurt} hurt` : ', nobody hurt'}`);
+    } else {
+      bus.inc.lost = bus.lost;
+      g.endIncident(false, msg || `The bus ploughed into the crosswalk. ${bus.lost} lost.`);
+    }
+    bus.removeT = 30;
+  }
+
+  function busHurt(n, why) {
+    const g = G(); if (!bus || n <= 0) return;
+    const was = bus.hurt; bus.hurt = Math.min(CFG.bus.aboard, bus.hurt + n); const d = bus.hurt - was; if (!d) return;
+    bus.hurtToast += d;
+    // fallen standing passengers in the cabin
+    let k = Math.ceil(bus.hurt * CFG.bus.standing / CFG.bus.aboard); for (const q of PAX) if (k-- > 0) q.f = 1;
+    if (clock - bus.hurtT > 1.2) { g.toast(`${why}: ${bus.hurtToast} passenger${bus.hurtToast > 1 ? 's' : ''} hurt`, 'alert'); bus.hurtToast = 0; bus.hurtT = clock; }
+  }
+  function standingG() {
+    const c = window.SM_CATCH && window.SM_CATCH.cfg;
+    return (c && (c.gStanding || c.gStandingPerson)) || CFG.bus.hurtG;
+  }
+
+  function simBus(g, dt) {
+    const B = CFG.bus, P = g.P;
+    if (bus.phase === 'run') {
+      let a = bus.v < B.vmax ? B.slope : 0;
+      if (bus.attached) {
+        const W = g.keys.has('KeyW'), S = g.keys.has('KeyS'), soft = held.KeyE || g.keys.has('KeyE');
+        let cmd = bus.push;
+        if (soft) cmd = B.softG; else if (W) cmd = Math.min(B.pushMaxG, bus.push + B.pushRamp * dt * 2); else if (S) cmd = 0;
+        bus.push += Math.max(-B.jerk * dt * (S ? 3 : 1), Math.min(B.jerk * dt, cmd - bus.push));
+        a -= bus.push * G0;
+      }
+      bus.vPrev = bus.v; bus.v += a * dt;
+      if (bus.v > B.vmax) bus.v = B.vmax;
+      if (bus.v <= 0) { bus.v = 0; bus.phase = 'stopped'; bus.attached = false; g.toast('The bus is stopped.', 'good'); }
+      bus.sPrev = bus.s; bus.s += bus.v * dt;
+      // stationary block: running into Superman when he isn't braced
+      if (!bus.attached && Math.abs(P.pos.x - B.x) < 1.7 && P.pos.y < B.h + 0.4 && P.pos.z >= bus.sPrev - 0.4 && P.pos.z <= bus.s + 0.6) {
+        const rel = bus.v - P.vel.z;
+        if (rel > 3) {
+          const v0 = bus.v; bus.vPrev = bus.v; bus.v = Math.max(0, P.vel.z); bus.blocked = true; bus.vBlock = +v0.toFixed(1);
+          busHurt(Math.ceil(B.blockInj * (v0 - bus.v) / 25), 'You stopped it dead');
+          bus.dmg += 180000; g.ledger.damage += 180000; if (g.currentInc === bus.inc) bus.inc.damage += 180000;
+          g.SFX.punch(P.pos, 1.5); for (let k = 0; k < 18; k++) g.FX.spark(P.pos.x, P.pos.y, P.pos.z, (Math.random() - 0.5) * 12, Math.random() * 6, -Math.random() * 8);
+          bus.gS = Math.max(bus.gS, (v0 - bus.v) / 0.1 / G0); bus.maxG = Math.max(bus.maxG, bus.gS);
+          if (g.hitStop) g.hitStop(0.09); if (g.addShake) g.addShake(0.8); if (g.emit) g.emit('impact', { what: 'bus', v: v0 });
+          if (bus.v <= 0.01) { bus.v = 0; bus.phase = 'stopped'; }
+        } else attachBus(g);
+      }
+      // cars in the way get shoved aside; cars behind queue up
+      for (const c of g.cars) {
+        if (c.dead || c.held) continue;
+        const dx = c.pos.x - B.x;
+        if (Math.abs(dx) < 2.6 && c.pos.z > bus.s - B.len - 2 && c.pos.z < bus.s + 2.2 && c.pos.y < 3) {
+          if (c.pos.z < bus.s - B.len + 1 && c.drive) { c.pos.z = bus.s - B.len - 2.5; c.drive.v = Math.min(c.drive.v, bus.v); continue; }
+          if (c.drive && c.drive.axis === 'z') { c.pos.z = bus.s - B.len - 2.5; c.drive.v = Math.min(c.drive.v, bus.v); continue; }
+          c.drive = null; c.parked = false; c.sleeping = false; c.sleepT = 0;
+          const sx = dx >= 0 ? 1 : -1; c.pos.x = B.x + sx * 2.7; c.vel.set(sx * 9, 2.5, bus.v * 0.7);
+          bus.v = Math.max(0, bus.v - 0.15); bus.dmg += 25000; g.ledger.damage += 25000; if (g.currentInc === bus.inc) bus.inc.damage += 25000;
+          g.SFX.crumble(c.pos); g.toast('The bus clipped a car', '');
+        }
+      }
+      // the crosswalk
+      if (bus.s > B.stopZ + 1 && bus.v > 1) {
+        bus.phase = 'crash';
+        let lost = 0;
+        for (const p of bus.crowd) {
+          if (p.mode === 'gone' || p.mode === 'held') continue;
+          const d = Math.abs(p.pos.x - B.x);
+          if (d < 1.9 && p.pos.z > B.stopZ - 1 && lost < 4) { p.mode = 'gone'; lost++; }
+          else if (d < 5) { g.injurePerson(p); p.mode = 'down'; }
+        }
+        if (!lost) lost = 1;
+        bus.lost = lost; g.ledger.lost += lost;
+        busHurt(Math.ceil(6 * bus.v / 25), 'Impact');
+        g.SFX.crumble(T1.set(B.x, 1, bus.s)); g.SFX.punch(T1, 1.2);
+      }
+    } else if (bus.phase === 'crash') {
+      bus.vPrev = bus.v; bus.v = Math.max(0, bus.v - 7 * dt); bus.sPrev = bus.s; bus.s += bus.v * dt;
+      if (bus.v === 0) bus.phase = 'wreck';
+    } else {
+      bus.vPrev = bus.v = 0; if (bus.phase === 'stopped') bus.stopT += dt;
+    }
+    // passenger deceleration in g (smoothed over the catch window), the standing-passenger rule
+    const win = (window.SM_CATCH && window.SM_CATCH.cfg && window.SM_CATCH.cfg.window) || 0.1;
+    const sustain = (window.SM_CATCH && window.SM_CATCH.cfg && window.SM_CATCH.cfg.sustain) || 0.25;
+    const gi = dt > 0 ? Math.max(0, (bus.vPrev - bus.v) / dt / G0) : 0;
+    bus.gS += (gi - bus.gS) * Math.min(1, dt / win);
+    if (bus.phase === 'run' || bus.phase === 'stopped') {
+      bus.maxG = Math.max(bus.maxG, bus.gS);
+      const lim = standingG();
+      if (bus.gS > lim + 1e-3) { bus.aboveT += dt; while (bus.aboveT >= sustain) { bus.aboveT -= sustain; busHurt(Math.ceil((bus.gS - lim) * 6), 'Braked too hard'); } }
+      else bus.aboveT = 0;
+    }
+    // Superman braced on the front bumper
+    if (bus.attached) {
+      P.flying = true; P.pos.set(B.x, 1.7, bus.s + 0.75); P.vel.set(0, 0, bus.v);
+    }
+    // invariants for the bot
+    if (g.blockAt(B.x, 1.5, bus.s - 1) >= 0 || g.blockAt(B.x, 1.5, bus.s - B.len + 1) >= 0) bus.insideBlock = true;
+    if (!isFinite(bus.s) || !isFinite(bus.v)) { bus.nan = true; bus.s = B.z0; bus.v = 0; }
+    // punches
+    if (P.punchT > bus.lastPunch + 0.05 && bus.phase === 'run' && nearBus(P.pos, 2.5)) {
+      busHurt(Math.ceil(B.punchInj * (0.5 + bus.v / 25)), 'You punched the bus');
+      bus.v *= 0.8; bus.dmg += 90000; g.ledger.damage += 90000; if (g.currentInc === bus.inc) bus.inc.damage += 90000;
+    }
+    bus.lastPunch = P.punchT;
+  }
+  function nearBus(p, m) { const B = CFG.bus; return Math.abs(p.x - B.x) < B.w / 2 + m && p.z > bus.s - B.len - m && p.z < bus.s + m && p.y < B.h + m; }
+  function attachBus(g) {
+    if (!bus || bus.phase !== 'run' || bus.attached) return false;
+    bus.attached = true; bus.push = 0; g.setYawPitch(0, -0.05); g.SFX.punch(g.P.pos, 0.4);
+    g.toast('Braced on the bus. Hold E for a smooth stop (W pushes harder, S eases off; tap E to let go)', 'good');
+    return true;
+  }
+  function busKey(g) {
+    if (!bus || bus.ended || bus.phase !== 'run') return false;
+    const P = g.P, B = CFG.bus;
+    if (bus.attached) return 'held';
+    const dz = P.pos.z - bus.s;
+    if (Math.abs(P.pos.x - B.x) < 2.3 && dz > -1.2 && dz < 6 && P.pos.y < 4.8) { if (P.hold) { g.toast('Hands full. Set it down first.', ''); return true; } attachBus(g); ignoreUp = true; return true; }
+    if (nearBus(P.pos, 2.2)) {
+      // grabbed from the side: a lurch that throws the standing passengers
+      busHurt(Math.ceil(B.sideInj * bus.v / 25) + 1, 'Grabbed from the side');
+      bus.v *= 0.55; bus.dmg += 120000; g.ledger.damage += 120000; if (g.currentInc === bus.inc) bus.inc.damage += 120000;
+      g.SFX.crumble(P.pos); g.toast('Not from the side! Get in front of it.', 'alert');
+      return true;
+    }
+    return false;
+  }
+  function drawBus(g, dt) {
+    const B = CFG.bus;
+    busMesh.position.set(B.x, 0, bus.s - 6);
+    busMesh.rotation.set(Math.min(0.05, bus.gS * 0.012), 0, 0);
+    busMesh.updateMatrixWorld();
+    // standing passengers lean with the deceleration
+    const lean = Math.min(0.55, bus.gS * 0.2);
+    for (let i = 0; i < PAX.length; i++) {
+      const q = PAX[i];
+      TE.set(q.f ? 1.45 : lean, 0, 0); TQ.setFromEuler(TE);
+      T1.set(q.x, q.f ? 0.9 : 0.68, q.z); T2.set(1, 1, 1);
+      TM.compose(T1, TQ, T2); TM2.multiplyMatrices(busMesh.matrixWorld, TM);
+      pplMesh.setMatrixAt(pplN++, TM2);
+    }
+  }
+
+  // ================================================================== the airliner
+  let plane = null, planeMesh = null, wingL = null;
+  const HP = {};            // hardpoints, local
+  function makePlaneMesh() {
+    const white = col(0xe8e6e0), grey = col(0x8a9099), stripe = col(0x6c7480), win = col(0x2a3038), wingC = col(0xd2d2d0), eng = col(0xb8bcc2), dark = col(0x25272b);
+    function wing(sign, span, root, chord, sweep, y, z, th) {
+      const g = new THREE.BoxGeometry(span, th, chord, 4, 1, 1); g.translate(span / 2, 0, 0);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) { const t = p.getX(i) / span; p.setZ(i, p.getZ(i) * (1 - 0.6 * t) + t * sweep); p.setX(i, sign * (p.getX(i) + root)); }
+      if (sign < 0) { const idx = g.index.array; for (let i = 0; i < idx.length; i += 3) { const a = idx[i]; idx[i] = idx[i + 2]; idx[i + 2] = a; } }
+      g.computeVertexNormals(); g.translate(0, y, z); return g;
+    }
+    const fin = new THREE.BoxGeometry(0.35, 6.5, 4.5, 1, 2, 1); { const p = fin.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, p.getZ(i) * (1 - 0.35 * (p.getY(i) + 3.25) / 6.5) + (p.getY(i) + 3.25) * 0.55); fin.computeVertexNormals(); fin.translate(0, 4.6, 15.5); }
+    const main = [
+      [zcyl(2, 2, 30, 14, 0, 0, 0), white], [zcyl(0.35, 2, 5, 14, 0, 0, -17.5), white], [zcyl(2, 0.55, 7, 14, 0, 0.4, 18.5), white],
+      [box(0.06, 0.45, 30, -2.0, -0.2, 0), stripe], [box(0.06, 0.45, 30, 2.0, -0.2, 0), stripe],
+      [box(0.05, 0.26, 26, -1.97, 0.75, -1), win], [box(0.05, 0.26, 26, 1.97, 0.75, -1), win],
+      [wing(1, 15, 1.5, 6, 5, -1.0, 0.5, 0.45), wingC], [zcyl(1.0, 1.15, 4.2, 12, 6.5, -2.2, -1.5), eng], [zcyl(0.8, 0.8, 0.1, 12, 6.5, -2.2, -3.65), dark],
+      [box(0.4, 0.9, 1.6, 6.5, -1.2, -1.3), wingC], [fin, grey],
+      [wing(1, 5.5, 0.4, 3, 2.2, 0.6, 17, 0.25), wingC], [wing(-1, 5.5, 0.4, 3, 2.2, 0.6, 17, 0.25), wingC]
+    ];
+    const left = [[wing(-1, 15, 1.5, 6, 5, -1.0, 0.5, 0.45), wingC], [zcyl(1.0, 1.15, 4.2, 12, -6.5, -2.2, -1.5), eng], [zcyl(0.8, 0.8, 0.1, 12, -6.5, -2.2, -3.65), dark], [box(0.4, 0.9, 1.6, -6.5, -1.2, -1.3), wingC]];
+    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.3 });
+    const m = new THREE.Mesh(merge(main), mat), l = new THREE.Mesh(merge(left), mat);
+    m.castShadow = l.castShadow = true;
+    const grp = new THREE.Group(); grp.add(m, l); grp.visible = false; scene.add(grp);
+    wingL = l;
+    HP.nose = new V3(0, -2.3, -17); HP.left = new V3(-16.2, -1.2, 4.6); HP.right = new V3(16.2, -1.2, 4.6); HP.tail = new V3(0, -1.6, 17);
+    HP.engine = new V3(-6.5, -2.2, -1.5); HP.engineR = new V3(6.5, -2.2, -1.5); HP.wingRoot = new V3(-3.5, -1.0, 0.5);
+    return grp;
+  }
+  function planeStart() {
+    const g = G(), C = CFG.plane; if (!THREE || !g) return null;
+    if (!ready) firstRun(g);
+    if (!planeMesh) planeMesh = makePlaneMesh();
+    if (wingL.parent !== planeMesh) { wingL.parent.remove(wingL); wingL.position.set(0, 0, 0); wingL.quaternion.identity(); planeMesh.add(wingL); }
+    wingL.visible = true; planeMesh.visible = true;
+    plane = { pos: new V3(C.start[0], C.start[1], C.start[2]), vel: new V3(), th: 0, ph: 0, ps: C.heading, q: 0, p: 0,
+      quat: new THREE.Quaternion(), f: new V3(), up: new V3(), right: new V3(), alpha: 0,
+      fire: 1, breath: 0, wing: true, phase: 'fly', attached: null, pu: 0, ps2: 0, age: 0, fall: null,
+      outcome: null, vsTouch: 0, rollTouch: 0, removeT: -1, standers: 0, maxVs: 0, nan: false, smokeT: 0, sinkT: 0 };
+    plane.vel.set(-Math.sin(C.heading), -0.05, -Math.cos(C.heading)).normalize().multiplyScalar(C.v0);
+    planeAxes();
+    const inc = {
+      type: 'airliner', label: 'Falling airliner', limit: C.limit, where: 'the bay',
+      title: 'Airliner in trouble over the bay! Engine fire. Freeze it (Q), then grab a push point (E) and set it down on the water.',
+      marker() { return plane ? plane.pos.clone() : new V3(); },
+      update() {
+        if (!plane || plane.inc !== this || plane.ended) return;
+        if (plane.outcome) finishPlane();
+      },
+      timeout() { if (plane && !plane.ended) { plane.outcome = { kind: 'timeout' }; finishPlane(); } },
+      cleanup() { if (plane) { plane.attached = null; plane.ended = true; if (plane.phase === 'fly') { plane.phase = 'gone'; planeMesh.visible = false; } if (plane.removeT < 0) plane.removeT = 40; } }
+    };
+    plane.inc = inc;
+    return inc;
+  }
+  const planeEuler = () => TE.set(plane.th, plane.ps, -plane.ph, 'YXZ');
+  function planeAxes() { plane.quat.setFromEuler(planeEuler()); plane.f.set(0, 0, -1).applyQuaternion(plane.quat); plane.up.set(0, 1, 0).applyQuaternion(plane.quat); plane.right.set(1, 0, 0).applyQuaternion(plane.quat); }
+  function hpWorld(name, o) { return o.copy(HP[name]).applyQuaternion(plane.quat).add(plane.pos); }
+
+  function planeStep(g, dt) {
+    const C = CFG.plane, pl = plane;
+    planeAxes();
+    const V = pl.vel.length() || 1, vh = T1.copy(pl.vel).divideScalar(V);
+    const alpha = Math.atan2(-pl.vel.dot(pl.up), pl.vel.dot(pl.f)), ad = alpha / D2R; pl.alpha = alpha;
+    let CL = ad <= 13.3 ? C.cl * ad : Math.max(0.5, C.clMax - (ad - 13.3) * 0.08); CL = Math.max(-0.8, Math.min(C.clMax, CL));
+    const qd = 0.5 * C.rho * V * V, S = C.S * (pl.wing ? 1 : 0.6);
+    const acc = T2.set(0, -G0, 0);
+    const ld = T3.copy(pl.up).addScaledVector(vh, -pl.up.dot(vh)); if (ld.lengthSq() > 1e-6) ld.normalize();
+    acc.addScaledVector(ld, qd * S * CL / C.mass);
+    acc.addScaledVector(vh, -qd * S * (C.cd0 + C.k * CL * CL) / C.mass);
+    const beta = Math.atan2(pl.vel.dot(pl.right), pl.vel.dot(pl.f));
+    acc.addScaledVector(pl.right, -qd * C.S * 0.25 * beta / C.mass);
+    let Mth = 0, Mph = 0, Mps = 0;
+    if (pl.attached) {
+      // push at the hardpoint: torque r x F in body axes, a fraction of F as net force
+      const r = T3.copy(HP[pl.attached === 'left' && !pl.wing ? 'wingRoot' : pl.attached]).applyQuaternion(pl.quat);
+      const F = T4.copy(pl.up).multiplyScalar(pl.pu * C.push).addScaledVector(pl.right, pl.ps2 * C.push);
+      const tx = r.y * F.z - r.z * F.y, ty = r.z * F.x - r.x * F.z, tz = r.x * F.y - r.y * F.x;
+      Mth = tx * pl.right.x + ty * pl.right.y + tz * pl.right.z;
+      Mph = tx * pl.f.x + ty * pl.f.y + tz * pl.f.z;
+      Mps = tx * pl.up.x + ty * pl.up.y + tz * pl.up.z;
+      acc.addScaledVector(F, C.pushLin / C.mass);
+    }
+    pl.vel.addScaledVector(acc, dt); pl.pos.addScaledVector(pl.vel, dt);
+    const qs = Math.min(2.5, (V / 80) * (V / 80));
+    pl.q += (-C.ka * qs * (alpha - C.alphaTrim * D2R) - C.cq * pl.q + Mth / C.Ith) * dt;
+    const drift = C.drift * (pl.fire > 0 ? 1 : 0.05) * (pl.wing ? 1 : 2.5);
+    pl.p += (-drift - C.kr * pl.ph * (pl.wing ? 1 : 0.2) - C.cp * pl.p + Mph / C.Iph) * dt;
+    pl.th = Math.max(-1.2, Math.min(1.2, pl.th + pl.q * dt)); pl.ph += pl.p * dt;
+    pl.ps += (-C.kbeta * beta + Mps / C.Ips) * dt;
+    if (!isFinite(pl.pos.x + pl.pos.y + pl.pos.z + pl.vel.x + pl.vel.y + pl.vel.z + pl.th + pl.ph)) { pl.nan = true; pl.outcome = { kind: 'breakup', why: 'nan' }; return; }
+    planeAxes();
+  }
+  function planeContacts(g) {
+    const C = CFG.plane, pl = plane, WY = g.WATER_Y !== undefined ? g.WATER_Y : -0.6;
+    let low = pl.pos.y - 2.0 * Math.abs(Math.cos(pl.ph)), hitB = false, overLand = false;
+    for (const k of ['nose', 'left', 'right', 'tail']) {
+      if (k === 'left' && !pl.wing) continue;
+      hpWorld(k, T3); if (T3.y < low) low = T3.y;
+      if (T3.y < 200 && g.blockAt(T3.x, T3.y, T3.z) >= 0) hitB = true;
+    }
+    if (pl.pos.y < 200 && g.blockAt(pl.pos.x, pl.pos.y, pl.pos.z) >= 0) hitB = true;
+    const inBay = pl.pos.z > 240 && pl.pos.z < 1800;
+    if (!inBay && low <= 0.3) overLand = true;
+    if (hitB || overLand) { pl.outcome = { kind: 'breakup', why: hitB ? 'building' : 'land' }; return; }
+    if (inBay && low <= WY) {
+      const vs = Math.max(0, -pl.vel.y), roll = Math.abs(((pl.ph / D2R + 540) % 360) - 180);
+      pl.vsTouch = vs; pl.rollTouch = roll;
+      if (vs < C.vsOK && roll < C.rollOK) pl.outcome = { kind: 'ditch', hurt: 0 };
+      else if (vs <= C.vsHard && roll < C.rollHard) pl.outcome = { kind: 'hard', hurt: Math.round(Math.max(0, vs - C.vsOK) * 10 + Math.max(0, roll - C.rollOK) * 2) };
+      else pl.outcome = { kind: 'breakup', why: 'water' };
+    }
+  }
+  function finishPlane() {
+    const g = G(), C = CFG.plane, pl = plane; if (!pl || pl.ended) return;
+    pl.ended = true; const o = pl.outcome; const P = g.P;
+    if (pl.attached) { pl.attached = null; P.pos.y = Math.max(P.pos.y, pl.pos.y + 6); P.vel.set(0, 4, 0); }
+    const WY = -0.6;
+    const res = { type: 'airliner', kind: o.kind, why: o.why || '', vs: +pl.vsTouch.toFixed(2), roll: +pl.rollTouch.toFixed(1), fireOut: pl.fire <= 0, wing: pl.wing, saved: 0, hurt: 0, lost: 0, success: false, nan: pl.nan, age: +pl.age.toFixed(1), pos: [Math.round(pl.pos.x), Math.round(pl.pos.z)] };
+    if (o.kind === 'ditch' || o.kind === 'hard') {
+      const hurt = Math.min(C.pax, (o.hurt || 0) + (pl.wing ? 0 : C.wingHurt));
+      res.hurt = hurt; res.saved = C.pax - hurt; res.success = true;
+      pl.phase = 'float'; pl.pos.y = Math.max(pl.pos.y, WY + 1.0);
+      splash(g, pl.pos, 160); if (g.addShake) g.addShake(0.6);
+      const inc = pl.inc; inc.injuries += hurt; if (hurt) g.hopeHit(Math.min(10, hurt * 0.25));
+      g.addSave(res.saved, pl.pos.clone(), 'Airliner passengers safe');
+      API.last = res; API.results.push(res);
+      g.endIncident(true, o.kind === 'ditch' ? `Set down on the bay at ${pl.vsTouch.toFixed(1)} m/s. All ${res.saved} aboard safe${hurt ? `, ${hurt} hurt` : ''}` : `Hard ditching at ${pl.vsTouch.toFixed(1)} m/s · ${hurt} hurt, ${res.saved} safe`);
+    } else {
+      res.lost = o.kind === 'timeout' ? 0 : C.pax; pl.inc.lost = res.lost; g.ledger.lost += res.lost;
+      if (o.kind === 'breakup') {
+        pl.phase = 'sink';
+        if (o.why === 'water') splash(g, pl.pos, 220); else { try { g.explode(pl.pos.clone(), 6e7, {}); } catch (e) { /* ignore */ } planeMesh.visible = false; pl.phase = 'gone'; }
+      } else { pl.phase = 'gone'; planeMesh.visible = false; }
+      API.last = res; API.results.push(res);
+      g.endIncident(false, o.kind === 'timeout' ? 'The airliner went down out of reach.' : o.why === 'water' ? `The airliner broke up hitting the water at ${pl.vsTouch.toFixed(0)} m/s.` : 'The airliner crashed into the city.');
+    }
+    pl.removeT = 45;
+  }
+  function splash(g, p, n) {
+    for (let k = 0; k < n; k++) g.FX.water(p.x + (Math.random() - 0.5) * 30, -0.4, p.z + (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 22, 6 + Math.random() * 26, (Math.random() - 0.5) * 22);
+    g.SFX.splash(p); g.SFX.boom(p, 0.8);
+  }
+  function simPlane(g, dt) {
+    const C = CFG.plane, pl = plane, P = g.P;
+    if (pl.phase === 'fly') {
+      pl.age += dt;
+      // pushing input (keys, or the analog test/gamepad override)
+      if (pl.attached) {
+        const k = g.keys;
+        let u = ((k.has('KeyW') || k.has('Space')) ? 1 : 0) - ((k.has('KeyS') || k.has('KeyC')) ? 1 : 0), s = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
+        if (API_PUSH.on) { u = API_PUSH.u; s = API_PUSH.s; }
+        const a = Math.min(1, dt * 4); pl.pu += (u - pl.pu) * a; pl.ps2 += (s - pl.ps2) * a;
+      } else { pl.pu = pl.ps2 = 0; }
+      planeStep(g, dt);
+      if (!pl.outcome) planeContacts(g);
+      // engine fire: freeze breath on it, or the wing fails
+      if (pl.fire > 0 && pl.wing) {
+        hpWorld('engine', T3);
+        if (P.freeze) {
+          const ad = g.aimDir(T4), mx = P.pos.x, my = P.pos.y + 0.66, mz = P.pos.z;
+          const dx = T3.x - mx, dy = T3.y - my, dz = T3.z - mz, d = Math.hypot(dx, dy, dz);
+          const range = 45 * (g.PWR ? g.PWR.freeze[(g.POWER || 3) - 1] : 1);
+          if (d < range && (dx * ad.x + dy * ad.y + dz * ad.z) / (d || 1) > Math.cos(0.32)) {
+            pl.breath += dt; pl.fire = Math.max(0, 1 - pl.breath / C.fireBreath);
+            if (Math.random() < 0.5) g.FX.steam(T3.x, T3.y, T3.z);
+            if (pl.fire <= 0) { g.toast('Engine fire out!', 'ice'); g.SFX.freezeHit(); API.fireOutAt = pl.age; API.fireBreath = pl.breath; }
+          }
+        }
+        const grow = 1 + Math.min(2, pl.age / 12);
+        if (pl.fire > 0) {
+          for (let i = 0; i < 2; i++) g.FX.fire(T3.x, T3.y + 0.5, T3.z, 0.8 * grow * pl.fire + 0.3);
+          if (pl.age > 12) { hpWorld('wingRoot', T4); g.FX.fire(T4.x, T4.y + 0.4, T4.z, 0.6 * pl.fire); }
+        }
+        if (pl.age >= C.wingFailT && pl.fire > 0) breakWing(g);
+      }
+      pl.smokeT -= dt;
+      if (pl.smokeT <= 0) { pl.smokeT = 0.04; hpWorld(pl.wing ? 'engine' : 'wingRoot', T3); g.FX.smoke(T3.x, T3.y, T3.z, pl.fire > 0 ? 1.4 : 0.8, pl.fire > 0 ? 0.04 : 0.12); }
+      if (pl.attached) {
+        hpWorld(pl.attached === 'left' && !pl.wing ? 'wingRoot' : pl.attached, T3); T3.addScaledVector(pl.up, -1.25);
+        P.flying = true; P.pos.copy(T3); P.vel.copy(pl.vel);
+      }
+      pl.maxVs = Math.max(pl.maxVs, -pl.vel.y);
+    } else if (pl.phase === 'float') {
+      // floating: settle level, skid to a stop throwing spray, then people climb onto the wings
+      const hs = Math.hypot(pl.vel.x, pl.vel.z), k = Math.exp(-0.9 * dt);
+      pl.vel.x *= k; pl.vel.z *= k; pl.vel.y = 0;
+      pl.pos.x += pl.vel.x * dt; pl.pos.z += pl.vel.z * dt;
+      pl.pos.y += (-0.6 + 1.1 + Math.sin(clock * 0.9) * 0.15 - pl.pos.y) * Math.min(1, dt * 2);
+      pl.th *= Math.exp(-1.5 * dt); pl.ph *= Math.exp(-1.2 * dt); planeAxes();
+      if (hs > 4 && Math.random() < 0.9) for (let i = 0; i < 3; i++) g.FX.water(pl.pos.x + (Math.random() - 0.5) * 30, -0.4, pl.pos.z + (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, 3 + Math.random() * 8 * Math.min(1, hs / 40), (Math.random() - 0.5) * 8);
+      if (hs < 3) pl.standers = Math.min(40, pl.standers + dt * 10);
+      if (pl.fire > 0) { hpWorld('engine', T3); g.FX.smoke(T3.x, T3.y, T3.z, 1, 0.1); }
+    } else if (pl.phase === 'sink') {
+      pl.sinkT += dt; pl.pos.y -= dt * 0.8; pl.vel.multiplyScalar(Math.exp(-2 * dt)); pl.pos.addScaledVector(pl.vel, dt);
+      if (Math.random() < 0.5) g.FX.smoke(pl.pos.x, Math.max(0, pl.pos.y + 2), pl.pos.z, 2, 0.05);
+      if (pl.sinkT > 15) { pl.phase = 'gone'; planeMesh.visible = false; }
+      planeAxes();
+    }
+    // the detached wing tumbles into the bay
+    if (pl.fall) {
+      const w = pl.fall; w.vel.y -= G0 * dt; w.vel.multiplyScalar(Math.exp(-0.3 * dt)); w.pos.addScaledVector(w.vel, dt);
+      TQ.setFromAxisAngle(w.axis, w.spin * dt); w.quat.premultiply(TQ);
+      wingL.position.copy(w.pos); wingL.quaternion.copy(w.quat);
+      if (!w.splashed && w.pos.y < -0.5) { w.splashed = true; splash(g, w.pos, 50); }
+      if (w.pos.y < -12) { wingL.visible = false; pl.fall = null; }
+      if (Math.random() < 0.6) g.FX.smoke(w.pos.x, w.pos.y, w.pos.z, 1.2, 0.04);
+    }
+  }
+  function breakWing(g) {
+    const pl = plane; if (!pl.wing) return;
+    pl.wing = false; pl.fire = 0;
+    if (pl.attached === 'left') g.toast('The wing tore away under you!', 'alert');
+    planeMesh.updateMatrixWorld();
+    wingL.matrixWorld.decompose(T1, TQ, T2);
+    planeMesh.remove(wingL); scene.add(wingL); wingL.position.copy(T1); wingL.quaternion.copy(TQ);
+    pl.fall = { pos: T1.clone(), vel: pl.vel.clone().add(T2.set(0, 3, 0)).addScaledVector(pl.right, -6), quat: TQ.clone(), axis: pl.f.clone(), spin: 1.5, splashed: false };
+    g.toast('The burning wing failed! It\'s rolling. 40 hurt aboard.', 'alert'); if (g.addShake) g.addShake(0.5); g.SFX.crumble(pl.pos); g.SFX.boom(pl.pos, 0.6);
+    for (let k = 0; k < 40; k++) g.FX.spark(T1.x, T1.y, T1.z, (Math.random() - 0.5) * 20, Math.random() * 10, (Math.random() - 0.5) * 20);
+  }
+  function planeKey(g) {
+    if (!plane || plane.phase !== 'fly' || plane.ended) return false;
+    const P = g.P;
+    if (plane.attached) return 'held';
+    let best = null, bd = CFG.plane.attachR;
+    for (const k of ['nose', 'left', 'right', 'tail']) {
+      hpWorld(k === 'left' && !plane.wing ? 'wingRoot' : k, T3); const d = T3.distanceTo(P.pos);
+      if (d < bd) { bd = d; best = k; }
+    }
+    if (!best) return false;
+    if (P.hold) { g.toast('Hands full. Set it down first.', ''); return true; }
+    attachPlane(g, best); ignoreUp = true; return true;
+  }
+  const HP_NAME = { nose: 'the nose', left: 'the left wingtip', right: 'the right wingtip', tail: 'the tail' };
+  function attachPlane(g, k) {
+    plane.attached = k; plane.pu = plane.ps2 = 0;
+    g.setYawPitch(plane.ps, -0.1); g.SFX.punch(g.P.pos, 0.5);
+    g.toast(`Holding ${HP_NAME[k]}. W/Space push up, S/C down, A/D sideways. Tap E to let go.`, 'good');
+  }
+  function drawPlane(g) {
+    planeMesh.position.copy(plane.pos); planeMesh.quaternion.copy(plane.quat);
+    if (plane.phase === 'float' && plane.standers > 0) {
+      planeMesh.updateMatrixWorld();
+      const n = Math.floor(plane.standers);
+      for (let i = 0; i < n && pplN < PCAP; i++) {
+        const side = (i % 2) ? 1 : -1; if (side < 0 && !plane.wing) { T1.set((i % 5) * 0.5 - 1, 2.0, -10 + (i % 20)); } else {
+          const t = ((i >> 1) % 10) / 10; T1.set(side * (3 + t * 10), -0.55, 0.5 + t * 5 + ((i >> 1) % 3 - 1) * 0.8);
+        }
+        TQ.identity(); T2.set(1, 1, 1); TM.compose(T1, TQ, T2); TM2.multiplyMatrices(planeMesh.matrixWorld, TM);
+        pplMesh.setMatrixAt(pplN++, TM2);
+      }
+    }
+  }
+
+  // ================================================================== HUD: card, meter, hardpoint tags
+  const UI = {};
+  function buildDOM() {
+    const css = document.createElement('style');
+    css.textContent = `
+#sp-card { position: absolute; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 86px); transform: translateX(-50%); width: min(460px, calc(100% - 40px)); box-sizing: border-box;
+  padding: 8px 14px 10px; background: rgba(8, 12, 28, 0.82); border: 1px solid var(--edge, rgba(150,180,255,.2)); border-left: 4px solid var(--sun, #ffc531); border-radius: 6px; pointer-events: none; z-index: 6; }
+#sp-card .who { font-size: 12px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--sun, #ffc531); }
+#sp-card p { margin: 3px 0 0; font-size: 17px; font-weight: 600; line-height: 1.25; }
+#sp-card .row { display: flex; gap: 14px; margin-top: 6px; font-family: var(--f-num, monospace); font-size: 13px; color: var(--dim, #9aa9cf); }
+#sp-card .row b { color: var(--text, #eef3ff); font-weight: 600; }
+#sp-card .bad b { color: #ff6b6b; }
+.sp-meter { position: relative; height: 12px; margin-top: 7px; border-radius: 3px; overflow: hidden;
+  background: linear-gradient(90deg, rgba(87,227,154,.45) 0 31.25%, rgba(255,197,49,.4) 31.25% 62.5%, rgba(255,107,107,.45) 62.5% 100%); }
+.sp-meter i { position: absolute; top: 0; bottom: 0; left: 0; width: 0; background: rgba(255,255,255,.85); }
+.sp-meter s { position: absolute; top: -2px; bottom: -2px; left: 31.25%; width: 2px; background: #fff; text-decoration: none; }
+.sp-scale { display: flex; justify-content: space-between; font-family: var(--f-num, monospace); font-size: 11px; color: var(--dim, #9aa9cf); }
+.sp-tag { position: absolute; transform: translate(-50%, -50%); font: 700 12px var(--f-ui, sans-serif); color: #fff; background: rgba(8,12,28,.75); border: 1px solid rgba(255,197,49,.7);
+  border-radius: 10px; padding: 1px 7px; pointer-events: none; white-space: nowrap; z-index: 5; text-shadow: 0 1px 2px #000; }
+.sp-tag.near { background: rgba(255,197,49,.9); color: #111; text-shadow: none; }
+.sp-tag.fire { border-color: #ff6a2b; color: #ffcf9a; }`;
+    document.head.appendChild(css);
+    const hud = document.getElementById('hud') || document.body;
+    UI.card = document.createElement('div'); UI.card.id = 'sp-card'; UI.card.hidden = true;
+    UI.card.innerHTML = '<div class="who"></div><p></p><div class="row"></div><div class="sp-meter"><i></i><s></s></div><div class="sp-scale"><span>0 g</span><span>1 g: hurts standing passengers</span><span>3.2 g</span></div>';
+    hud.appendChild(UI.card);
+    UI.who = UI.card.querySelector('.who'); UI.p = UI.card.querySelector('p'); UI.row = UI.card.querySelector('.row');
+    UI.meter = UI.card.querySelector('.sp-meter'); UI.bar = UI.card.querySelector('.sp-meter i'); UI.scale = UI.card.querySelector('.sp-scale');
+    UI.tags = [];
+    for (let i = 0; i < 5; i++) { const d = document.createElement('div'); d.className = 'sp-tag'; d.hidden = true; hud.appendChild(d); UI.tags.push(d); }
+    UI.t = 0; UI.txt = {};
+  }
+  function setText(el, key, s) { if (UI.txt[key] !== s) { UI.txt[key] = s; el.innerHTML = s; } }
+  function tag(i, pos, text, cls, camera) {
+    const d = UI.tags[i]; d.frame = UI.frame; T1.copy(pos).project(camera);
+    if (T1.z > 1 || T1.x < -1.1 || T1.x > 1.1 || T1.y < -1.1 || T1.y > 1.1) { if (!d.hidden) d.hidden = true; return; }
+    d.hidden = false; d.style.left = ((T1.x * 0.5 + 0.5) * innerWidth).toFixed(0) + 'px'; d.style.top = ((-T1.y * 0.5 + 0.5) * innerHeight).toFixed(0) + 'px';
+    if (d.textContent !== text) d.textContent = text; const c = 'sp-tag' + (cls ? ' ' + cls : ''); if (d.className !== c) d.className = c;
+  }
+  function updateUI(g, camera, dt) {
+    if (!UI.card) return;
+    const inc = g.currentInc, P = g.P;
+    UI.frame = (UI.frame || 0) + 1;
+    if (bus && inc && inc === bus.inc && !bus.ended) {
+      UI.card.hidden = false; UI.meter.hidden = UI.scale.hidden = false;
+      const left = Math.max(0, CFG.bus.stopZ - bus.s), need = bus.v * bus.v / (2 * CFG.bus.softG * G0 - 2 * CFG.bus.slope);
+      setText(UI.who, 'w', 'Runaway bus · ' + CFG.bus.aboard + ' aboard');
+      setText(UI.p, 'p', bus.attached ? (g.keys.has('KeyE') || held.KeyE ? 'Soft hands: easing it down…' : 'Hold E for a smooth stop. W pushes harder, S eases off.')
+        : (Math.abs(P.pos.x - CFG.bus.x) < 3 && P.pos.z > bus.s && P.pos.z < bus.s + 8 ? 'E: brace against the front' : 'Get in front of it with room to stop'));
+      UI.t -= dt;
+      if (UI.t <= 0) {
+        UI.t = 0.1;
+        setText(UI.row, 'r', `<span>${(bus.v * 3.6).toFixed(0)} <b>km/h</b></span><span class="${left < need ? 'bad' : ''}"><b>${left.toFixed(0)} m</b> to crosswalk</span><span>stop needs <b>${need.toFixed(0)} m</b></span><span class="${bus.hurt ? 'bad' : ''}"><b>${bus.hurt}</b> hurt</span>`);
+        UI.bar.style.width = Math.min(100, bus.gS / 3.2 * 100).toFixed(1) + '%';
+        UI.bar.style.background = bus.gS > standingG() ? '#ff6b6b' : '#fff';
+      }
+      if (!bus.attached && bus.phase === 'run') { T2.set(CFG.bus.x, 2, bus.s + 0.4); tag(0, T2, 'E · brace here', T2.distanceTo(P.pos) < 6 ? 'near' : '', camera); }
+    } else if (plane && inc && inc === plane.inc && !plane.ended) {
+      UI.card.hidden = false; UI.meter.hidden = UI.scale.hidden = true;
+      setText(UI.who, 'w', 'Falling airliner · ' + CFG.plane.pax + ' aboard');
+      setText(UI.p, 'p', plane.fire > 0 ? `Engine fire! Freeze it (Q) · wing fails in ${Math.max(0, CFG.plane.wingFailT - plane.age).toFixed(0)} s` :
+        plane.attached ? `Holding ${HP_NAME[plane.attached]}: nose up to bleed speed, level the wings, touch the water gently` : 'Grab a push point (E): nose, wingtips or tail');
+      UI.t -= dt;
+      if (UI.t <= 0) {
+        UI.t = 0.1;
+        const vs = -plane.vel.y, roll = plane.ph / D2R;
+        setText(UI.row, 'r', `<span>alt <b>${Math.max(0, plane.pos.y).toFixed(0)} m</b></span><span class="${vs >= CFG.plane.vsOK ? 'bad' : ''}">v/s <b>${vs.toFixed(1)}</b> (&lt;6)</span><span class="${Math.abs(roll) >= CFG.plane.rollOK ? 'bad' : ''}">roll <b>${roll.toFixed(0)}°</b> (&lt;15)</span><span>pitch <b>${(plane.th / D2R).toFixed(0)}°</b></span>${plane.fire > 0 ? `<span class="bad">fire <b>${Math.round(plane.fire * 100)}%</b></span>` : ''}`);
+      }
+      if (!plane.attached && plane.pos.distanceTo(P.pos) < 220) {
+        let i = 0;
+        for (const k of ['nose', 'left', 'right', 'tail']) {
+          if (k === 'left' && !plane.wing) continue;
+          hpWorld(k, T2); tag(i++, T2, 'E · ' + k, T2.distanceTo(P.pos) < CFG.plane.attachR ? 'near' : '', camera);
+        }
+      }
+      if (plane.fire > 0 && plane.pos.distanceTo(P.pos) < 300) { hpWorld('engine', T2); tag(4, T2, 'Q · fire', 'fire', camera); }
+    } else if (!UI.card.hidden) UI.card.hidden = true;
+    for (const d of UI.tags) if (d.frame !== UI.frame && !d.hidden) d.hidden = true;
+  }
+
+  // ================================================================== input
+  function keyAllowed() {
+    const g = G(); if (!g || !g.started || (g.MAP && g.MAP.open)) return false;
+    const pz = document.getElementById('paused'); return !pz || pz.hidden;
+  }
+  function attachedAny() { return (bus && bus.attached) || (plane && plane.attached); }
+  function detach(g) {
+    if (bus && bus.attached) { bus.attached = false; g.toast('You let go of the bus.', ''); }
+    if (plane && plane.attached) { plane.attached = null; g.toast('You let go of the airliner.', ''); }
+  }
+  function handleKey(code, down) {
+    if (code !== 'KeyE') return false;
+    const g = G();
+    if (!down) {
+      held.KeyE = false;
+      if (ignoreUp) { ignoreUp = false; return attachedAny() ? true : false; }
+      if (attachedAny() && clock - eDownAt < 0.25) { detach(g); return true; }
+      return !!attachedAny();
+    }
+    held.KeyE = true; eDownAt = clock;
+    if (!keyAllowed()) return false;
+    if (attachedAny()) return true;   // a hold (soft hands) or the start of a tap-to-release
+    return !!(busKey(g) || planeKey(g));
+  }
+  addEventListener('keydown', e => {
+    if (e.code !== 'KeyE') return;
+    if (e.repeat) { if (attachedAny()) { e.preventDefault(); e.stopImmediatePropagation(); } return; }
+    if (handleKey('KeyE', true)) { e.preventDefault(); e.stopImmediatePropagation(); }
+  }, true);
+  addEventListener('keyup', e => { if (e.code === 'KeyE' && handleKey('KeyE', false)) e.stopImmediatePropagation(); }, true);
+  addEventListener('blur', () => { held.KeyE = false; });
+
+  // ================================================================== plugin
+  function firstRun(g) {
+    ready = true; if (!g) return;
+    if (g.PIN_COL) g.PIN_COL.sp = '#ff9a3c';
+    if (g.BEACON_COL) g.BEACON_COL.sp = new THREE.Color(2.8, 1.1, 0.3);
+    if (g.mapPinHooks) g.mapPinHooks.push(pins => {
+      const inc = g.currentInc;
+      if (bus && inc && inc === bus.inc && !bus.ended) pins.push([CFG.bus.x, CFG.bus.stopZ + 4, 'sp', 'Crosswalk']);
+      if (plane && inc && inc === plane.inc && !plane.ended && plane.fire > 0) { hpWorld('engine', T3); pins.push([T3.x + 30, T3.z, 'sp', 'Engine fire']); }
+    });
+    if (!g.setpieces) g.setpieces = API;
+  }
+  function update(wdt, camera) {
+    const g = G(); if (!g) return;
+    if (!ready) firstRun(g);
+    const dt = Math.min(0.1, wdt); clock += dt;
+    pplN = 0;
+    if (bus) {
+      if (!bus.ended || bus.phase !== 'gone') simBus(g, dt);
+      if (bus.removeT >= 0) { bus.removeT -= dt; if (bus.removeT <= 0) { busMesh.visible = false; bus = null; } }
+      if (bus) drawBus(g, dt);
+    }
+    if (plane) {
+      simPlane(g, dt);
+      if (plane.removeT >= 0) { plane.removeT -= dt; if (plane.removeT <= 0) { planeMesh.visible = false; if (wingL) wingL.visible = false; plane = null; } }
+      if (plane && planeMesh.visible) drawPlane(g);
+    }
+    if (pplMesh) { pplMesh.count = pplN; if (pplN) pplMesh.instanceMatrix.needsUpdate = true; }
+    if (g.started) updateUI(g, camera, dt);
+  }
+
+  // ================================================================== registry + test / demo API
+  window.SM_INCIDENTS = window.SM_INCIDENTS || {};
+  window.SM_INCIDENTS.bus = { start: busStart, want: (n, t) => t >= CFG.rotation.busAfter && n % CFG.rotation.every === 5 };
+  window.SM_INCIDENTS.airliner = { start: planeStart, want: (n, t) => t >= CFG.rotation.planeAfter && n % CFG.rotation.every === 0 };
+
+  const API = {
+    cfg: CFG, results: [], last: null, fireOutAt: null, fireBreath: null,
+    start(type) { const g = G(); g.startIncident(type === 'plane' ? 'airliner' : type); const inc = g.currentInc; return !!(inc && (inc.type === type || (type === 'plane' && inc.type === 'airliner'))); },
+    press(code) { const used = handleKey(code, true); if (!used && code === 'KeyE' && keyAllowed()) G().grabOrRelease(); return used; },
+    release(code) { return handleKey(code, false); },
+    tapRelease() { const g = G(); detach(g); },
+    push(u, s) { if (u === null || u === undefined) { API_PUSH.on = false; return; } API_PUSH.on = true; API_PUSH.u = Math.max(-1, Math.min(1, u)); API_PUSH.s = Math.max(-1, Math.min(1, s || 0)); },
+    attach(k) { const g = G(); if (k === 'bus') return attachBus(g); if (!plane || plane.phase !== 'fly') return false; attachPlane(g, k); return true; },
+    hardpoint(k, o) { if (!plane) return null; return hpWorld(k, o || new V3()); },
+    get bus() { return bus ? { s: bus.s, v: bus.v, g: bus.gS, maxG: bus.maxG, hurt: bus.hurt, attached: bus.attached, push: bus.push, phase: bus.phase, insideBlock: bus.insideBlock, nan: bus.nan } : null; },
+    get plane() { return plane ? { pos: plane.pos.clone(), vel: plane.vel.clone(), vs: -plane.vel.y, roll: plane.ph / D2R, rollRate: plane.p, pitch: plane.th / D2R, pitchRate: plane.q, alpha: plane.alpha / D2R, heading: plane.ps,
+      fire: plane.fire, breath: plane.breath, wing: plane.wing, phase: plane.phase, attached: plane.attached, age: plane.age, standers: Math.floor(plane.standers), nan: plane.nan } : null; },
+    get people() { return pplMesh ? pplMesh.count : 0; }
+  };
+  window.SM_SETPIECES = API;
+
+  window.SM_PLUGINS = window.SM_PLUGINS || [];
+  window.SM_PLUGINS.push(function setpieces(c) {
+    THREE = c.THREE; V3 = THREE.Vector3; scene = c.scene;
+    T1 = new V3(); T2 = new V3(); T3 = new V3(); T4 = new V3();
+    TM = new THREE.Matrix4(); TM2 = new THREE.Matrix4(); TQ = new THREE.Quaternion(); TE = new THREE.Euler();
+    makePeople();
+    buildDOM();
+    return { update };
+  });
+})();
+
+</script>
+<script>/* js/feel.js */
+/* Feel pass: hit-stop with a time-scale ramp, trauma-based rotational screen shake, critically damped
+ * springs for the camera, and the landing-tier rule. See design/dream-features.md §3 "Feel targets".
+ *
+ * window.SM_FEEL is a singleton that game.js drives:
+ *   FEEL.step(rdt)          -> sim time scale for this frame (0 while frozen, ramps back to 1)
+ *   FEEL.hitStop(s, ramp)   -> freeze the sim for s seconds (150 ms ceiling), then ramp 0.25 -> 1 over `ramp` s
+ *   FEEL.add(t)             -> add trauma (0..1); shake = trauma^2, decays 1.6/s
+ *   FEEL.kick(x, y, z, m)   -> directional camera impulse of about m metres on a 120 ms spring
+ *   FEEL.shake(rdt)         -> advance the shake; read FEEL.pitch/yaw/roll (rad) and FEEL.ox/oy/oz (m)
+ *   FEEL.spring(s, goal, halfLife, dt)  -> critically damped scalar spring on {x, v}
+ *   FEEL.landTier(v, braked)            -> 'soft' | 'hero' | 'crater'
+ * Optional settings (a menu comes later): window.SM_SETTINGS.get('shake') scales the shake (0..1, or 0..100 %),
+ * get('hitStop') === false turns hit-stop off, get('reducedMotion') halves it. Nothing here allocates per frame.
+ */
+(function () {
+  'use strict';
+  const LN2 = Math.LN2, DEG = Math.PI / 180;
+  const setting = (k) => { try { const S = window.SM_SETTINGS; return S && typeof S.get === 'function' ? S.get(k) : undefined; } catch (_) { return undefined; } };
+  // smooth 1D value noise in [-1, 1]
+  function hash(n) { n = (n << 13) ^ n; n = (Math.imul(n, (Math.imul(Math.imul(n, n), 15731) + 789221) | 0) + 1376312589) & 0x7fffffff; return 1 - n / 1073741824; }
+  function vnoise(x, seed) { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f), a = hash(i + seed * 7919), b = hash(i + 1 + seed * 7919); return a + (b - a) * u; }
+  // critically damped spring (Holden's half-life form): s = {x, v}
+  function spring(s, goal, half, dt) {
+    const y = 2 * LN2 / Math.max(1e-4, half), j0 = s.x - goal, j1 = s.v + j0 * y, e = Math.exp(-y * dt);
+    s.x = e * (j0 + j1 * dt) + goal; s.v = e * (s.v - j1 * y * dt);
+    return s.x;
+  }
+  const KICK_HALF = 0.12, KY = 2 * LN2 / KICK_HALF;
+  const kx = { x: 0, v: 0 }, ky = { x: 0, v: 0 }, kz = { x: 0, v: 0 };
+  const F = {
+    // tuning (dream-features §3)
+    DECAY: 1.6, MAX_PITCH: 2.5 * DEG, MAX_YAW: 2.5 * DEG, MAX_ROLL: 4 * DEG, MAX_POS: 0.15, CEIL: 0.15,
+    trauma: 0, ph: 0, pitch: 0, yaw: 0, roll: 0, ox: 0, oy: 0, oz: 0,
+    hitStopT: 0, rampT: 0, rampDur: 0, rampFrom: 1, timeScale: 1,
+    lastHitStopMs: 0, frozenMs: 0, peakTrauma: 0,
+    spring, vnoise,
+    intensity() {
+      const v = setting('shake');
+      if (typeof v !== 'number' || !isFinite(v)) return 1;
+      return Math.max(0, v > 1.5 ? v / 100 : v);
+    },
+    add(t) { if (!(t > 0)) return; this.trauma = Math.min(1, this.trauma + t); if (this.trauma > this.peakTrauma) this.peakTrauma = this.trauma; },
+    // remote events fall off linearly with distance
+    addAt(t, dist, range) { this.add(t * Math.max(0, 1 - dist / (range || 150))); },
+    kick(x, y, z, m) {
+      const I = this.intensity(), v0 = m * KY * Math.E * I, l = Math.hypot(x, y, z) || 1;
+      kx.v += x / l * v0; ky.v += y / l * v0; kz.v += z / l * v0;
+    },
+    hitStop(s, ramp) {
+      if (setting('hitStop') === false) { this.lastHitStopMs = 0; return; }
+      if (setting('reducedMotion')) s *= 0.5;
+      s = Math.min(this.CEIL, Math.max(0, s));
+      if (s <= this.hitStopT) return;
+      if (this.hitStopT <= 0) this.frozenMs = 0;
+      this.hitStopT = s; this.lastHitStopMs = Math.round(s * 1000);
+      this.rampDur = Math.max(this.rampT < this.rampDur ? this.rampDur - this.rampT : 0, ramp || 0); this.rampT = 0; this.rampFrom = 0.25;
+    },
+    // returns the sim time scale for a frame of real length rdt
+    step(rdt) {
+      if (!(rdt > 0)) return 1;
+      let live = rdt;
+      if (this.hitStopT > 0) {
+        const fr = Math.min(this.hitStopT, rdt);
+        this.hitStopT -= fr; this.frozenMs += fr * 1000; live = rdt - fr;
+        if (live <= 1e-6) { this.timeScale = 0; return 0; }
+      }
+      let k = 1;
+      if (this.rampT < this.rampDur) {
+        this.rampT += live; const u = Math.min(1, this.rampT / this.rampDur);
+        k = this.rampFrom + (1 - this.rampFrom) * u * u * (3 - 2 * u);
+      }
+      this.timeScale = k * live / rdt;
+      return this.timeScale;
+    },
+    shake(rdt) {
+      this.trauma = Math.max(0, this.trauma - this.DECAY * rdt);
+      const I = this.intensity(), tr = this.trauma, s = tr * tr * I;
+      // fast (~20 Hz) jitter on fresh impacts settling into a ~6 Hz rumble as trauma drains
+      this.ph = (this.ph + rdt * (6 + 16 * Math.min(1, tr * 1.6))) % 65536;
+      const ph = this.ph;
+      this.pitch = this.MAX_PITCH * s * vnoise(ph, 1);
+      this.yaw = this.MAX_YAW * s * vnoise(ph, 2);
+      this.roll = this.MAX_ROLL * s * vnoise(ph * 0.8, 3);
+      const pk = tr > 0.7 ? this.MAX_POS * (tr - 0.7) / 0.3 * I : 0;
+      spring(kx, 0, KICK_HALF, rdt); spring(ky, 0, KICK_HALF, rdt); spring(kz, 0, KICK_HALF, rdt);
+      this.ox = pk * vnoise(ph, 4) + kx.x; this.oy = pk * vnoise(ph, 5) + ky.x; this.oz = pk * vnoise(ph, 6) + kz.x;
+    },
+    // landing tiers by vertical speed at contact: soft < 15 m/s, hero 15-45, crater > 45 unless braked
+    SOFT_MAX: 15, HERO_MAX: 45,
+    landTier(v, braked) { return v < this.SOFT_MAX ? 'soft' : (v <= this.HERO_MAX || braked) ? 'hero' : 'crater'; },
+    reset() { this.trauma = 0; this.hitStopT = 0; this.rampT = this.rampDur = 0; this.timeScale = 1; kx.x = kx.v = ky.x = ky.v = kz.x = kz.v = 0; }
+  };
+  window.SM_FEEL = F;
+})();
+
+</script>
+<script>/* js/comms.js */
+/* "Voices of Metropolis" for Superman Over Metropolis (dream-features #6, demo step 5).
+ *
+ * Radio calls in your ear: Lois Lane (leads, banter, reactions), Jimmy Olsen (begs for the shot,
+ * reacts to stunts), Perry White (front-page verdicts on your conduct) and Metropolis PD dispatch
+ * (incident callouts), plus the cockpit of a stricken airliner when that set piece runs.
+ *
+ *   - Comms card: a DOM portrait card (outside the colour grade) with a procedurally drawn canvas
+ *     portrait, channel, name, word-synced subtitle and a live waveform.
+ *   - Triggers come from a data table (LINES), watched from window.__game: emergency start / half
+ *     time / last person / lost / end + medal, tower collapse, big damage, Hope band swings, first
+ *     use of each power, Mach 1 / 3 / 10 records, Mach 1 near the Daily Planet, help missions
+ *     (window.SM_MISSIONS stats), set pieces (any non-base incident type, or __game.setpieces),
+ *     and idle city flavour.
+ *   - Pacing: one call at a time. Dispatch for an emergency is urgent: it starts at once and may
+ *     cut a lower call short. Incident-tied calls wait 8 s after the last call started; chatter
+ *     waits a rolled 20-40 s. Nothing overlaps.
+ *   - Voice: WebAudio "radio babble" on the game's context (__game.AU): sawtooth + noise through
+ *     three moving formant filters, gated per syllable at 6-8 syllables/s and timed to the
+ *     subtitle, a squelch at each end, a per-speaker timbre and a crackle bed for police. K mutes.
+ *     No audio context (headless) just means silent calls; subtitles never depend on audio.
+ *   - Barks (js/missions.js) stay street-level speech bubbles; comms are only ever radio.
+ *
+ * API: window.SM_COMMS = { say(who, text, opts), queue, history, ... } (also __game.comms).
+ * Performance: one DOM card, two small canvases redrawn only while a call is on screen; no
+ * per-frame allocations (calls allocate their schedule once when they start).
+ */
+(function () {
+  'use strict';
+
+  // ================================================================== tuning
+  const CFG = {
+    gapChatter: [20, 40],  // s from the last call's start before a non-urgent call may start
+    gapEvent: 8,           // s from the last call's start before an incident-tied call may start
+    gapAfter: 0.6,         // s of radio silence after a call hangs up
+    open: 0.45,            // s of squelch / "incoming" before the first syllable
+    hold: 1.5,             // s the card stays after the last word
+    idle: [38, 70],        // s of quiet (no emergency, no call) before city flavour
+    hello: 14,             // s after takeoff for the first friendly call
+    maxQueue: 6,
+    vol: 0.55,             // radio bus loudness
+    damageWin: 6,          // s window for the "big damage" detector
+    damageBig: 1.5e6,      // $ in that window
+    collapseBlocks: 40,    // falling blocks that count as a tower collapse
+    hopeEdge: 2,           // Hope points past a band edge before a band change counts
+    machHold: 0.3          // s above a Mach mark before it counts as a record
+  };
+
+  // ================================================================== speakers
+  // pitch per design doc: Lois 220 Hz, Jimmy 260, Perry 120, Dispatch 140
+  const SPK = {
+    lois: {
+      name: 'Lois Lane', role: 'Daily Planet · City Desk', chan: 'PLANET LINE 2', col: '#ff5d7c', ini: 'L',
+      pitch: 220, form: 1.12, rate: 7.1, voiced: 0.8, breath: 0.22, band: [240, 3900], drive: 0, crackle: 0, inton: 0.16, wave: 'sawtooth'
+    },
+    jimmy: {
+      name: 'Jimmy Olsen', role: 'Daily Planet · Photo Desk', chan: 'PLANET MOBILE', col: '#ffb43a', ini: 'J',
+      pitch: 260, form: 1.2, rate: 7.9, voiced: 0.75, breath: 0.25, band: [320, 3600], drive: 0.25, crackle: 0.15, inton: 0.24, wave: 'sawtooth'
+    },
+    perry: {
+      name: 'Perry White', role: 'Editor-in-Chief', chan: 'PLANET LINE 1', col: '#e8d6a3', ini: 'P',
+      pitch: 120, form: 0.86, rate: 6.0, voiced: 0.7, breath: 0.4, band: [180, 3400], drive: 0.15, crackle: 0, inton: 0.1, wave: 'sawtooth'
+    },
+    dispatch: {
+      name: 'MPD Dispatch', role: 'Metropolis Police · Citywide', chan: 'MPD BAND 3', col: '#5aa9ff', ini: 'D',
+      pitch: 140, form: 0.96, rate: 6.7, voiced: 0.65, breath: 0.3, band: [300, 3000], drive: 0.6, crackle: 1, inton: 0.06, wave: 'square'
+    },
+    pilot: {
+      name: 'Capt. Reyes', role: 'Metro Air 207 · Cockpit', chan: 'GUARD 121.5', col: '#5fe0c8', ini: 'R',
+      pitch: 112, form: 0.9, rate: 6.3, voiced: 0.65, breath: 0.35, band: [350, 2800], drive: 0.5, crackle: 0.7, inton: 0.08, wave: 'square'
+    }
+  };
+  const PRIO_RANK = { dispatch: 4, pilot: 3, lois: 2, perry: 1, jimmy: 0 }; // tie-break: Dispatch > Lois > Perry > Jimmy
+
+  // ================================================================== the line table (data)
+  // Each trigger has 2+ variants. {where} = the incident's cross streets ("5th and Bessolo"),
+  // {street} = a random corner, {dmg} = the damage figure. All dialogue is original.
+  const L = (w, t) => ({ w, t });
+  const LINES = {
+    // ---------------- emergency start: dispatch (urgent)
+    start_fire: [
+      L('dispatch', 'All units, 10-70, structure fire at {where}. Occupants trapped above the fire floor. Engines are four minutes out.'),
+      L('dispatch', 'Dispatch to all cars: working fire, {where}. Multiple callers report people at the windows. Clear the block for FD.'),
+      L('dispatch', 'Code 3, structure fire at {where}. Heavy smoke from the upper floors. Any unit near, set up a perimeter.'),
+      L('dispatch', 'Be advised, fire at {where} upgraded to a second alarm. Persons trapped. Ladder company still six minutes out.')
+    ],
+    start_heli: [
+      L('dispatch', 'All units, aircraft in distress over {where}. News chopper reporting engine failure. Clear the streets below.'),
+      L('dispatch', 'Priority traffic: rotorcraft losing altitude near {where}. The tower has lost its transponder.'),
+      L('dispatch', 'Code 3 to {where}. Helicopter in an uncontrolled descent. Get those sidewalks empty, now.')
+    ],
+    start_meteor: [
+      L('dispatch', 'All units, the observatory reports an object on an impact track for {where}. Evacuate the area. This is not a drill.'),
+      L('dispatch', 'Dispatch to all cars: incoming debris from above, projected impact at {where}. Clear civilians, then clear yourselves.'),
+      L('dispatch', 'Priority traffic: something bright coming down over {where}. The plot gives us under half a minute.')
+    ],
+    start_kryp: [
+      L('dispatch', 'All units, the object falling near {where} reads green on the hazmat scope. Keep everyone back. And I mean everyone.'),
+      L('dispatch', 'Be advised: radiation spike on that inbound rock over {where}. The lab says nobody gets close to it.')
+    ],
+    start_robbery: [
+      L('dispatch', 'All units, 10-31 in progress at {where}. Shots fired. Multiple armed suspects. Hold the perimeter for backup.'),
+      L('dispatch', 'Dispatch to all cars, armed robbery at {where}. The alarm company confirms gunfire inside. Approach with caution.'),
+      L('dispatch', 'Code 3 to {where}. Robbery in progress, possible hostages. Units on scene are pinned behind their cars.'),
+      L('dispatch', 'Any unit near {where}: shots fired, officer requesting assistance. Repeat, shots fired.')
+    ],
+    start_bus: [
+      L('dispatch', 'All units, runaway transit bus through {where}. Driver unresponsive, passengers aboard. Clear the intersections.'),
+      L('dispatch', 'Dispatch to all cars: Metro Transit reports a bus with no brakes near {where}. Block cross traffic if you can.'),
+      L('dispatch', 'Code 3, city bus out of control at {where}. The brakes are gone and it is picking up speed.')
+    ],
+    start_airliner: [
+      L('dispatch', 'All units, the tower reports an airliner in trouble on approach over {where}. Fire and rescue to the bay shore.'),
+      L('dispatch', 'Priority one: a passenger jet is losing hydraulics over the city near {where}. Every unit is on this one.'),
+      L('dispatch', 'Code 3 citywide. Commercial plane coming down over {where}. Clear the waterfront.')
+    ],
+    start_other: [
+      L('dispatch', 'All units, major incident reported at {where}. Respond Code 3. Details to follow.'),
+      L('dispatch', 'Dispatch to all cars: emergency in progress at {where}. Callers are reporting something big.')
+    ],
+    // ---------------- set piece voices (after the callout)
+    pilot_airliner: [
+      L('pilot', 'Mayday, mayday, Metro Air two-zero-seven. Both hydraulic systems are gone. If anybody out there can hear this, we could use a miracle.'),
+      L('pilot', 'Two-zero-seven. The controls are mush and I have a hundred and forty souls aboard. Whoever you are, I will hold her as level as I can.'),
+      L('pilot', 'Metropolis approach, two-zero-seven. Something red and blue just pulled alongside my left wing. Tell me that is who I think it is.')
+    ],
+    driver_bus: [
+      L('dispatch', 'Transit control patched through: the driver is slumped over the wheel. Passengers are trying to reach the brake.'),
+      L('dispatch', 'Update on the runaway bus: next stop is a red light at a full intersection. Units, clear that crossing.')
+    ],
+    // ---------------- Lois's lead, a few seconds after the callout
+    tip_fire: [
+      L('lois', 'Lois here. My source at the fire marshal says the stairwell is gone. Those people can only come down the outside.'),
+      L('lois', 'It is Lois. That building failed its last inspection and the sprinklers are dry. Freeze it from the top.'),
+      L('lois', 'I am two blocks from {where}. You can see people at the windows from here. Go.')
+    ],
+    tip_heli: [
+      L('lois', 'That is the Channel Six chopper! I know the pilot. Please, catch it gently.'),
+      L('lois', 'Lois. There is a news crew in that helicopter. If it hits {where} it takes the whole crosswalk with it.'),
+      L('lois', 'I am watching it spin from the newsroom window and I cannot breathe. Hurry.')
+    ],
+    tip_meteor: [
+      L('lois', 'Lois. The observatory says it is the size of a car. Break it up high; the gravel is safer than the whole thing.'),
+      L('lois', 'It is headed for {where}. There is a school two streets over. Just so you know.')
+    ],
+    tip_kryp: [
+      L('lois', 'Do not go near that rock. Use your eyes from a distance. I mean it.'),
+      L('lois', 'Lois. That meteor is glowing green. You know what that means. Stay back and burn it from range.')
+    ],
+    tip_robbery: [
+      L('lois', 'Lois here. That looks like the crew from the armored car job last month. They do not give up easily.'),
+      L('lois', 'My scanner says three shooters, maybe four. Try not to leave the police anything to sweep up.'),
+      L('lois', 'Careful. There are customers inside at {where}. Get between the bullets and the people.')
+    ],
+    tip_bus: [
+      L('lois', 'Transit says there are twenty riders on that bus. Stop it. Just do not stop it all at once.'),
+      L('lois', 'Lois. That bus is heading for the waterfront. If it goes in, it sinks fast.')
+    ],
+    tip_airliner: [
+      L('lois', 'I checked the manifest. There is a youth choir on that flight. No pressure.'),
+      L('lois', 'Lois. The airport says the landing gear is jammed too. You are the landing gear now.')
+    ],
+    tip_other: [
+      L('lois', 'Lois. Something is happening at {where}. I am on my way, but you will beat me there.'),
+      L('lois', 'Every scanner in the newsroom just lit up for {where}. Go.')
+    ],
+    // ---------------- incident progress
+    half: [
+      L('dispatch', 'Units on scene, give me a status. The clock is running at {where}.'),
+      L('dispatch', 'Dispatch to all units: still no all-clear at {where}. Hold your positions.'),
+      L('lois', 'Whatever you are doing, do it faster. It is getting worse at {where}.'),
+      L('lois', 'I am watching the live feed. Half the time is gone. You have got this.')
+    ],
+    lastOne: [
+      L('dispatch', 'Spotter reports one civilian still inside at {where}. One.'),
+      L('lois', 'One left. Just one. Bring them home.')
+    ],
+    lost: [
+      L('lois', 'Someone did not make it out. I am so sorry.'),
+      L('lois', 'We lost someone. Keep going. The others still need you.'),
+      L('dispatch', 'Be advised, one civilian casualty confirmed at {where}.')
+    ],
+    // ---------------- outcomes (medal tiers from the ledger)
+    gold: [
+      L('perry', 'Perry White. Clean save, no casualties, nothing broken. That is the kind of story I put above the fold.'),
+      L('perry', 'Now that is a front page. Lois, drop everything and file it before the competition does.'),
+      L('perry', 'Not a scratch on the city and everybody walked away. You just made my week.'),
+      L('perry', 'Thirty years of headlines, and this one I am framing.'),
+      L('lois', 'Perfect. Not one window broken. I will have it filed within the hour.'),
+      L('lois', 'You made that look easy. I know it was not.'),
+      L('lois', 'Everybody is out and everybody is fine. Thank you. From all of us.')
+    ],
+    silver: [
+      L('perry', 'Good work, mostly. The fire department will want a word about the mess, but the people are safe.'),
+      L('perry', 'Second best is still a headline. Page two, maybe page one if nothing else burns tonight.'),
+      L('lois', 'Everyone made it. That is what counts. The cleanup crews will grumble.'),
+      L('lois', 'Nice save. A little rough around the edges, but so is good journalism.')
+    ],
+    bronze: [
+      L('perry', 'It is done, I will give you that. But I cannot put a crater on page one and call it a rescue.'),
+      L('perry', 'The job got done and the city paid for it. Do better. I know you can.'),
+      L('lois', 'You got there. Some people got hurt along the way. Next time will be better, right?'),
+      L('lois', 'It is over. I am going to need a softer headline than I hoped.')
+    ],
+    fail: [
+      L('perry', 'We lost that one. I am not printing excuses, I am printing what happened. Learn from it.'),
+      L('perry', 'Some nights the city does not get a happy ending. It still needs you tomorrow.'),
+      L('lois', 'It is over. It was not your fault. Not all of it. Come by the office when you can.'),
+      L('lois', 'I am sorry. I know you tried. Talk to me later?'),
+      L('dispatch', 'All units, the scene at {where} is now a recovery operation. Stand by.')
+    ],
+    allClear: [
+      L('dispatch', 'All units, {where} is code 4. Scene secure. Thanks for the assist, big guy.'),
+      L('dispatch', 'Dispatch to all cars: all clear at {where}. Return to patrol.')
+    ],
+    shot: [
+      L('jimmy', 'Got it! The whole thing, frame by frame! Mister White is going to flip!'),
+      L('jimmy', 'That was unreal. I had the long lens on you the entire time. Front page, I swear.'),
+      L('jimmy', 'I think I just took the best picture of my whole life. My hands are still shaking!')
+    ],
+    // ---------------- city-scale events
+    collapse: [
+      L('dispatch', 'All units, structural collapse! A tower just came down. Search and rescue to the debris field.'),
+      L('dispatch', 'Multiple callers: building collapse in progress. Units, get back from the dust cloud.'),
+      L('perry', 'Did I just watch a skyscraper fall on live television? Somebody tell me that was empty.'),
+      L('lois', 'A building just fell. Please tell me you checked it was empty first.')
+    ],
+    damage: [
+      L('perry', 'The repair estimate just passed {dmg}. I want heroics, not demolition.'),
+      L('perry', 'Every hole you punch in this city, the taxpayers fill. Ease up, son.'),
+      L('perry', 'I have the mayor on line two asking who pays for the windows. Do not make me answer that.'),
+      L('perry', 'The insurance pages are going to need their own section after today.'),
+      L('lois', 'Easy. Those buildings have people in them.'),
+      L('lois', 'That is a lot of broken glass. The city is going to start sending you invoices.'),
+      L('jimmy', 'Whoa, that was loud! Great photo though. Is that going to be expensive?'),
+      L('jimmy', 'I got the dust cloud. Mister White says I cannot run it without a damage figure.')
+    ],
+    // ---------------- Hope swings (Perry's front page + Lois on the street)
+    hopeUp: [
+      L('perry', 'Letters to the editor are running nine to one in your favour. Do not let it go to your head.'),
+      L('perry', 'People are starting to look up again. That is worth more than any headline.'),
+      L('lois', 'Have you seen the street? People are smiling at strangers. That is you.'),
+      L('lois', 'The city is talking about you, and for once it is all good.'),
+      L('jimmy', 'Kids are chalking the shield on the sidewalk outside the Planet! I got a picture!')
+    ],
+    hopeHigh: [
+      L('perry', 'Our readers just voted you citizen of the year. I did not rig it. Much.'),
+      L('lois', 'I have never seen Metropolis like this. The whole city is standing up straighter.')
+    ],
+    hopeDown: [
+      L('perry', 'Our phones are ringing and it is not fan mail. People are scared of you. Fix it.'),
+      L('perry', 'The opinion page wants to call you a menace. I can only hold them off so long.'),
+      L('lois', 'People are flinching when you fly over. I do not like that, and neither do you.'),
+      L('lois', 'The city is losing faith. Slow down. Help someone small. It matters.'),
+      L('jimmy', 'Somebody gave me a dirty look for wearing my shield shirt today. Rough week, huh?')
+    ],
+    hopeLow: [
+      L('perry', 'We are at the bottom, son. The only way out is one decent act at a time.'),
+      L('lois', 'They do not trust you right now. Earn it back. I will be watching.')
+    ],
+    // ---------------- first use of each power
+    power_heat: [
+      L('jimmy', 'Was that a beam out of your eyes? I need that again with better light!'),
+      L('lois', 'Careful with the heat. Half this city is glass and the other half is gas lines.')
+    ],
+    power_freeze: [
+      L('jimmy', 'Frost on my lens! You froze my camera from a block away!'),
+      L('lois', 'Freeze breath. Remind me to call you the next time the newsroom air conditioning dies.')
+    ],
+    power_xray: [
+      L('lois', 'If you are using the x-ray trick, stay out of my desk drawers.'),
+      L('jimmy', 'Can you see through the darkroom door? Do not open it, the film is still out!')
+    ],
+    power_hear: [
+      L('lois', 'If you can hear the whole city, you can hear me telling you to be careful.'),
+      L('dispatch', 'Dispatch, uh, to our friend with the good ears: we appreciate the help on this channel.')
+    ],
+    power_clap: [
+      L('jimmy', 'My ears are still ringing! Was that a thunderclap? With your hands?'),
+      L('perry', 'Something just rattled every window on our floor. I am going to assume that was you.')
+    ],
+    power_slow: [
+      L('jimmy', 'Everything went weird for a second. Was that you? Did time just slow down?'),
+      L('lois', 'My coffee stopped in mid-pour. I am not even going to ask.')
+    ],
+    power_grab: [
+      L('jimmy', 'You picked that up like a lunchbox! Do it again, slower, for the camera!'),
+      L('lois', 'Put it down gently. Somebody owns that.')
+    ],
+    power_punch: [
+      L('jimmy', 'That punch knocked my camera off the tripod! Totally worth it!'),
+      L('perry', 'Easy on the haymakers. The city is not a punching bag.')
+    ],
+    // ---------------- speed records
+    mach1: [
+      L('jimmy', 'Sonic boom! I felt it in my teeth! Do it over the bay so I can catch the cone!'),
+      L('lois', 'Was that a sonic boom? Every car alarm on Fifth just went off.')
+    ],
+    mach3: [
+      L('jimmy', 'Mach three! I cannot even pan that fast! You are a red streak!'),
+      L('lois', 'Mach three. Showing off already? I am writing that down.')
+    ],
+    mach10: [
+      L('jimmy', 'Mach ten?! The weather service thinks you are a meteor!'),
+      L('perry', 'The Air Force just called asking about something doing Mach ten. I told them no comment.'),
+      L('lois', 'Mach ten. You could lap the planet before I finish this sentence. Please do not.')
+    ],
+    machPlanet: [
+      L('perry', 'That boom rattled the globe on our roof. Do it again and the repair bill goes to you.'),
+      L('jimmy', 'You flew right past the globe! The whole newsroom hit the floor!')
+    ],
+    // ---------------- help missions (missions.js owns the street talk; this is the word getting round)
+    missionWin: [
+      L('lois', 'Someone just called the newsroom to say you helped them on the street. Small things count.'),
+      L('lois', 'Not every rescue makes the paper, but I heard about that one.'),
+      L('jimmy', 'A lady just showed me a phone video of you helping her! Can I buy it off her?'),
+      L('perry', 'We got a letter about you helping a regular joe today. I am running it on page three.'),
+      L('perry', 'Big saves sell papers. Little ones build a city. Keep doing both.')
+    ],
+    missionFail: [
+      L('lois', 'I heard about the trouble on the street. You cannot be everywhere. Still hurts, I know.'),
+      L('perry', 'You let one slip. Shake it off and get back out there.')
+    ],
+    // ---------------- landings (from the feel pass's __game.events log)
+    landHero: [
+      L('jimmy', 'That landing! One knee, fist down, dust everywhere! Tell me you will do that again where I can see it!'),
+      L('lois', 'Nice entrance. The pigeons on Fifth will be talking about it for weeks.')
+    ],
+    landCrater: [
+      L('perry', 'You just put a crater in a city street. Public Works has my number now, and they are not happy.'),
+      L('lois', 'You know there are stairs, right? That street will take a month to repave.'),
+      L('jimmy', 'The whole block shook! I got the shot, but the asphalt did not make it.')
+    ],
+    // ---------------- first call of the session
+    hello: [
+      L('lois', 'Lois. Perry finally gave me the city beat, so I guess we will be talking. I will call if anything breaks.'),
+      L('lois', 'It is Lois. The scanners are quiet for now. Enjoy the view while it lasts.'),
+      L('perry', 'Perry White. My reporters chase the news. You stop it before it happens. Do not make me choose.')
+    ],
+    // ---------------- idle city flavour
+    idle_dispatch: [
+      L('dispatch', 'Unit 12, 10-50 minor collision at {street}. No injuries. Tow requested.'),
+      L('dispatch', 'Any unit, report of a loose dog on {street}. Animal control is backed up.'),
+      L('dispatch', 'Unit 7, noise complaint, {street}. Someone practising the trumpet. Again.'),
+      L('dispatch', 'Dispatch to traffic: signal outage at {street}. An officer is needed to direct.'),
+      L('dispatch', 'Unit 3, check on a stalled delivery truck at {street}. Driver is fine; the horns are not.'),
+      L('dispatch', 'Be advised, the harbour parade permit for Saturday has been approved. Plan accordingly.'),
+      L('dispatch', 'Unit 14, welfare check at {street}. A neighbour has not seen the tenant in three days.'),
+      L('dispatch', 'Any unit near the waterfront, kids climbing the pier railing again. Swing by.'),
+      L('dispatch', 'Unit 9, shoplifter detained at {street}. The store wants a report.'),
+      L('dispatch', 'Traffic advisory: lane closures on {street} for water main work.'),
+      L('dispatch', 'All units, quiet shift so far. Let us keep it that way.'),
+      L('dispatch', 'Unit 5, cat stuck on a fire escape at {street}. Yes, really.')
+    ],
+    idle_lois: [
+      L('lois', 'Lois. Quiet out there today. I am almost suspicious.'),
+      L('lois', 'Perry is on me about a deadline. If you see anything exciting, call me first.'),
+      L('lois', 'I am working on a piece about the harbour contracts. The numbers do not add up.'),
+      L('lois', 'If you fly past the office, wave. I will pretend I did not see you.'),
+      L('lois', 'There is a rumour about a break-in at the university lab. Keep your eyes open.'),
+      L('lois', 'Most people take the weekend off. Not you, huh?'),
+      L('lois', 'I am interviewing the mayor tomorrow. Anything you want me to ask her?'),
+      L('lois', 'The night shift brought doughnuts. I would save you one, but you are fast enough to take it.')
+    ],
+    idle_jimmy: [
+      L('jimmy', 'Jimmy here! Could you fly past the globe at sunset? I am on the roof with the long lens!'),
+      L('jimmy', 'Can you do a loop over the bay? Mister White wants a cover with sky in it.'),
+      L('jimmy', 'Any chance you could hover by the bridge for a second? Just strike a pose. Kidding! Mostly.'),
+      L('jimmy', 'If you swoop low down the avenue, I will get a great streak shot from the corner!'),
+      L('jimmy', 'My editor says my last picture of you was a red blur. Could you slow down for one?'),
+      L('jimmy', 'If something exciting happens, could it happen near the Planet? My knees hurt from running.'),
+      L('jimmy', 'Do you ever land on rooftops? That would make an awesome portrait.')
+    ],
+    idle_perry: [
+      L('perry', 'Perry White. A quiet day is good for the city and bad for my circulation.'),
+      L('perry', 'When this paper prints your name, it should mean help is on the way. Keep it that way.'),
+      L('perry', 'Great reporters and great heroes have one thing in common: they show up.'),
+      L('perry', 'I do not care how fast you fly. I care what you do when you land.'),
+      L('perry', 'Do not let the cheers or the boos steer you. Do the right thing and let the presses sort it out.'),
+      L('perry', 'When I started, the biggest story in town was a pier fire. Now there is a man flying past my window.')
+    ]
+  };
+  // which trigger groups replace each other in the queue (newest wins)
+  const GROUP = { mach1: 'speed', mach3: 'speed', mach10: 'speed', hopeUp: 'hope', hopeHigh: 'hope', hopeDown: 'hope', hopeLow: 'hope' };
+  const BASE_TYPES = { fire: 1, heli: 1, meteor: 1, robbery: 1 };
+
+  // ================================================================== module state
+  let THREE = null, ctx = null, ready = false;
+  let clock = 0;                 // real seconds while the game runs (pauses with it)
+  let cur = null;                // the call on air
+  let lastStart = -99, lastEnd = 0, nextGap = 25, idleNext = 50, lastNonDispatch = -99;
+  const queue = [];              // pending calls, best first
+  const history = [];            // every call: {who, text, trigger, prio, incidentType, t0, t1, cut}
+  const lastPick = {};           // trigger -> last variant index (never the same twice running)
+  const recentText = [];         // last few lines, to keep variety across triggers
+  const cooldown = {};           // trigger key -> clock when it may fire again
+  const stats = { calls: 0, cut: 0, dropped: 0, byWho: {} };
+  const W = {                    // watchers
+    inc: null, incHalf: false, incTrapped: -1, medals: 0, resolved: 0, lost: 0,
+    dmg: 0, dmgT: 0, dmgBase: 0, band: -1, hopeT: 0, used: {}, mach: 0, machT: 0, machMark: 0,
+    fall: 0, ms: 0, mf: 0, evT: -1, hello: false, sp: new Set(), started: false, planet: null
+  };
+  const opts0 = {};
+  const S = { voice: true, tts: false };
+
+  // ================================================================== helpers
+  const R = (a, b) => a + Math.random() * (b - a);
+  const G = () => window.__game;
+  const shortWhere = (s) => {
+    if (!s) return 'downtown';
+    const m = /^(.+?) & (.+)$/.exec(s);
+    if (!m) return s;
+    const strip = (x) => x.replace(/\s+(St|Ave|Blvd|Rd)\.?$/, '').replace(/’s Bay/, '’s Bay');
+    return strip(m[1]) + ' and ' + strip(m[2]);
+  };
+  const STREETS = ['1st', '2nd', '3rd', 'Centennial', '5th', '6th', '7th', 'Harbor'];
+  const AVES = ['Siegel', 'Shuster', 'Kane', 'Clinton', 'Bessolo', 'Lincoln', 'River Road'];
+  const randStreet = () => STREETS[(Math.random() * STREETS.length) | 0] + ' and ' + AVES[(Math.random() * AVES.length) | 0];
+  function fill(text, vars) {
+    return text.replace(/\{(\w+)\}/g, (_, k) => {
+      if (k === 'street') return randStreet();
+      if (vars && vars[k] !== undefined) return vars[k];
+      return 'downtown';
+    });
+  }
+  function fmtDmg(d) { return d >= 1e9 ? '$' + (d / 1e9).toFixed(1) + ' billion' : '$' + Math.max(1, Math.round(d / 1e6)) + ' million'; }
+
+  // pick a variant: never the one this trigger used last, avoid recent texts, optional speaker filter
+  function pickLine(trigger, onlyWho) {
+    const list = LINES[trigger]; if (!list || !list.length) return null;
+    const cand = [];
+    for (let i = 0; i < list.length; i++) {
+      if (onlyWho && onlyWho.indexOf(list[i].w) < 0) continue;
+      if (i === lastPick[trigger] && list.length > 1) continue;
+      cand.push(i);
+    }
+    if (!cand.length) return null;
+    const fresh = cand.filter(i => recentText.indexOf(list[i].t) < 0);
+    const pool = fresh.length ? fresh : cand;
+    const i = pool[(Math.random() * pool.length) | 0];
+    lastPick[trigger] = i;
+    return list[i];
+  }
+
+  // ================================================================== queueing
+  // prio 3 = urgent (dispatch callout: starts now, may cut in); 2 = incident-tied (8 s gap);
+  // 1 = chatter (20-40 s gap, and not during an emergency unless it is a reaction).
+  function enqueue(item) {
+    if (item.group) for (let i = queue.length - 1; i >= 0; i--) if (queue[i].group === item.group) queue.splice(i, 1);
+    queue.push(item);
+    queue.sort((a, b) => (b.prio - a.prio) || ((PRIO_RANK[b.who] || 0) - (PRIO_RANK[a.who] || 0)) || (a.at - b.at));
+    while (queue.length > CFG.maxQueue) { queue.pop(); stats.dropped++; }
+    return item;
+  }
+  function trig(trigger, o) {
+    o = o || opts0;
+    if (o.cd) { if (clock < (cooldown[o.cdKey || trigger] || 0)) return null; cooldown[o.cdKey || trigger] = clock + o.cd; }
+    const line = pickLine(trigger, o.who); if (!line) return null;
+    return enqueue({
+      who: line.w, text: fill(line.t, o.vars), trigger, prio: o.prio || 1, at: clock,
+      notBefore: clock + (o.delay || 0), exp: clock + (o.ttl || 30), inc: o.inc || null,
+      incidentType: o.incidentType !== undefined ? o.incidentType : null, group: GROUP[trigger] || null,
+      reaction: !!o.reaction, interrupt: !!o.interrupt, after: !!o.after, vi: lastPick[trigger]
+    });
+  }
+  function say(who, text, o) {
+    o = o || {};
+    if (!SPK[who]) who = 'dispatch';
+    const g = G(), inc = g && g.currentInc;
+    const urgent = !!(o.urgent || o.interrupt);
+    return enqueue({
+      who, text: String(text), trigger: o.trigger || 'say', prio: o.prio || (urgent ? 3 : 2), at: clock,
+      notBefore: clock + (o.delay || 0), exp: clock + (o.ttl || 60), inc: null,
+      incidentType: o.incidentType !== undefined ? o.incidentType : (inc ? inc.type : null),
+      group: null, reaction: true, interrupt: urgent, force: !!o.interrupt, onEnd: o.onEnd || null
+    });
+  }
+
+  function canStart(it, g) {
+    if (clock < it.notBefore) return false;
+    if (it.prio >= 3) return true;
+    if (clock - lastEnd < CFG.gapAfter) return false;
+    if (it.prio === 2) return clock - lastStart >= CFG.gapEvent;
+    if (g.currentInc && !it.reaction) return false;
+    return clock - lastStart >= nextGap;
+  }
+  function pump(g) {
+    // drop stale items (expired, or tied to an emergency that is no longer the current one)
+    for (let i = queue.length - 1; i >= 0; i--) {
+      const it = queue[i];
+      if (clock > it.exp || (it.inc && it.inc !== g.currentInc) || (it.after && g.currentInc)) { queue.splice(i, 1); stats.dropped++; }
+    }
+    if (!queue.length) return;
+    if (cur) {
+      // only urgent calls cut in, and never on another urgent call
+      const it = queue[0];
+      // (a callout for an emergency that has since been replaced counts as stale)
+      const stale = cur.inc && cur.inc !== g.currentInc;
+      if (it.prio >= 3 && it.interrupt && (cur.prio < 3 || stale || it.force) && clock >= it.notBefore) { hangUp(true); }
+      else return;
+    }
+    for (let i = 0; i < queue.length; i++) {
+      if (canStart(queue[i], g)) { const it = queue.splice(i, 1)[0]; startCall(it, g); return; }
+    }
+  }
+
+  // ================================================================== speech timeline (also drives subtitles + waveform)
+  const VOW = { a: [800, 1200, 2500], e: [500, 1850, 2600], i: [330, 2250, 3000], o: [560, 900, 2450], u: [360, 850, 2300], y: [330, 2100, 2900] };
+  function plan(text, spk) {
+    const words = text.split(/\s+/).filter(Boolean);
+    const syl = [], wordT = [], wordEnd = [];
+    let t = 0, chars = 0, sent = 0;
+    const per = 1 / spk.rate;
+    for (let wi = 0; wi < words.length; wi++) {
+      const w = words[wi];
+      chars += (wi ? 1 : 0) + w.length;
+      wordT.push(t); wordEnd.push(chars);
+      const lw = w.toLowerCase();
+      let groups = lw.match(/[aeiouy]+/g) || [];
+      const digits = lw.match(/[0-9]/g);
+      if (digits) { groups = groups.concat(digits.map(() => 'e')); }
+      if (!groups.length) groups = ['a'];
+      if (groups.length > 1 && /e$/.test(lw) && !/le$/.test(lw)) groups.pop(); // silent e
+      const consonantStart = /^[^aeiouy0-9]/.test(lw);
+      for (let k = 0; k < groups.length; k++) {
+        const d = per * R(0.78, 1.22) * (k === groups.length - 1 && groups.length > 1 ? 1.15 : 1);
+        syl.push({ t, d, v: groups[k][0], a: (k === 0 ? 1 : 0.78) * R(0.85, 1), c: k === 0 ? consonantStart : Math.random() < 0.55, s: sent });
+        t += d;
+      }
+      t += 0.035;
+      const end = w[w.length - 1];
+      if (end === ',' || end === ';' || end === ':') t += 0.17;
+      else if (end === '.' || end === '!' || end === '?') { t += 0.3; sent++; syl[syl.length - 1].q = end === '?'; syl[syl.length - 1].x = end === '!'; syl[syl.length - 1].end = true; }
+      else if (end === '-') t += 0.12;
+    }
+    return { syl, wordT, wordEnd, dur: t + 0.05 };
+  }
+
+  // ================================================================== calls
+  function startCall(it, g) {
+    const spk = SPK[it.who];
+    const pl = plan(it.text, spk);
+    const t0 = clock;
+    cur = {
+      who: it.who, spk, text: it.text, trigger: it.trigger, prio: it.prio, incidentType: it.incidentType,
+      inc: it.inc, t0, tSpeak: t0 + CFG.open, tEnd: t0 + CFG.open + pl.dur + CFG.hold, plan: pl, word: -1, sylI: 0, audio: null, onEnd: it.onEnd || null
+    };
+    lastStart = t0;
+    if (it.who !== 'dispatch') lastNonDispatch = t0;
+    nextGap = R(CFG.gapChatter[0], CFG.gapChatter[1]);
+    stats.calls++; stats.byWho[it.who] = (stats.byWho[it.who] || 0) + 1;
+    recentText.push(it.text); if (recentText.length > 12) recentText.shift();
+    const rec = { who: it.who, name: spk.name, text: it.text, trigger: it.trigger, vi: it.vi === undefined ? -1 : it.vi, prio: it.prio, incidentType: it.incidentType, t0, t1: cur.tEnd, simT: g.simT, cut: false };
+    history.push(rec); if (history.length > 400) history.shift();
+    cur.rec = rec;
+    // test-hook contract: __game.events gets a `line` entry per call
+    try {
+      const ev = { who: it.who, speaker: spk.name, text: it.text, trigger: it.trigger, incidentType: it.incidentType, prio: it.prio };
+      if (typeof g.emit === 'function') g.emit('line', ev);
+      else { if (!Array.isArray(g.events)) g.events = []; ev.t = g.simT; ev.type = 'line'; g.events.push(ev); }
+    } catch (_) { /* events may be a frozen getter */ }
+    showCard(cur);
+    if (S.tts) speakTTS(cur); else if (S.voice) cur.audio = voiceCall(cur, g);
+  }
+  function hangUp(cut) {
+    const c = cur; if (!c) return;
+    cur = null;
+    c.rec.t1 = clock; c.rec.cut = !!cut;
+    if (cut) stats.cut++;
+    lastEnd = clock;
+    if (c.audio) stopAudio(c.audio, cut);
+    if (S.tts && window.speechSynthesis) try { window.speechSynthesis.cancel(); } catch (_) { /* optional */ }
+    hideCard();
+    if (c.onEnd) try { c.onEnd(c.rec); } catch (e) { console.warn('[comms] onEnd', e); }
+  }
+
+  // ================================================================== radio audio (WebAudio on __game.AU)
+  let bus = null, driveCurve = null, warned = false;
+  function audioReady() {
+    const g = G(), AU = g && g.AU;
+    if (!AU || !AU.ctx || !AU.noise) return null;
+    if (!bus || bus.context !== AU.ctx) {
+      const c = AU.ctx;
+      bus = c.createGain(); bus.gain.value = AU.muted ? 0 : CFG.vol;
+      // straight to the output: the radio is in his ear, so super hearing's city muffle doesn't touch it
+      bus.connect(c.destination);
+      if (!driveCurve) {
+        const n = 1024; driveCurve = new Float32Array(n);
+        for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; driveCurve[i] = Math.tanh(2.6 * x) / Math.tanh(2.6); }
+      }
+    }
+    return AU;
+  }
+  function noiseSrc(c, AU, t, dur) {
+    const s = c.createBufferSource(); s.buffer = AU.noise; s.loop = true;
+    s.start(t, Math.random() * 1.5); s.stop(t + dur);
+    return s;
+  }
+  // squelch: a short band-limited hiss burst (police: with the tail of the carrier dropping out)
+  function squelch(c, AU, t, spk, closing, dest) {
+    const police = spk.crackle >= 0.6;
+    const s = noiseSrc(c, AU, t, 0.4);
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = 0.9;
+    f.frequency.setValueAtTime(police ? 2400 : 1600, t);
+    f.frequency.exponentialRampToValueAtTime(police ? 900 : 1200, t + (closing ? 0.22 : 0.12));
+    const gg = c.createGain();
+    const pk = police ? 0.5 : 0.22, len = closing ? (police ? 0.28 : 0.12) : (police ? 0.16 : 0.08);
+    gg.gain.setValueAtTime(0.0001, t); gg.gain.linearRampToValueAtTime(pk, t + 0.006);
+    gg.gain.setValueAtTime(pk * 0.8, t + len * 0.6); gg.gain.exponentialRampToValueAtTime(0.0001, t + len);
+    s.connect(f); f.connect(gg); gg.connect(dest);
+    if (!closing || !police) {
+      // the "chirp" of a keyed mic (police) or the click of a phone line (Planet)
+      const o = c.createOscillator(), og = c.createGain();
+      o.type = police ? 'sine' : 'square';
+      o.frequency.setValueAtTime(police ? (closing ? 1100 : 1500) : 2200, t);
+      og.gain.setValueAtTime(police ? 0.09 : 0.05, t); og.gain.exponentialRampToValueAtTime(0.0001, t + (police ? 0.07 : 0.012));
+      o.connect(og); og.connect(dest); o.start(t); o.stop(t + 0.1);
+    }
+  }
+  function voiceCall(call, g) {
+    let AU;
+    try {
+      AU = audioReady(); if (!AU || AU.muted) return null;
+      const c = AU.ctx, spk = call.spk, pl = call.plan;
+      const now = c.currentTime + 0.02, ts = now + CFG.open, tEnd = ts + pl.dur;
+      const out = c.createGain(); out.gain.value = 1;  // per-call fader (for cutting in)
+      out.connect(bus);
+      squelch(c, AU, now, spk, false, out);
+      // ---- voice: saw (voiced) + noise (breath / consonants) -> three formants -> gate -> radio band
+      const osc = c.createOscillator(); osc.type = spk.wave;
+      osc.frequency.setValueAtTime(spk.pitch, now);
+      const vib = c.createOscillator(), vibG = c.createGain(); vib.frequency.value = R(4.5, 6); vibG.gain.value = spk.pitch * 0.012;
+      vib.connect(vibG); vibG.connect(osc.frequency);
+      const oscG = c.createGain(); oscG.gain.value = spk.voiced * (spk.wave === 'square' ? 0.6 : 1);
+      const nz = noiseSrc(c, AU, now, pl.dur + CFG.open + 0.4);
+      const nzG = c.createGain(); nzG.gain.setValueAtTime(spk.breath, now);
+      osc.connect(oscG); nz.connect(nzG);
+      const F = [], fq = [7, 9, 11], fl = [1, 0.7, 0.35];
+      const mix = c.createGain(); mix.gain.value = 1;
+      for (let k = 0; k < 3; k++) {
+        const f = c.createBiquadFilter(); f.type = 'bandpass'; f.Q.value = fq[k];
+        f.frequency.setValueAtTime(VOW.a[k] * spk.form, now);
+        const fg = c.createGain(); fg.gain.value = fl[k] * 3.2;
+        oscG.connect(f); nzG.connect(f); f.connect(fg); fg.connect(mix); F.push(f);
+      }
+      const gate = c.createGain(); gate.gain.setValueAtTime(0, now);
+      const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = spk.band[0]; hp.Q.value = 0.8;
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = spk.band[1]; lp.Q.value = 0.8;
+      mix.connect(gate); gate.connect(hp); hp.connect(lp);
+      const vg = c.createGain(); vg.gain.value = 0.9;
+      if (spk.drive > 0) {
+        const pre = c.createGain(); pre.gain.value = 1 + spk.drive * 3;
+        const sh = c.createWaveShaper(); sh.curve = driveCurve;
+        lp.connect(pre); pre.connect(sh); sh.connect(vg);
+        vg.gain.value = 0.55;
+      } else lp.connect(vg);
+      vg.connect(out);
+      // ---- syllable schedule: gate envelope, formant glides, pitch contour, consonant hiss
+      let sentStart = 0;
+      for (let i = 0; i < pl.syl.length; i++) {
+        const s = pl.syl[i], t = ts + s.t, d = s.d;
+        const fm = VOW[s.v] || VOW.a;
+        for (let k = 0; k < 3; k++) F[k].frequency.setTargetAtTime(fm[k] * spk.form * R(0.94, 1.06), t, 0.018);
+        // declination across a sentence, a rise on questions, a lift on exclamations
+        const frac = (s.t - sentStart) / 2.5;
+        let p = spk.pitch * (1 + spk.inton * (Math.random() - 0.5) * 2) * (1 - 0.1 * Math.min(1, frac));
+        if (s.q) p *= 1.25; if (s.x) p *= 1.12;
+        osc.frequency.setTargetAtTime(p, t, 0.025);
+        if (s.end) sentStart = s.t + d;
+        const a = s.a * 0.9;
+        gate.gain.setValueAtTime(0.0001, t);
+        gate.gain.linearRampToValueAtTime(a, t + Math.min(0.03, d * 0.25));
+        gate.gain.setValueAtTime(a * 0.85, t + d * 0.62);
+        gate.gain.linearRampToValueAtTime(0.0001, t + d * 0.96);
+        if (s.c) { nzG.gain.setValueAtTime(spk.breath * 3.2, t); nzG.gain.setTargetAtTime(spk.breath, t + 0.02, 0.02); }
+      }
+      osc.start(now); vib.start(now); osc.stop(tEnd + 0.5); vib.stop(tEnd + 0.5);
+      // ---- crackle bed (police / cockpit / Jimmy's cell): steady hiss with random pops
+      let crk = null;
+      if (spk.crackle > 0) {
+        crk = noiseSrc(c, AU, now, pl.dur + CFG.open + 0.4);
+        const hf = c.createBiquadFilter(); hf.type = 'highpass'; hf.frequency.value = 1800;
+        const cg = c.createGain(); const base = 0.025 * spk.crackle;
+        cg.gain.setValueAtTime(base, now);
+        for (let t = now + 0.05; t < tEnd; t += R(0.04, 0.22)) {
+          cg.gain.setValueAtTime(base + R(0.05, 0.22) * spk.crackle, t);
+          cg.gain.exponentialRampToValueAtTime(base, t + R(0.008, 0.03));
+        }
+        cg.gain.setValueAtTime(base, tEnd); cg.gain.linearRampToValueAtTime(0.0001, tEnd + 0.05);
+        crk.connect(hf); hf.connect(cg); cg.connect(out);
+      }
+      squelch(c, AU, tEnd + 0.04, spk, true, out);
+      return { out, osc, vib, nz, crk, c };
+    } catch (e) {
+      if (!warned) { warned = true; console.warn('[comms] radio audio unavailable:', e && e.message); }
+      return null;
+    }
+  }
+  function stopAudio(a, cut) {
+    try {
+      const t = a.c.currentTime;
+      if (!cut) return; // natural end: everything is already scheduled to stop
+      a.out.gain.cancelScheduledValues(t); a.out.gain.setValueAtTime(a.out.gain.value, t); a.out.gain.linearRampToValueAtTime(0.0001, t + 0.06);
+      for (const n of [a.osc, a.vib, a.nz, a.crk]) if (n) try { n.stop(t + 0.08); } catch (_) { /* already stopped */ }
+    } catch (_) { /* context closed */ }
+  }
+  function speakTTS(call) {
+    try {
+      const ss = window.speechSynthesis; if (!ss || typeof SpeechSynthesisUtterance === 'undefined') return;
+      const u = new SpeechSynthesisUtterance(call.text);
+      u.pitch = Math.max(0.1, Math.min(2, call.spk.pitch / 170)); u.rate = call.spk.rate / 6.8;
+      const g = G(); u.volume = g && g.AU && g.AU.muted ? 0 : 1;
+      ss.cancel(); ss.speak(u);
+    } catch (_) { /* optional accessibility path */ }
+  }
+
+  // ================================================================== the comms card (DOM)
+  const UI = { el: null, port: null, pctx: null, wave: null, wctx: null, name: null, role: null, chan: null, said: null, rest: null, state: '', who: '', hideT: 0 };
+  const PORTRAITS = {};
+  function buildDOM() {
+    const host = document.getElementById('hud') || document.body;
+    const el = document.createElement('div');
+    el.id = 'comms'; el.className = 'comms'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite');
+    el.innerHTML =
+      '<div class="cm-lights"><i></i><i></i></div>' +
+      '<div class="cm-port"><canvas width="152" height="152"></canvas><span class="cm-ini"></span></div>' +
+      '<div class="cm-body">' +
+        '<div class="cm-head"><span class="cm-chan"></span><span class="cm-live"><i></i><b>INCOMING</b></span></div>' +
+        '<div class="cm-name"></div><div class="cm-role"></div>' +
+        '<p class="cm-sub"><span class="cm-said"></span><span class="cm-rest"></span></p>' +
+        '<canvas class="cm-wave" width="300" height="44"></canvas>' +
+      '</div>';
+    host.appendChild(el);
+    UI.el = el;
+    UI.port = el.querySelector('.cm-port canvas'); UI.pctx = UI.port.getContext('2d');
+    UI.wave = el.querySelector('.cm-wave'); UI.wctx = UI.wave.getContext('2d');
+    UI.name = el.querySelector('.cm-name'); UI.role = el.querySelector('.cm-role'); UI.chan = el.querySelector('.cm-chan');
+    UI.said = el.querySelector('.cm-said'); UI.rest = el.querySelector('.cm-rest'); UI.ini = el.querySelector('.cm-ini');
+    UI.live = el.querySelector('.cm-live b');
+    for (const k in SPK) PORTRAITS[k] = drawPortrait(k);
+  }
+  function setState(s) { if (UI.state === s) return; UI.state = s; UI.el.className = 'comms' + (s ? ' ' + s : '') + (UI.who ? ' cm-' + UI.who : ''); }
+  function showCard(call) {
+    if (!UI.el) return;
+    UI.who = call.who;
+    UI.el.style.setProperty('--cm', call.spk.col);
+    UI.name.textContent = call.spk.name; UI.role.textContent = call.spk.role; UI.chan.textContent = call.spk.chan; UI.ini.textContent = call.spk.ini;
+    UI.said.textContent = ''; UI.rest.textContent = call.text; UI.live.textContent = call.who === 'dispatch' ? 'PRIORITY' : 'INCOMING';
+    UI.state = ''; setState('on ring');
+    drawPortraitFrame(call, 0);
+  }
+  function hideCard() { if (UI.el) setState('out'); UI.hideT = 0.4; }
+
+  // procedural portrait: newsprint / radio-grid backdrop, a silhouette with a coloured rim, props
+  function drawPortrait(who) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 152;
+    const x = cv.getContext('2d'), spk = SPK[who], W2 = 152;
+    // backdrop
+    const bg = x.createRadialGradient(W2 * 0.5, W2 * 0.38, 8, W2 * 0.5, W2 * 0.5, W2 * 0.75);
+    bg.addColorStop(0, spk.col); bg.addColorStop(0.55, shade(spk.col, 0.35)); bg.addColorStop(1, '#05070f');
+    x.fillStyle = bg; x.fillRect(0, 0, W2, W2);
+    x.globalAlpha = 0.16; x.fillStyle = '#000';
+    if (who === 'dispatch' || who === 'pilot') {
+      x.strokeStyle = '#000'; x.lineWidth = 1;
+      for (let i = 0; i < W2; i += 12) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, W2); x.moveTo(0, i); x.lineTo(W2, i); x.stroke(); }
+    } else {
+      for (let yy = 4; yy < W2; yy += 7) for (let xx = (yy / 7 & 1) * 3.5; xx < W2; xx += 7) { const r = 1.2 + 1.6 * (yy / W2); x.beginPath(); x.arc(xx, yy, r, 0, 6.283); x.fill(); }
+    }
+    x.globalAlpha = 1;
+    // silhouette (dark), drawn as one path so a single stroke gives the rim
+    const sil = new Path2D();
+    const cx = W2 / 2;
+    const shoulders = who === 'perry' ? 64 : who === 'jimmy' ? 50 : who === 'lois' ? 48 : 56;
+    const headR = who === 'perry' ? 25 : who === 'jimmy' ? 22 : 22;
+    const headY = who === 'jimmy' ? 66 : 64;
+    // shoulders + neck
+    sil.moveTo(cx - shoulders, W2 + 2);
+    sil.bezierCurveTo(cx - shoulders, 118, cx - 30, 108, cx - 11, 104);
+    sil.lineTo(cx - 10, headY + headR - 6); sil.lineTo(cx + 10, headY + headR - 6); sil.lineTo(cx + 11, 104);
+    sil.bezierCurveTo(cx + 30, 108, cx + shoulders, 118, cx + shoulders, W2 + 2);
+    sil.closePath();
+    sil.ellipse(cx, headY, headR * 0.86, headR, 0, 0, 6.283);
+    if (who === 'lois') {
+      // a sharp bob with a side part
+      sil.moveTo(cx - 24, headY + 16);
+      sil.bezierCurveTo(cx - 30, headY - 10, cx - 18, headY - 28, cx + 2, headY - 25);
+      sil.bezierCurveTo(cx + 22, headY - 24, cx + 30, headY - 6, cx + 25, headY + 17);
+      sil.lineTo(cx + 15, headY + 14); sil.lineTo(cx - 14, headY + 15); sil.closePath();
+    } else if (who === 'jimmy') {
+      // a cowlick that will not lie flat
+      sil.moveTo(cx - 19, headY - 8);
+      sil.bezierCurveTo(cx - 18, headY - 26, cx + 8, headY - 30, cx + 19, headY - 12);
+      sil.lineTo(cx + 6, headY - 22); sil.lineTo(cx + 9, headY - 36); sil.lineTo(cx - 2, headY - 24); sil.closePath();
+    } else if (who === 'perry') {
+      // big frame, receding hair at the temples
+      sil.moveTo(cx - 22, headY - 4); sil.bezierCurveTo(cx - 24, headY - 22, cx - 10, headY - 27, cx - 2, headY - 20);
+      sil.bezierCurveTo(cx + 8, headY - 27, cx + 24, headY - 22, cx + 22, headY - 4); sil.closePath();
+    } else if (who === 'pilot') {
+      // peaked captain's cap
+      sil.moveTo(cx - 24, headY - 10); sil.lineTo(cx - 20, headY - 26); sil.bezierCurveTo(cx - 8, headY - 34, cx + 8, headY - 34, cx + 20, headY - 26);
+      sil.lineTo(cx + 24, headY - 10); sil.lineTo(cx + 30, headY - 6); sil.lineTo(cx - 6, headY - 8); sil.closePath();
+    }
+    x.save();
+    x.shadowColor = spk.col; x.shadowBlur = 14;
+    x.strokeStyle = spk.col; x.lineWidth = 3; x.stroke(sil);
+    x.restore();
+    const fillG = x.createLinearGradient(0, 30, 0, W2); fillG.addColorStop(0, '#11131c'); fillG.addColorStop(1, '#06070c');
+    x.fillStyle = fillG; x.fill(sil);
+    // props
+    x.lineWidth = 2.2; x.strokeStyle = spk.col; x.fillStyle = spk.col;
+    if (who === 'lois') {
+      x.beginPath(); x.arc(cx + 18, headY + 9, 2.2, 0, 6.283); x.fill(); // earring glint
+      x.globalAlpha = 0.85; x.beginPath(); x.moveTo(cx - 12, 106); x.lineTo(cx, 124); x.lineTo(cx + 12, 106); x.stroke(); x.globalAlpha = 1; // collar
+    } else if (who === 'jimmy') {
+      x.beginPath(); x.moveTo(cx, 108); x.lineTo(cx - 11, 102); x.lineTo(cx - 11, 114); x.closePath(); x.moveTo(cx, 108); x.lineTo(cx + 11, 102); x.lineTo(cx + 11, 114); x.closePath(); x.fill(); // bow tie
+      x.globalAlpha = 0.9; x.beginPath(); x.moveTo(cx - 40, 112); x.lineTo(cx + 22, 150); x.stroke(); x.globalAlpha = 1; // strap
+      x.fillStyle = '#0b0c12'; x.fillRect(cx + 14, 128, 30, 20); x.strokeRect(cx + 14, 128, 30, 20); // camera
+      x.beginPath(); x.arc(cx + 29, 138, 6, 0, 6.283); x.stroke(); x.fillStyle = spk.col; x.fillRect(cx + 36, 130, 5, 3);
+    } else if (who === 'perry') {
+      x.beginPath(); x.moveTo(cx - 5, 106); x.lineTo(cx + 5, 106); x.lineTo(cx + 7, 140); x.lineTo(cx, 150); x.lineTo(cx - 7, 140); x.closePath(); x.fill(); // tie
+      x.globalAlpha = 0.9; x.beginPath(); x.rect(cx - 17, headY - 2, 13, 8); x.rect(cx + 4, headY - 2, 13, 8); x.moveTo(cx - 4, headY + 1); x.lineTo(cx + 4, headY + 1); x.stroke(); x.globalAlpha = 1; // glasses
+    } else if (who === 'dispatch') {
+      x.beginPath(); x.arc(cx, headY - 2, headR + 3, Math.PI * 1.05, Math.PI * 1.95); x.stroke(); // headset band
+      x.fillRect(cx - headR - 5, headY - 6, 7, 14); x.fillRect(cx + headR - 2, headY - 6, 7, 14); // ear cups
+      x.beginPath(); x.moveTo(cx - headR - 1, headY + 6); x.quadraticCurveTo(cx - 18, headY + 24, cx - 4, headY + 20); x.stroke(); // boom mic
+      badge(x, cx + 34, 128, 11, spk.col);
+    } else if (who === 'pilot') {
+      x.fillRect(cx - 20, headY - 12, 40, 3); // cap band
+      x.beginPath(); x.moveTo(cx - 28, 124); x.lineTo(cx - 12, 124); x.moveTo(cx - 28, 129); x.lineTo(cx - 12, 129); x.moveTo(cx - 28, 134); x.lineTo(cx - 12, 134); x.stroke(); // stripes
+      x.beginPath(); x.moveTo(cx + headR - 1, headY + 4); x.quadraticCurveTo(cx + 18, headY + 24, cx + 4, headY + 20); x.stroke();
+    }
+    // vignette
+    const vg = x.createRadialGradient(cx, cx, W2 * 0.35, cx, cx, W2 * 0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+    x.fillStyle = vg; x.fillRect(0, 0, W2, W2);
+    return cv;
+  }
+  function badge(x, bx, by, r, col) {
+    x.save(); x.fillStyle = col; x.beginPath();
+    for (let i = 0; i < 14; i++) { const a = -Math.PI / 2 + i * Math.PI / 7, rr = i & 1 ? r * 0.55 : r; x.lineTo(bx + Math.cos(a) * rr, by + Math.sin(a) * rr); }
+    x.closePath(); x.fill(); x.fillStyle = '#0b0c12'; x.beginPath(); x.arc(bx, by, r * 0.32, 0, 6.283); x.fill(); x.restore();
+  }
+  function shade(hex, k) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = ((n >> 16) & 255) * k | 0, g = ((n >> 8) & 255) * k | 0, b = (n & 255) * k | 0;
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  // envelope of the speech at time t (s since speech start): 0..1, follows the syllable gate
+  function envAt(call, t) {
+    const syl = call.plan.syl;
+    if (t < 0 || !syl.length) return 0;
+    let i = call.sylI;
+    while (i < syl.length - 1 && syl[i].t + syl[i].d <= t) i++;
+    call.sylI = i;
+    const s = syl[i]; if (t < s.t || t > s.t + s.d) return 0;
+    const u = (t - s.t) / s.d;
+    return s.a * (u < 0.12 ? u / 0.12 : u < 0.62 ? 1 - 0.15 * (u - 0.12) / 0.5 : Math.max(0, 0.85 * (0.96 - u) / 0.34));
+  }
+  let scan = 0;
+  function drawPortraitFrame(call, env) {
+    const x = UI.pctx; if (!x) return;
+    x.globalAlpha = 1; x.drawImage(PORTRAITS[call.who], 0, 0);
+    // moving scanline band + fine lines
+    scan = (scan + 1.6) % 190;
+    x.globalAlpha = 0.1; x.fillStyle = '#fff'; x.fillRect(0, scan - 30, 152, 20);
+    x.globalAlpha = 0.18; x.fillStyle = '#000';
+    for (let y = 0; y < 152; y += 4) x.fillRect(0, y, 152, 1);
+    // talk glow on the rim
+    x.globalAlpha = 0.25 + 0.75 * env; x.strokeStyle = call.spk.col; x.lineWidth = 5;
+    x.strokeRect(2.5, 2.5, 147, 147);
+    x.globalAlpha = 1;
+  }
+  const BARS = 30, barH = new Float32Array(BARS), barSeed = new Float32Array(BARS);
+  for (let i = 0; i < BARS; i++) barSeed[i] = Math.random();
+  function drawWave(call, env, t) {
+    const x = UI.wctx; if (!x) return;
+    const w = 300, h = 44, bw = w / BARS;
+    x.clearRect(0, 0, w, h);
+    x.globalAlpha = 0.25; x.fillStyle = call.spk.col; x.fillRect(0, h / 2 - 0.5, w, 1);
+    x.globalAlpha = 1;
+    const static0 = call.spk.crackle * 0.08;
+    for (let i = 0; i < BARS; i++) {
+      // a band-shaped spectrum that breathes with the syllable envelope
+      const centre = 1 - Math.abs(i - BARS * 0.42) / (BARS * 0.6);
+      const wob = 0.55 + 0.45 * Math.sin(t * (9 + barSeed[i] * 13) + barSeed[i] * 40);
+      const target = Math.max(static0 * Math.random(), env * Math.max(0.15, centre) * wob);
+      barH[i] += (target - barH[i]) * 0.45;
+      const bh = Math.max(1.5, barH[i] * (h - 4));
+      x.fillRect(i * bw + 1.5, (h - bh) / 2, bw - 3, bh);
+    }
+  }
+  function updateCard(dt) {
+    if (UI.hideT > 0) { UI.hideT -= dt; if (UI.hideT <= 0 && !cur) setState(''); }
+    if (!cur) return;
+    const t = clock - cur.tSpeak;
+    if (t >= 0 && UI.state.indexOf('ring') >= 0) { setState('on'); UI.live.textContent = cur.who === 'dispatch' ? 'ON AIR' : 'LIVE'; }
+    // subtitle: reveal word by word as each word's first syllable starts
+    const pl = cur.plan;
+    let wI = cur.word;
+    while (wI + 1 < pl.wordT.length && pl.wordT[wI + 1] <= t) wI++;
+    if (wI !== cur.word) {
+      cur.word = wI;
+      const n = wI >= 0 ? pl.wordEnd[wI] : 0;
+      UI.said.textContent = cur.text.slice(0, n); UI.rest.textContent = cur.text.slice(n);
+    }
+    const env = envAt(cur, t);
+    drawPortraitFrame(cur, env);
+    drawWave(cur, env, clock);
+  }
+
+  // ================================================================== trigger detection
+  function machOf(P) { return P.vel.length() / Math.max(295, 340.3 - 0.0041 * P.pos.y); }
+  function medalTotal(L) { return L.medals.gold + L.medals.silver + L.medals.bronze; }
+  function incTypeKey(inc) {
+    if (inc.type === 'meteor' && ((inc.m && inc.m.kryp) || /kryptonite/i.test(inc.title || ''))) return 'kryp';
+    return inc.type;
+  }
+  function onIncStart(g, inc, loose) {
+    if (!loose) { W.incHalf = false; W.incTrapped = -1; }
+    const tie = loose ? null : inc;
+    const key = incTypeKey(inc), where = shortWhere(inc.where);
+    const vars = { where };
+    const sk = LINES['start_' + key] ? 'start_' + key : 'start_other';
+    // the callout: urgent, starts now (cuts in on chatter)
+    trig(sk, { prio: 3, interrupt: true, inc: tie, incidentType: inc.type, vars, ttl: 1.0, reaction: true });
+    if (!BASE_TYPES[inc.type]) {
+      // a set piece (bus, airliner, ...): its own voice follows the callout
+      if (inc.type === 'airliner' || inc.type === 'plane') trig('pilot_airliner', { prio: 2, inc: tie, incidentType: inc.type, vars, delay: 2, ttl: 20, reaction: true });
+      else if (inc.type === 'bus') trig('driver_bus', { prio: 2, inc: tie, incidentType: inc.type, vars, delay: 2, ttl: 20, reaction: true });
+    }
+    const tk = LINES['tip_' + key] ? 'tip_' + key : 'tip_other';
+    trig(tk, { prio: 2, inc: tie, incidentType: inc.type, vars, delay: R(6, 9), ttl: 25, reaction: true });
+  }
+  function onIncEnd(g, inc) {
+    const Lg = g.ledger, total = medalTotal(Lg);
+    const vars = { where: shortWhere(inc.where) };
+    let tier = null;
+    if (total > W.medals) tier = Lg.medals.gold > W.gold ? 'gold' : Lg.medals.silver > W.silver ? 'silver' : 'bronze';
+    W.medals = total; W.gold = Lg.medals.gold; W.silver = Lg.medals.silver;
+    if (tier) {
+      // the verdict comes from the newsroom; ambient (incidentType null) because the emergency is over
+      trig(tier, { prio: 2, delay: 1.2, ttl: 30, reaction: true, after: true });
+      if (tier === 'gold' && Math.random() < 0.5) trig('shot', { prio: 1, delay: 4, ttl: 45, reaction: true, after: true });
+      else if (Math.random() < 0.35) trig('allClear', { prio: 1, delay: 3, ttl: 30, vars, reaction: true, after: true });
+    } else {
+      trig('fail', { prio: 2, delay: 1.5, ttl: 30, vars, reaction: true, after: true });
+    }
+  }
+  function detect(g, dt) {
+    const Lg = g.ledger, P = g.P, inc = g.currentInc;
+    if (!W.started) {
+      W.started = true; W.medals = medalTotal(Lg); W.gold = Lg.medals.gold; W.silver = Lg.medals.silver;
+      W.lost = Lg.lost; W.dmg = W.dmgBase = Lg.damage; W.band = Math.floor(Lg.hope / 20);
+      const b = (g.buildings || []).find(bb => bb.lot && bb.lot.i === 3 && bb.lot.j === 3);
+      if (b) W.planet = { x: (b.x0 + b.x1) / 2, z: (b.z0 + b.z1) / 2 };
+      const M = window.SM_MISSIONS; if (M && M.stats) { W.ms = M.stats.success; W.mf = M.stats.fail; }
+      if (Array.isArray(g.events) && g.events.length) W.evT = g.events[g.events.length - 1].t;
+    }
+    // ---- emergencies
+    if (inc !== W.inc) {
+      if (W.inc) onIncEnd(g, W.inc);
+      W.inc = inc;
+      if (inc) onIncStart(g, inc);
+    }
+    if (inc) {
+      if (!W.incHalf && inc.limit && inc.age > inc.limit * 0.5) { W.incHalf = true; trig('half', { prio: 2, inc, incidentType: inc.type, vars: { where: shortWhere(inc.where) }, ttl: 12, reaction: true }); }
+      if (inc.trapped && inc.trapped.length > 1) {
+        let n = 0; for (const p of inc.trapped) if (p.mode === 'trapped') n++;
+        if (W.incTrapped > 1 && n === 1) trig('lastOne', { prio: 2, inc, incidentType: inc.type, vars: { where: shortWhere(inc.where) }, ttl: 15, reaction: true });
+        W.incTrapped = n;
+      }
+    }
+    if (Lg.lost > W.lost) {
+      W.lost = Lg.lost;
+      trig('lost', { prio: 2, cd: 30, inc, incidentType: inc ? inc.type : null, vars: { where: shortWhere(inc && inc.where) }, ttl: 12, reaction: true });
+    }
+    // ---- a tower coming down
+    const fq = g.fallQueue ? g.fallQueue.length : 0;
+    if (fq >= CFG.collapseBlocks && W.fall < CFG.collapseBlocks) trig('collapse', { prio: 2, cd: 60, ttl: 15, incidentType: inc ? inc.type : null, inc, reaction: true });
+    W.fall = fq;
+    // ---- big damage in a short window
+    W.dmgT += dt;
+    if (Lg.damage - W.dmgBase >= CFG.damageBig) {
+      trig('damage', { prio: 1, cd: 75, ttl: 30, reaction: true, incidentType: inc ? inc.type : null, inc, vars: { dmg: fmtDmg(Lg.damage) } });
+      W.dmgBase = Lg.damage; W.dmgT = 0;
+    } else if (W.dmgT > CFG.damageWin) { W.dmgBase = Lg.damage; W.dmgT = 0; }
+    // ---- Hope bands (with an edge so jitter on a boundary doesn't chatter)
+    const h = Lg.hope, b0 = W.band;
+    let band = b0;
+    if (h >= (b0 + 1) * 20 + CFG.hopeEdge) band = Math.min(4, Math.floor((h - CFG.hopeEdge) / 20));
+    else if (h <= b0 * 20 - CFG.hopeEdge) band = Math.max(0, Math.floor((h + CFG.hopeEdge) / 20));
+    if (band !== b0) {
+      W.band = band;
+      const up = band > b0, k = up ? (band >= 4 ? 'hopeHigh' : 'hopeUp') : (band <= 0 ? 'hopeLow' : 'hopeDown');
+      trig(k, { prio: 1, cd: 50, cdKey: up ? 'hopeUp' : 'hopeDown', ttl: 45, reaction: true, incidentType: inc ? inc.type : null, inc });
+    }
+    // ---- first use of each power
+    const used = W.used;
+    const first = (k, on) => { if (on && !used[k]) { used[k] = true; trig('power_' + k, { prio: 1, ttl: 40, reaction: true, incidentType: inc ? inc.type : null, inc }); } };
+    first('heat', g.heatOn); first('freeze', P.freeze); first('xray', P.xray); first('hear', g.hearOn);
+    first('clap', P.clapT > 0); first('slow', P.slow); first('grab', !!P.hold); first('punch', P.punchT > 0 && !(P.clapT > 0));
+    // ---- speed records
+    const mach = machOf(P);
+    const mark = mach >= 10 ? 10 : mach >= 3 ? 3 : mach >= 1 ? 1 : 0;
+    if (mark > W.machMark) {
+      W.machT += dt;
+      if (W.machT >= CFG.machHold) {
+        W.machMark = mark; W.machT = 0;
+        trig('mach' + mark, { prio: 1, ttl: 35, reaction: true, incidentType: inc ? inc.type : null, inc });
+      }
+    } else W.machT = 0;
+    if (mach >= 1 && W.planet && P.pos.y < 420) {
+      const dx = P.pos.x - W.planet.x, dz = P.pos.z - W.planet.z;
+      if (dx * dx + dz * dz < 350 * 350) trig('machPlanet', { prio: 1, cd: 120, ttl: 30, reaction: true, incidentType: inc ? inc.type : null, inc });
+    }
+    // ---- help missions: the word gets round (missions.js owns the street dialogue)
+    const M = window.SM_MISSIONS;
+    if (M && M.stats) {
+      if (M.stats.success > W.ms) { W.ms = M.stats.success; if (Math.random() < 0.6) trig('missionWin', { prio: 1, cd: 40, delay: 4, ttl: 40 }); }
+      if (M.stats.fail > W.mf) { W.mf = M.stats.fail; if (Math.random() < 0.5) trig('missionFail', { prio: 1, cd: 60, delay: 4, ttl: 40 }); }
+    }
+    // ---- set pieces registered through another API (__game.setpieces), if present
+    const sp = g.setpieces;
+    if (sp) {
+      const list = Array.isArray(sp) ? sp : (Array.isArray(sp.active) ? sp.active : (sp.active ? [sp.active] : (sp.current ? [sp.current] : null)));
+      if (list) for (const s of list) {
+        if (!s || typeof s !== 'object' || W.sp.has(s) || s === inc) continue;
+        if (s.active === false || s.done) continue;
+        W.sp.add(s);
+        if (!inc || s.type !== inc.type) onIncStart(g, { type: s.type || s.kind || 'other', where: s.where || s.name, title: s.title || '' }, true);
+      }
+    }
+    // ---- landings, read from the shared event log (feel.js emits land {tier})
+    const E = g.events;
+    if (Array.isArray(E) && E.length) {
+      for (let i = E.length - 1; i >= 0; i--) {
+        const e = E[i]; if (e.t <= W.evT) break;
+        if (e.type !== 'land') continue;
+        if (e.tier === 'hero' && !W.used.landHero) { W.used.landHero = true; trig('landHero', { prio: 1, ttl: 30, reaction: true, incidentType: inc ? inc.type : null, inc }); }
+        else if (e.tier === 'crater') trig('landCrater', { prio: 1, cd: 90, ttl: 30, reaction: true, incidentType: inc ? inc.type : null, inc });
+      }
+      W.evT = E[E.length - 1].t;
+    }
+    // ---- quiet city: hello, then flavour
+    if (!W.hello && clock > CFG.hello && !inc) { W.hello = true; trig('hello', { prio: 1, ttl: 60 }); }
+    if (!inc && !cur && !queue.length && clock - lastEnd > idleNext && clock - lastStart > nextGap) {
+      const r = Math.random();
+      const k = r < 0.36 ? 'idle_dispatch' : r < 0.6 ? 'idle_lois' : r < 0.8 ? 'idle_jimmy' : 'idle_perry';
+      trig(k, { prio: 1, ttl: 10 });
+      idleNext = R(CFG.idle[0], CFG.idle[1]);
+    }
+  }
+
+  // ================================================================== plugin
+  let errOnce = false;
+  function update(wdt) {
+    const g = G(); if (!g || !g.started) return;
+    if (!ready) { ready = true; if (!g.comms) try { g.comms = API; } catch (_) { /* read-only */ } }
+    const dt = Math.min(0.1, wdt / (g.P && g.P.slow ? 0.12 : 1));
+    clock += dt;
+    try {
+      detect(g, dt);
+      if (cur && clock >= cur.tEnd) hangUp(false);
+      pump(g);
+      updateCard(dt);
+      // mute (K) and the radio bus
+      if (bus && g.AU) { const v = g.AU.muted ? 0 : CFG.vol; if (bus.gain.value !== v) bus.gain.value = v; }
+    } catch (e) { if (!errOnce) { errOnce = true; console.warn('[comms]', e); } }
+  }
+
+  // ================================================================== API (window.SM_COMMS, also __game.comms)
+  const API = {
+    cfg: CFG, speakers: SPK, lines: LINES, stats,
+    say, queue, history,
+    get current() { return cur ? { who: cur.who, text: cur.text, trigger: cur.trigger, prio: cur.prio, incidentType: cur.incidentType, t0: cur.t0, tEnd: cur.tEnd } : null; },
+    get last() { return history.length ? history[history.length - 1] : null; },
+    get speaking() { return !!cur && clock >= cur.tSpeak && clock < cur.tSpeak + cur.plan.dur; },
+    get clock() { return clock; },
+    get voice() { return S.voice; }, set voice(v) { S.voice = !!v; },
+    get tts() { return S.tts; }, set tts(v) { S.tts = !!v; },
+    trigger(name, o) { return trig(name, Object.assign({ prio: 2, reaction: true, ttl: 30 }, o || {})); },
+    hangUp() { hangUp(true); },
+    clear() { queue.length = 0; if (cur) hangUp(true); },
+    // card state for tests: '' (hidden), 'on ring', 'on', 'out'
+    cardState() { return UI.state; },
+    cardVisible() { if (!UI.el) return false; const cs = getComputedStyle(UI.el); return cs.visibility === 'visible' && cs.display !== 'none' && /\bon\b/.test(UI.el.className) && !!UI.el.offsetWidth; },
+    cardText() { return UI.el ? { name: UI.name.textContent, text: UI.said.textContent + UI.rest.textContent, said: UI.said.textContent } : null; },
+    lineCount() { let n = 0; for (const k in LINES) n += LINES[k].length; return n; },
+    nextGap() { return nextGap; }
+  };
+  window.SM_COMMS = API;
+
+  window.SM_PLUGINS = window.SM_PLUGINS || [];
+  window.SM_PLUGINS.push(function comms(c) {
+    ctx = c; THREE = c.THREE;
+    buildDOM();
+    return { update };
+  });
 })();
 
 </script>
@@ -7547,6 +9920,7 @@ function knock(p, vel, injure) {
   if (p.mode === 'trapped') p.danger = true;
   p.mode = 'phys'; p.vel.copy(vel); p.sleeping = false; p.sleepT = 0; p.onGround = false;
   p.angVel.set(R(-3, 3), R(-1, 1), R(-3, 3)); p.quat.setFromAxisAngle(UP, p.face);
+  if (!p.thug && vel.lengthSq() > 64) p.danger = true;   // thrown hard: catch them before they land
   if (injure) injurePerson(p);
 }
 function injurePerson(p) {
@@ -7604,7 +9978,9 @@ const P = {
   pos: new V3(-90, 45, 150), vel: new V3(), flying: true, grounded: false, quat: new Q4(),
   hold: null, holdRel: new Q4(), charge: 0, charging: false, punchT: 0, heat: false, freeze: false,
   xray: false, hear: false, slow: false, solar: 1, boomed: false, clapCD: 0, walkPhase: 0, hitT: 0,
-  landT: 0, bank: 0, lastYaw: 0, combatT: 0, kryp: 0, runK: 0, runTopT: 0
+  landT: 0, bank: 0, lastYaw: 0, combatT: 0, kryp: 0, runK: 0, runTopT: 0,
+  // feel: charged takeoff and landing tiers
+  jumpCharging: false, jumpT: 0, jumpCharge: 0, spaceWas: false, airT: 0, flareT: 0, landTier: '', landDur: 0.6, poseDrop: 0, poseLean: 0
 };
 let yaw = -0.54, pitch = -0.08;
 const hero = (() => {
@@ -7855,8 +10231,11 @@ function hopeHit(v) {
   if (ledger.time - hopeWinT > 5) { hopeWinT = ledger.time; hopeWinLoss = 0; }
   const take = Math.max(0, Math.min(v, 10 - hopeWinLoss)); hopeWinLoss += take; hopeAdd(-take);
 }
+const SAVE_HOPE_CAP = 10;   // T5: per-person save Hope is capped per incident; set pieces pay out through the medal
 function addSave(n, pos, why) {
-  ledger.saves += n; hopeAdd(2 * n); SFX.good();
+  let h = 2 * n;
+  if (currentInc) { const got = currentInc.saveHope || 0; h = Math.max(0, Math.min(h, SAVE_HOPE_CAP - got)); currentInc.saveHope = got + h; }
+  ledger.saves += n; hopeAdd(h); SFX.good();
   if (pos) celebrate(pos, 45);
   toast((why || 'Saved') + (n > 1 ? ` ×${n}` : ''), 'good');
   checkUnlocks();
@@ -8028,7 +10407,7 @@ function structuralCheck(b) {
   if (fell > 12) {
     blockCenter(b.start + ((b.ny >> 1) * b.nz + (b.nz >> 1)) * b.nx + (b.nx >> 1), T1);
     toast(fell > 120 ? `${b.name}: the tower is coming down!` : `${b.name}: floors collapsing`, 'alert');
-    SFX.crumble(T1, 2); addShake(Math.min(2, fell / 80) / (1 + camera.position.distanceTo(T1) / 150));
+    SFX.crumble(T1, 2); shakeAt(Math.min(0.7, 0.15 + fell / 200), T1, 400);
     scare(T1, 90, 10); hopeHit(Math.min(8, fell / 40));
     if (fell > 30) { // a billowing dust cloud rolls out through the streets
       const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, n = Math.min(260, 60 + fell / 3);
@@ -8074,7 +10453,7 @@ function explode(pos, energy, opts) {
   ring(T1.set(c.x, Math.max(c.y, 0.3), c.z), UP, 1, Rr * 2.2, 0.7, new THREE.Color(2.5, 1.6, 0.9), 0.7);
   if (c.y < 3 && !inBay(c.z)) addDecal('crater', c.x, 0, c.z, Rr * 0.5);
   SFX.boom(c, Math.min(2, Rr / 12));
-  addShake(Math.min(2.5, Rr / 8) / (1 + camera.position.distanceTo(c) / 120));
+  shakeAt(Math.min(0.8, 0.2 + Rr / 20), c, 150 + Rr * 6);
   const R2 = Rr * 2;
   for (const b of bodies) {
     if (b === opts.src || b.dead || b.held) continue;
@@ -8347,7 +10726,7 @@ function onImpact(b, sp, kind) {
     const n = Math.min(14, sp * 0.5) | 0;
     for (let k = 0; k < n; k++) FX.dust(p.x + R(-1, 1) * b.half.x, p.y - b.half.y * 0.6, p.z + R(-1, 1) * b.half.z, R(-3, 3), R(0, 2), R(-3, 3), Math.min(1.5, b.rad / 1.5));
     if (b.kind === 'debris') SFX.crumble(p, Math.min(1.5, b.mass / 30000 * sp / 15)); else if (b.kind === 'car') SFX.punch(p, 0.5);
-    if (b.mass > 20000 && sp > 12) addShake(Math.min(1, b.mass / 60000 * sp / 30) / (1 + camera.position.distanceTo(p) / 60));
+    if (b.mass > 20000 && sp > 12) shakeAt(Math.min(0.4, b.mass / 60000 * sp / 60), p, 90);
   }
   if (b.kind === 'debris' && kind === 'ground' && b.mass > 15000 && sp > 13 && simT - lastCrackT > 0.15 && !inBay(p.z)) {
     lastCrackT = simT; addDecal('crater', p.x, 0, p.z, Math.min(4.5, Math.cbrt(b.mass) / 14 * sp / 20));
@@ -8498,11 +10877,15 @@ function updateBullets(dt) {
 // ============================================================ emergencies (one at a time)
 let currentInc = null, nextIncT = 25, incCount = 0;
 const INC_TYPES = ['heli', 'meteor', 'fire', 'robbery'];
+// module-registered incident types (js/setpieces.js): { start(forced) -> inc, want(incCount, time) -> bool }
+const INC_REG = window.SM_INCIDENTS = window.SM_INCIDENTS || {};
 function startIncident(forced) {
   if (currentInc) endIncident(false, 'Emergency abandoned.');
-  const type = forced ? String(forced).replace('kryptonite', 'meteor') : INC_TYPES[incCount % INC_TYPES.length]; incCount++;
+  let type = forced ? String(forced).replace('kryptonite', 'meteor') : INC_TYPES[incCount % INC_TYPES.length]; incCount++;
+  if (!forced) for (const k in INC_REG) if (INC_REG[k].want && INC_REG[k].want(incCount, ledger.time)) { type = k; break; }
   let inc = null;
-  if (type === 'fire') inc = startFire();
+  if (INC_REG[type]) inc = INC_REG[type].start(forced);
+  else if (type === 'fire') inc = startFire();
   else if (type === 'heli') inc = startHeli();
   else if (type === 'robbery') inc = startRobbery();
   else inc = startMeteor(forced === 'kryptonite' || (!forced && incCount > 4 && rnd() < 0.6));
@@ -8543,6 +10926,7 @@ function updateIncident(dt) {
   const inc = currentInc; inc.age += dt;
   inc.update(dt);
   if (currentInc === inc && inc.age > inc.limit) inc.timeout();
+  if (currentInc === inc && inc.age > inc.limit + 20) endIncident(false, 'Out of time.'); // hard stop: every incident ends
 }
 // --- fire with trapped people
 function startFire() {
@@ -8614,7 +10998,7 @@ function startHeli() {
         if (rnd() < 0.8) FX.smoke(h.pos.x, h.pos.y + 1, h.pos.z, 1.2, 0.04);
         if (rnd() < 0.3) FX.fire(h.pos.x - 1, h.pos.y + 1, h.pos.z, 0.6);
       }
-      if (h.landed) { addSave(3, h.pos, 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter down safely'); }
+      if (h.landed) { addSave(3, h.pos, h.occHurt ? 'Pilot, reporter and camera operator alive, but hurt' : 'Pilot, reporter and camera operator safe'); endIncident(true, 'Helicopter down safely'); }
       else if (h.crashed) { ledger.lost += 3; this.lost = 3; endIncident(false, 'The helicopter crashed.'); }
     },
     timeout() { if (!h.landed && !h.crashed) { if (h.phase === 'trouble') { h.phase = 'falling'; h.noGrav = false; } } },
@@ -8780,7 +11164,8 @@ function onKey(code) {
   if (code === 'KeyK') { AU.muted = !AU.muted; if (AU.master) AU.master.gain.value = AU.muted ? 0 : 0.75; toast(AU.muted ? 'Sound off' : 'Sound on'); }
   if (code === 'KeyE') grabOrRelease();
   if (code === 'KeyF') { P.flying = !P.flying; if (P.flying) P.vel.y = Math.max(P.vel.y, 6); toast(P.flying ? 'Flying' : 'Walking'); }
-  if (code === 'Space' && !P.flying) { if (P.grounded) { P.vel.y = 38; P.grounded = false; FX.dust(P.pos.x, P.pos.y - 0.9, P.pos.z, 0, 1, 0, 2); SFX.whoosh(); } else P.flying = true; }
+  // Space on the ground: hold to crouch and charge, release to launch (see updatePlayer); in the air it flies
+  if (code === 'Space' && !P.flying && !P.grounded && !P.jumpCharging) P.flying = true;
   if (code === 'KeyX') { P.xray = !P.xray; setXray(P.xray); }
   if (code === 'KeyH') { P.hear = !P.hear; hearDownT = performance.now(); if (!P.hear) toast('Hearing off'); }
   if (code === 'Digit1' || code === 'Numpad1') setPower(1);
@@ -8865,7 +11250,8 @@ function punch(power) {
     const at = T1.copy(t.pos).lerp(o, 0.4);
     ring(at, d, 0.3, 3 + power * 2, 0.35, null, 0.9);
     for (let k = 0; k < 12; k++) FX.spark(at.x, at.y, at.z, d.x * 10 + R(-6, 6), d.y * 10 + R(-6, 6), d.z * 10 + R(-6, 6));
-    addShake(0.25 * power); hitStop(0.05 * power);
+    // Arkham impact: 20 + 20 per power ms (40-100), 0.25 -> 1 time-scale ramp scaled by the charge
+    addShake(0.15 + 0.1 * (power - 1)); hitStop(Math.min(100, 20 + 20 * power) / 1000, 0.15 * (power - 1) / 3); FEEL.kick(d.x, d.y, d.z, 0.1 + 0.07 * power);
     if (t.kind === 'person') {
       if (t.thug) { knock(t, T2.copy(d).multiplyScalar(7).setY(3), false); t.mode = 'phys'; apprehend(t, 'Pulled punch'); SFX.punch(at, 0.6); }
       else toast('Superman doesn’t hit civilians. Press E to carry them.', '');
@@ -8892,7 +11278,7 @@ function punch(power) {
       breakBlock(g, T3.copy(d).multiplyScalar(30 * Math.sqrt(power) * (1 - dist / (rad + 1)) + 6).add(T4.set(R(-3, 3), R(0, 4), R(-3, 3))), 4, 'punch');
     });
     for (let k = 0; k < 14; k++) FX.dust(c.x, c.y, c.z, d.x * 8 + R(-4, 4), R(-1, 4), d.z * 8 + R(-4, 4), 1.4);
-    SFX.punch(c, 1.2); SFX.crumble(c); addShake(0.4 * power); hitStop(0.06 * power);
+    SFX.punch(c, 1.2); SFX.crumble(c); addShake(0.2 + 0.1 * (power - 1)); hitStop(Math.min(100, 20 + 20 * power) / 1000, 0.15 * (power - 1) / 3); FEEL.kick(d.x, d.y, d.z, 0.1 + 0.05 * power);
     if (budget === E) { for (let k = 0; k < 10; k++) FX.spark(c.x, c.y, c.z, R(-8, 8), R(-8, 8), R(-8, 8)); toast('Too solid for that. Charge the punch.', ''); }
     return;
   }
@@ -8919,7 +11305,7 @@ function clap() {
   if (P.clapCD > 0) return; P.clapCD = 1.0; P.punchT = 0.25; P.clapT = 0.25;
   const o = T5.copy(P.pos).add(T6.set(0, 0.3, 0)).clone(), d = aimDir(new V3());
   const k = pw('clap'), reach = 0.6 + 0.4 * k; // force scales fully, reach more gently
-  SFX.clap(); addShake(0.5 * k); hitStop(0.04);
+  SFX.clap(); addShake(0.3 * k); hitStop(0.04);
   ring(T1.copy(o).addScaledVector(d, 2), d, 0.5, 30 * reach, 0.6, new THREE.Color(2.2, 2.3, 2.6), 0.7);
   for (let k = 0; k < 60; k++) { const v = T1.copy(d).multiplyScalar(R(30, 60)).add(T2.set(R(-12, 12), R(-12, 12), R(-12, 12))); FX.vapor(o.x, o.y, o.z, v.x, v.y, v.z); }
   coneImpulse(o, d, 70 * reach, 0.6, 45 * k);
@@ -8954,7 +11340,7 @@ function grabOrRelease() {
       if (liveDebrisCount >= LIVE_CAP) { toast('Too much falling already. Wait a moment.', ''); return; }
       const before = liveDebrisCount; breakBlock(g, T1.set(0, 0, 0), 1, 'rip');
       if (liveDebrisCount > before) t = bodies[bodies.length - 1];
-      SFX.crumble(hit.point); addShake(0.3);
+      SFX.crumble(hit.point); addShake(0.25);
     }
   }
   if (!t) {
@@ -8962,8 +11348,14 @@ function grabOrRelease() {
     return;
   }
   if (t.mass > pw('grab')) { tooHeavy(t.mass); return; }
+  grabBody(t);
+}
+// take hold of a body; the catch rule (js/catch.js) judges the velocity change first
+function grabBody(t) {
+  if (P.hold || t.held) return false;
+  if (t.kind === 'person' && t.mode === 'trapped') return false;
+  if (window.SM_CATCH) SM_CATCH.onGrab(t);
   if (t.kind === 'person') {
-    if (t.mode === 'trapped') return;
     if (t.thug && !t.cuffed) apprehend(t, 'Disarmed');
     t.mode = 'held'; t.prevDanger = t.danger || t.pos.y > 4 || t.injured;
   } else if (t.kind === 'car') disturbCar(t);
@@ -8974,6 +11366,7 @@ function grabOrRelease() {
   if (t.kind === 'person') P.holdRel.setFromAxisAngle(T1.set(1, 0, 0), -Math.PI / 2);
   P.hold = t; SFX.whoosh();
   if (t.mass > 20000) toast(`${Math.round(t.mass / 1000)} tonnes. Easy.`, '');
+  return true;
 }
 function tooHeavy(kg) { toast(`${Math.round(kg / 1000)} tonnes is too heavy at power ${POWER}. Press 3 for full strength.`, ''); }
 function heldPos(h, o) {
@@ -9005,7 +11398,7 @@ function throwHeld(power) {
   const v = Math.min(170 * Math.sqrt(pw('punch')), Math.sqrt(2 * 3e7 * power * pw('punch') * (1 - kryptoniteNear() * 0.8) / h.mass));
   releaseHeld(T1.copy(P.vel).addScaledVector(d, v));
   h.angVel.set(R(-1, 1), R(-1, 1), R(-1, 1)).multiplyScalar(2); h.thrown = true;
-  P.punchT = 0.3; SFX.whoosh(); addShake(0.2 * power);
+  P.punchT = 0.3; SFX.whoosh(); addShake(Math.min(0.4, 0.1 * power));
   if (h.kind === 'meteor' && d.y > 0.3) toast('Up and away…', '');
 }
 
@@ -9121,10 +11514,23 @@ function setXray(on) {
 }
 
 // ============================================================ player
-const camState = { off: new V3(0, 2, 8), fov: 70, shake: 0, roll: 0 };
-let hitStopT = 0;
-function addShake(a) { camState.shake = Math.min(2.5, camState.shake + a); }
-function hitStop(t) { hitStopT = Math.max(hitStopT, t); }
+// feel (js/feel.js): trauma shake, hit-stop with a time-scale ramp, camera springs. See dream-features §3.
+const FEEL = window.SM_FEEL;
+const camState = {
+  off: new V3(0, 2, 8), fov: 70, roll: 0, init: false,
+  rel: new V3(), relV: new V3(), lastVel: new V3(), dist: { x: 6.8, v: 0 }, up: { x: 1.5, v: 0 }, side: { x: 0.95, v: 0 },
+  la: new V3(), laV: new V3(), boostT: 0, fovKick: { x: 0, v: 0 }, heroFrac: 0, heroH: 1.95, maxDist: 0, minDist: 0, hold: false
+};
+// add screen-shake trauma (0..1); shakeAt falls off with distance from the camera
+function addShake(a) { FEEL.add(a); }
+function shakeAt(a, pos, range) { FEEL.addAt(a, camera.position.distanceTo(pos), range); }
+// freeze the sim for t seconds (150 ms ceiling); `ramp` eases the time scale 0.25 -> 1 afterwards
+function hitStop(t, ramp) { FEEL.hitStop(t, ramp); }
+// a brief FOV kick in degrees, sprung back (takeoff, boost onset); not rate-limited
+function fovKick(deg) { camState.fovKick.v += deg * 2 * Math.LN2 / 0.12 * Math.E; }
+// test-hook contract (dream-features §2): an append-only event log
+const events = [];
+function emit(type, data) { const e = Object.assign({ t: +simT.toFixed(3), type }, data); events.push(e); if (events.length > 4000) events.splice(0, 1000); return e; }
 function flashHit(a) { const el = $('fx-hit'); el.style.opacity = a; setTimeout(() => { el.style.opacity = 0; }, 120); }
 let smashedThisStep = false, lastSmashFx = 0;
 function playerCollide(prevSpeed) {
@@ -9158,7 +11564,7 @@ function playerCollide(prevSpeed) {
       const vn = P.vel.dot(n);
       if (vn < 0) {
         if (sp > 26 && t === T_COL) {
-          P.vel.addScaledVector(n, -vn * 1.6); P.vel.multiplyScalar(0.7); addShake(0.6); SFX.punch(p, 1);
+          P.vel.addScaledVector(n, -vn * 1.6); P.vel.multiplyScalar(0.7); addShake(0.3); SFX.punch(p, 1);
           for (let k = 0; k < 16; k++) FX.spark(p.x, p.y, p.z, n.x * 10 + R(-8, 8), R(-4, 8), n.z * 10 + R(-8, 8));
           setBlockHeat(g, Math.min(1, heat[g] + 0.2)); hotSet.add(g);
         } else P.vel.addScaledVector(n, -vn);
@@ -9173,7 +11579,7 @@ function playerCollide(prevSpeed) {
     });
     if (simT - lastSmashFx > 0.08) {
       lastSmashFx = simT;
-      addShake(0.35); hitStop(0.012); SFX.punch(p, 1); SFX.crumble(p, 1.2);
+      addShake(0.25); hitStop(0.012); SFX.punch(p, 1); SFX.crumble(p, 1.2);
       for (let k = 0; k < 24; k++) FX.dust(p.x, p.y, p.z, P.vel.x * 0.35 + R(-8, 8), P.vel.y * 0.35 + R(-4, 8), P.vel.z * 0.35 + R(-8, 8), 1.6);
       for (let k = 0; k < 30; k++) FX.glass(p.x, p.y, p.z, P.vel.x * 0.5 + R(-10, 10), R(-4, 10), P.vel.z * 0.5 + R(-10, 10));
     }
@@ -9195,10 +11601,60 @@ function playerCollide(prevSpeed) {
   if (p.y - 0.97 < gy) {
     const vy = P.vel.y;
     p.y = gy + 0.97;
-    if (vy < -30 && (!P.flying || vy < -45)) superLanding(-vy);
+    // landing tiers (soft / hero / crater); a soft touchdown only counts after a real drop on foot
+    if (-vy >= FEEL.SOFT_MAX || (!P.flying && -vy > SOFT_LAND_V && P.airT > 0.25)) landing(-vy);
     if (vy < 0) P.vel.y = 0;
     P.grounded = true;
   }
+}
+// ---- launch and land (dream-features #1): charged takeoff and three landing tiers by impact speed
+const SOFT_LAND_V = 2, DUST_C = new THREE.Color(1.6, 1.5, 1.4);
+function takeoff(c) {
+  const p = P.pos, gy = groundY(p.x, p.z), street = gy >= 0 && p.y - 0.97 - gy < 0.6;
+  P.vel.y = lerp(38, 90, c); P.grounded = false; P.airT = 0;
+  SFX.whoosh(); if (c > 0.3) SFX.boom(p, 0.25 + 0.4 * c);
+  const n = 6 + (30 * c) | 0;
+  for (let k = 0; k < n; k++) { const a = R(0, 6.28), s = R(3, 8) + 14 * c; FX.dust(p.x + Math.cos(a), p.y - 0.85, p.z + Math.sin(a), Math.cos(a) * s, R(0, 2) + 3 * c, Math.sin(a) * s, 1 + 0.6 * c); }
+  if (c > 0.3) ring(T1.set(p.x, p.y - 0.8, p.z), UP, 0.5, 3 + 9 * c, 0.5, DUST_C, 0.3 + 0.3 * c);
+  // the downblast pushes bystanders back and nudges cars
+  const reach = 2 + 8 * c;
+  if (c > 0.3) for (const pp of people) {
+    if (pp.mode !== 'free' && pp.mode !== 'cheer') continue; const d = pp.pos.distanceTo(p); if (d > reach) continue;
+    knock(pp, T2.copy(pp.pos).sub(p).setY(0).normalize().multiplyScalar(2 + 3 * c * (1 - d / reach)).setY(1 + c), false);
+  }
+  if (c > 0.6) for (const b of bodies) {
+    if (b.dead || b.held || b.kind !== 'car') continue; const d = b.pos.distanceTo(p); if (d > reach) continue;
+    b.vel.add(T2.copy(b.pos).sub(p).setY(0).normalize().multiplyScalar(4 * c * (1 - d / reach))); wake(b); disturbCar(b);
+  }
+  // full charge cracks the pavement: a small crater decal and $5K
+  if (c > 0.7 && street && !inBay(p.z)) { addDecal('crater', p.x, gy, p.z, 1.2); ledger.damage += 5000; }
+  scare(p, 25, 3);
+  addShake(0.08 + 0.3 * c); fovKick(8 * c);
+  emit('takeoff', { charge: +c.toFixed(3), v: +P.vel.y.toFixed(1) });
+}
+function landing(v) {
+  const p = P.pos, gy = groundY(p.x, p.z), braked = P.flareT > 0;
+  if (gy < 0) { // into the bay
+    if (v >= FEEL.SOFT_MAX) { for (let k = 0; k < 80; k++) FX.water(p.x, WATER_Y, p.z, R(-12, 12), R(6, 26), R(-12, 12)); SFX.splash(p); }
+    emit('land', { tier: 'water', v: +v.toFixed(1) }); return;
+  }
+  const tier = FEEL.landTier(v, braked);
+  P.landTier = tier; P.airT = 0;
+  if (tier === 'soft') {
+    for (let k = 0; k < 6; k++) { const a = k / 6 * 6.28; FX.dust(p.x + Math.cos(a) * 0.4, gy + 0.15, p.z + Math.sin(a) * 0.4, Math.cos(a) * 2.5, R(0.2, 1), Math.sin(a) * 2.5, 0.9); }
+    P.landT = P.landDur = 0.3; FEEL.kick(0, -1, 0, 0.2);
+  } else if (tier === 'hero') {
+    // the hero landing: one knee, a fist on the pavement, a ring of dust; no decal, no bill
+    ring(T1.set(p.x, gy + 0.3, p.z), UP, 0.8, 5 + v * 0.12, 0.55, DUST_C, 0.45);
+    for (let k = 0; k < 28; k++) { const a = R(0, 6.28), s = R(5, 9) + v * 0.15; FX.dust(p.x + Math.cos(a) * 0.8, gy + 0.25, p.z + Math.sin(a) * 0.8, Math.cos(a) * s, R(0, 1.5), Math.sin(a) * s, 1.2); }
+    SFX.punch(p, 0.7); addShake(0.12 + 0.12 * (v - FEEL.SOFT_MAX) / 30); FEEL.kick(0, -1, 0, 0.4);
+    P.landT = P.landDur = 0.6;
+  } else {
+    superLanding(v);
+    FEEL.kick(0, -1, 0, 0.7); P.landT = P.landDur = 0.8;
+  }
+  if (tier !== 'soft') { P.vel.x *= 0.15; P.vel.z *= 0.15; P.flying = false; }
+  emit('land', { tier, v: +v.toFixed(1), braked });
 }
 function superLanding(v) {
   const p = P.pos, gy = groundY(p.x, p.z);
@@ -9207,7 +11663,7 @@ function superLanding(v) {
   addDecal('crater', p.x, 0, p.z, r * 0.5);
   ring(T1.set(p.x, 0.4, p.z), UP, 1, r * 3, 0.6, new THREE.Color(1.6, 1.5, 1.4), 0.6);
   for (let k = 0; k < 50; k++) { const a = R(0, 6.28), s = R(8, 22); FX.dust(p.x + Math.cos(a) * 1.5, 0.3, p.z + Math.sin(a) * 1.5, Math.cos(a) * s, R(0, 3), Math.sin(a) * s, 1.5); }
-  SFX.boom(p, Math.min(1.5, v / 50)); addShake(Math.min(2, v / 40)); hitStop(0.08); P.landT = 0.6;
+  SFX.boom(p, Math.min(1.5, v / 50)); addShake(clamp(0.3 + (v - 45) / 120, 0.3, 0.7)); hitStop(0.08); P.landT = P.landDur = 0.8; P.landTier = 'crater';
   ledger.damage += 25000;
   for (const b of bodies) {
     if (b.dead || b.held) continue; const d = b.pos.distanceTo(p); if (d > r * 3) continue;
@@ -9243,7 +11699,7 @@ function groundRun(dt, wasGrounded) {
   if (!water && rnd() < hs / 300) FX.paper(p.x + R(-3, 3), 0.3, p.z + R(-3, 3), dir.x * hs * 0.2 + R(-4, 4), R(3, 9), dir.z * hs * 0.2 + R(-4, 4));
   // breaking away at top speed: a whip-crack and a ring of dust (the true sonic boom needs 340 m/s)
   if (hs > top * 0.92 && !P.runTopT) {
-    P.runTopT = 1; SFX.crack(0.4 + 0.25 * POWER); addShake(0.25 * POWER);
+    P.runTopT = 1; SFX.crack(0.4 + 0.25 * POWER); addShake(0.1 * POWER);
     ring(T2.set(p.x, 0.3, p.z), UP, 1, 6 + 6 * POWER, 0.45, new THREE.Color(1.5, 1.45, 1.35), 0.5);
     for (let i = 0; i < 18 * POWER; i++) { const a = R(0, 6.28), s = R(6, 14) * k + 4; FX.dust(p.x, 0.3, p.z, Math.cos(a) * s, R(0, 2), Math.sin(a) * s, 1.2); }
   }
@@ -9278,7 +11734,8 @@ function updatePlayer(dt) {
   const right = new V3(Math.cos(yaw), 0, -Math.sin(yaw));
   let mx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0) + pad.lx;
   let mz = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0) - pad.ly;
-  const my = (keys.has('Space') || pad.up ? 1 : 0) - (keys.has('KeyC') || pad.down ? 1 : 0);
+  const spaceDown = keys.has('Space') || !!pad.up;
+  const my = (spaceDown ? 1 : 0) - (keys.has('KeyC') || pad.down ? 1 : 0);
   if (keys.has('ArrowLeft')) yaw += dt * 2; if (keys.has('ArrowRight')) yaw -= dt * 2;
   if (keys.has('ArrowUp')) pitch = clamp(pitch + dt * 1.5, -1.45, 1.45); if (keys.has('ArrowDown')) pitch = clamp(pitch - dt * 1.5, -1.45, 1.45);
   if (pad.on) { yaw -= pad.rx * dt * 2.6; pitch = clamp(pitch - pad.ry * dt * 2, -1.45, 1.45); }
@@ -9306,9 +11763,19 @@ function updatePlayer(dt) {
       }
       allowed = Math.max(vmax, sp - Math.max(400, sp * 0.8) * dt); // bleed off quickly, not instantly
       const s2 = P.vel.length(); if (s2 > allowed) P.vel.multiplyScalar(allowed / s2);
-    } else P.vel.multiplyScalar(Math.exp(-2.4 * dt));
+    } else if (!(P.hold && window.SM_CATCH && SM_CATCH.coast(dt))) P.vel.multiplyScalar(Math.exp(-2.4 * dt));
     if (P.kryp > 0.2) P.vel.y -= G * P.kryp * dt * 2;
   } else {
+    // charged takeoff: hold Space on the ground to crouch and charge (0.15-0.6 s), release to launch
+    if (spaceDown && !P.spaceWas && P.grounded && Math.abs(P.vel.y) < 2) { P.jumpCharging = true; P.jumpT = 0; P.jumpCharge = 0; }
+    if (P.jumpCharging && P.airT > 0.1) { P.jumpCharging = false; P.jumpCharge = 0; } // walked off an edge: no launch from mid-air
+    if (P.jumpCharging) {
+      if (spaceDown) { P.jumpT += dt; P.jumpCharge = clamp((P.jumpT - 0.15) / 0.45, 0, 1); const k = 1 - 0.85 * P.jumpCharge; mx *= k; mz *= k; }
+      else { const c = P.jumpCharge; P.jumpCharging = false; P.jumpCharge = 0; takeoff(c); }
+    } else if (spaceDown && P.vel.y < -4 && P.pos.y - 0.97 - Math.max(0, groundY(P.pos.x, P.pos.z)) < 20) {
+      // landing flare: Space held while dropping within 20 m of the street brakes at 60 m/s^2
+      P.vel.y = Math.min(-4, P.vel.y + 60 * dt); P.flareT = 0.2;
+    }
     P.vel.y -= G * dt;
     const fH = T1.set(-Math.sin(yaw), 0, -Math.cos(yaw));
     const wish = T2.copy(fH).multiplyScalar(mz).addScaledVector(right, mx); if (wish.lengthSq() > 1) wish.normalize();
@@ -9323,7 +11790,8 @@ function updatePlayer(dt) {
     P.walkPhase += dt * Math.min(hs * 1.7, 12 + hs * 0.1);
     P.runK = lerp(P.runK, boost && wish.lengthSq() > 0.01 ? clamp((hs - 10) / (runTop * 0.5), 0, 1) : 0, 1 - Math.exp(-6 * dt));
   }
-  if (P.flying) P.runK = 0;
+  if (P.flying) { P.runK = 0; P.jumpCharging = false; P.jumpCharge = 0; }
+  P.spaceWas = spaceDown;
   // integrate with sub-steps so fast flight sweeps through blocks instead of tunnelling
   const prevSpeed = P.vel.length(), wasGrounded = P.grounded;
   P.grounded = false;
@@ -9341,7 +11809,7 @@ function updatePlayer(dt) {
     const d = b.pos.distanceTo(P.pos), rr = b.rad + 0.55; if (d >= rr) continue;
     const n = T1.copy(b.pos).sub(P.pos).divideScalar(d || 1);
     const vr = T2.copy(P.vel).sub(b.vel).dot(n);
-    if (vr > 0) { b.vel.addScaledVector(n, vr * 1.3); wake(b); if (b.kind === 'car') { disturbCar(b); damageCar(b, vr); } if (vr > 15) { SFX.punch(b.pos, 0.6); addShake(0.2); } }
+    if (vr > 0) { b.vel.addScaledVector(n, vr * 1.3); wake(b); if (b.kind === 'car') { disturbCar(b); damageCar(b, vr); } if (vr > 15) { SFX.punch(b.pos, 0.6); addShake(0.15); } }
     if (b.mass > 50000 && ps < 20) P.pos.addScaledVector(n, -(rr - d)); else b.pos.addScaledVector(n, rr - d);
   }
   // sonic boom, vapour cone, re-entry plasma
@@ -9384,6 +11852,7 @@ function updatePlayer(dt) {
   if (P.hitT > 0) P.hitT -= dt;
   if (P.punchT > 0) P.punchT -= dt;
   if (P.landT > 0) P.landT -= dt;
+  P.airT = P.grounded ? 0 : P.airT + dt; if (P.flareT > 0) P.flareT -= dt;
   if (P.combatT > 0) P.combatT -= dt; else ledger.combo = 0;
   if (alt > 100000 && !P.karman) { P.karman = true; toast('Above the Kármán line. Welcome to space.', 'good'); }
   // the held object rides with him
@@ -9392,6 +11861,7 @@ function updatePlayer(dt) {
     if (h.dead || (h.kind === 'person' && h.mode !== 'held')) P.hold = null;
     else {
       heldPos(h, h.pos); h.vel.copy(P.vel); h.quat.copy(P.quat).multiply(P.holdRel);
+      if (window.SM_CATCH) SM_CATCH.carry(h, dt);   // g on the carried body (js/catch.js)
       if (ps > 14 && h.kind !== 'person') buildingCollide(h);
       if (h.kind === 'meteor' && h.kryp) { releaseHeld(); toast('Kryptonite burns. You had to drop it.', 'alert'); }
     }
@@ -9402,7 +11872,7 @@ function updatePlayer(dt) {
 }
 function sonicBoom() {
   const p = P.pos.clone();
-  SFX.sonic(); addShake(1.2); hitStop(0.05);
+  SFX.sonic(); addShake(0.5); hitStop(0.05);
   const vd = T1.copy(P.vel).normalize();
   ring(p, vd, 1, 80, 0.9, new THREE.Color(2, 2.1, 2.3), 0.5);
   ring(p, vd, 1, 40, 0.5, new THREE.Color(2, 2.1, 2.3), 0.7);
@@ -9453,6 +11923,14 @@ function updateHeroPose(dt, fwd) {
   }
   P.quat.slerp(TQ, 1 - Math.exp(-10 * dt));
   hero.g.position.copy(P.pos); hero.g.quaternion.copy(P.quat);
+  // launch and land poses: crouch while charging a takeoff, the one-knee hero landing, a soft knee bend
+  const crouch = !P.flying && P.jumpCharging ? clamp(0.3 + P.jumpCharge * 0.7, 0, 1) : 0;
+  const landW = P.landT > 0 ? clamp(P.landT / 0.18, 0, 1) : 0, kneel = landW > 0 && (P.landTier === 'hero' || P.landTier === 'crater');
+  const softW = landW > 0 && P.landTier === 'soft' ? landW : 0;
+  P.poseDrop = lerp(P.poseDrop, kneel ? 0.56 * landW : softW ? 0.14 * softW : crouch * 0.4, 1 - Math.exp(-20 * dt));
+  P.poseLean = lerp(P.poseLean, kneel ? 0.55 * landW : crouch * 0.38, 1 - Math.exp(-20 * dt));
+  if (P.poseLean > 0.005) hero.g.quaternion.multiply(TQ2.setFromAxisAngle(T1.set(1, 0, 0), -P.poseLean));
+  hero.g.position.y -= P.poseDrop;
   if (run) hero.g.position.y += (Math.abs(Math.cos(P.walkPhase)) * 0.09 - 0.07) * run; // stride bob, sunk into the lean
   // limbs
   const t = simT;
@@ -9468,7 +11946,9 @@ function updateHeroPose(dt, fwd) {
   else if (P.idleT > 1.5) { aL = -0.3; aR = -0.3; aLz = -0.55; aRz = 0.55; lL = 0.06; lR = -0.06; }
   else if (P.flying) { aL = 0.25 + Math.sin(t * 2) * 0.05; aR = 0.25 + Math.cos(t * 2) * 0.05; aLz = -0.22; aRz = 0.22; lL = 0.12 + Math.sin(t * 1.6) * 0.06; lR = -0.05; }
   else if (P.grounded) { const s = Math.sin(P.walkPhase); lL = s * 0.7; lR = -s * 0.7; aL = -s * 0.5; aR = s * 0.5; }
-  if (P.landT > 0) { lL = -0.8; lR = 0.4; aL = 0.6; aR = 0.2; aRz = -0.6; }
+  if (kneel) { lL = -0.05; lR = 1.65; aL = -0.6; aLz = -0.6; aR = 0.62; aRz = 0.12; }
+  else if (softW) { lL = lR = 0.35 * softW; aLz = -0.3; aRz = 0.3; }
+  else if (crouch) { lL = lR = 1.05 * crouch; aL = aR = -0.6 * crouch; aLz = -0.25; aRz = 0.25; }
   if (P.hold) {
     const big = Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) > 1;
     if (big) { aL = aR = Math.PI * 0.97; aLz = -0.15; aRz = 0.15; } else { aL = aR = 1.3; aLz = -0.2; aRz = 0.2; }
@@ -9485,7 +11965,9 @@ function updateHeroPose(dt, fwd) {
   else if (P.idleT > 1.5) { eLx = eRx = -0.1; eLz = 1.45; eRz = -1.45; }
   else if (P.flying) { eLx = eRx = 0.3; kL = -0.25 - Math.sin(t * 1.6) * 0.08; kR = -0.12; }
   else if (P.grounded) { const s = P.walkPhase; kL = -Math.max(0, Math.sin(s + 1.6)) * 0.9; kR = -Math.max(0, Math.sin(s + 1.6 + Math.PI)) * 0.9; eLx = eRx = 0.35; }
-  if (P.landT > 0) { kL = -1.4; kR = -0.35; eRx = 0.3; }
+  if (kneel) { kL = -1.8; kR = -1.75; eLx = 0.4; eRx = 0; }
+  else if (softW) { kL = kR = -0.7 * softW; }
+  else if (crouch) { kL = kR = -1.9 * crouch; eLx = eRx = 0.35; }
   if (P.hold) { const big = Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) > 1; eLx = eRx = big ? 0.25 : 0.9; }
   if (P.punchT > 0) { eRx = 0; if (P.clapT > 0) eLx = eRx = 0.15; }
   if (P.charging) { eRx = 1.9; }
@@ -9627,50 +12109,99 @@ function cool(dt) {
 
 // ============================================================ camera
 const titleAngle = () => 0.55 + Math.sin(simT * 0.07) * 0.35;
+// critically damped vector spring (half-life form), no allocation
+function springV(x, v, g, half, dt) {
+  const y = 2 * Math.LN2 / half, e = Math.exp(-y * dt);
+  let j0 = x.x - g.x, j1 = v.x + j0 * y; x.x = e * (j0 + j1 * dt) + g.x; v.x = e * (v.x - j1 * y * dt);
+  j0 = x.y - g.y; j1 = v.y + j0 * y; x.y = e * (j0 + j1 * dt) + g.y; v.y = e * (v.y - j1 * y * dt);
+  j0 = x.z - g.z; j1 = v.z + j0 * y; x.z = e * (j0 + j1 * dt) + g.z; v.z = e * (v.z - j1 * y * dt);
+}
+const HERO_H = 1.95, HERO_H_FLY = 0.9, FRAC_MIN = 0.12, FRAC_MAX = 0.18, CAM_LAG_MAX = 1.5;
+const CAM_WANT = new V3();
 function updateCamera(dt) {
+  const C = camState;
   if (!started) {
     // cinematic title framing: hero in the right third, slow drift around him
     const ta = titleAngle();
     camera.position.set(P.pos.x + Math.sin(ta) * 6.2, P.pos.y + 0.35, P.pos.z + Math.cos(ta) * 6.2);
     const rx = Math.cos(ta), rz = -Math.sin(ta);
     camera.lookAt(T5.set(P.pos.x - rx * 2.1, P.pos.y + 0.25, P.pos.z - rz * 2.1));
-    if (camera.fov !== 48) { camera.fov = 48; camState.fov = 48; camera.updateProjectionMatrix(); }
+    if (camera.fov !== 48) { camera.fov = 48; C.fov = 48; camera.updateProjectionMatrix(); }
+    C.init = false;
     return;
   }
+  FEEL.shake(dt);
+  if (C.hold) return; // a scripted or photo camera owns the lens
   const fwd = aimDir(T1), right = T2.set(Math.cos(yaw), 0, -Math.sin(yaw));
   const sp = P.vel.length();
   const combat = currentInc && currentInc.type === 'robbery' && currentInc.marker().distanceTo(P.pos) < 70;
-  const walking = !P.flying && started;
+  const walking = !P.flying;
   const run = walking ? P.runK : 0;
+  const mach = sp / soundSpeed(P.pos.y);
+  // ---- FOV: the powers team's speed curve (log past Mach 1), soft-capped above 94 deg and rate-limited
+  // to 40 deg/s; kicks (boost onset, takeoff) ride on top through a spring
+  const boosting = P.flying && (keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.boost);
+  if (boosting && C.boostT === 0) fovKick(Math.min(8, 3 + 1.5 * Math.log2(1 + pw('fly') / 350)));
+  C.boostT = boosting ? C.boostT + dt : 0;
+  let fovT = (combat ? 62 : 68) + Math.min(18, mach * 10 + sp * 0.02) + Math.min(14, Math.log2(1 + Math.max(0, mach - 1)) * 4.5) + run * 10
+    + (P.charging ? -Math.min(6, P.charge * 5) : 0) - 4 * (P.jumpCharge || 0);
+  if (fovT > 94) fovT = 94 + (fovT - 94) * 0.3;
+  const fstep = 40 * dt;
+  C.fov += clamp((fovT - C.fov) * (1 - Math.exp(-4 * dt)), -fstep, fstep);
+  FEEL.spring(C.fovKick, 0, 0.12, dt);
+  const fov = clamp(C.fov + C.fovKick.x, 30, 110), tanH = Math.tan(fov * Math.PI / 360);
+  // ---- distance per mode, then springs so walk / run / fly / hover blend instead of snapping
   // flight keeps pulling back past Mach 1 (log scale) so Mach 3 and Mach 10 read differently
   let dist = combat ? 5.2 : walking ? 8.4 + Math.min(4, sp * 0.05) * (1 - run * 0.6) + run * 1.5 : 6.8 + Math.min(9, sp * 0.025) + Math.min(6, Math.log2(1 + sp / 400) * 2);
   if (P.hold) dist += Math.min(8, Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) * 1.4);
-  if (!started) dist = 9;
-  // walking frames him low and off-centre, like a third-person street camera; flight keeps him central
+  // walking frames him low and off-centre, like a third-person street camera; flight keeps him central;
   // the sprint camera drops low behind him so the street rushes past
-  const want = T3.copy(fwd).multiplyScalar(-dist).addScaledVector(UP, combat ? 1.1 : walking ? 2.4 - run * 1.3 : 1.5).addScaledVector(right, combat ? 1.2 : walking ? 0.85 : 0.95);
-  camState.off.lerp(want, 1 - Math.exp(-(combat ? 6 : 9) * dt));
-  const cp = T4.copy(P.pos).add(camState.off);
+  const modeHalf = combat ? 0.2 : 0.18;
+  FEEL.spring(C.dist, dist, modeHalf, dt);
+  FEEL.spring(C.up, combat ? 1.1 : walking ? 2.4 - run * 1.3 : 1.5, modeHalf, dt);
+  FEEL.spring(C.side, combat ? 1.2 : walking ? 0.85 : 0.95, modeHalf, dt);
+  const want = CAM_WANT.copy(fwd).multiplyScalar(-C.dist.x).addScaledVector(UP, C.up.x).addScaledVector(right, C.side.x);
+  // screen-space readability: in flight he stays 12-18% of screen height (as a standing figure) at any
+  // speed, so Mach 10 no longer shrinks him to a speck; the near limit only engages at speed
+  // his on-screen height shrinks from 1.95 m standing to ~0.9 m seen from behind in a full flight stretch
+  const heroH = lerp(HERO_H, HERO_H_FLY, P.flying ? clamp((sp - 12) / 25, 0, 1) : 0); C.heroH = heroH;
+  C.maxDist = heroH / (2 * tanH * FRAC_MIN); C.minDist = heroH / (2 * tanH * FRAC_MAX);
+  if (P.flying && !P.hold) {
+    const L = want.length(), lo = C.minDist * clamp((sp - 75) / 75, 0, 1);
+    if (L > C.maxDist) want.multiplyScalar(C.maxDist / L); else if (L < lo) want.multiplyScalar(lo / L);
+  }
+  // ---- follow: critically damped spring on the hero-relative offset. The camera keeps its world
+  // velocity when he accelerates, so a boost surges him ahead in frame (half-life 140 ms for the first
+  // 0.5 s), then it settles (70 ms cruise). The lag is clamped so he never runs away from the lens.
+  if (!C.init) { C.rel.copy(want); C.relV.set(0, 0, 0); C.lastVel.copy(P.vel); C.la.set(0, 0, 0); C.laV.set(0, 0, 0); C.init = true; }
+  const dv = T3.copy(P.vel).sub(C.lastVel); C.lastVel.copy(P.vel);
+  if (dv.lengthSq() < 400 * 400) C.relV.addScaledVector(dv, P.flying ? -1 : -0.5); // teleports don't count
+  const half = combat ? 0.2 : P.flying ? (C.boostT > 0 && C.boostT < 0.5 ? 0.14 : 0.07) : 0.09;
+  springV(C.rel, C.relV, want, half, dt);
+  const lag = T3.copy(C.rel).sub(want), lagL = lag.length();
+  if (lagL > CAM_LAG_MAX) { C.rel.copy(want).addScaledVector(lag, CAM_LAG_MAX / lagL); C.relV.multiplyScalar(0.5); }
+  if (P.flying && !P.hold) { // the lag never takes him outside the 12-18% band at speed
+    const L = C.rel.length(), lo = C.minDist * clamp((sp - 75) / 75, 0, 1);
+    if (L > C.maxDist) C.rel.multiplyScalar(C.maxDist / L); else if (L < lo && L > 0.01) C.rel.multiplyScalar(lo / L);
+  }
+  // look-ahead: lead the frame toward where he is going (velocity across the view)
+  const la = T3.copy(P.vel).addScaledVector(fwd, -P.vel.dot(fwd)).multiplyScalar(0.012), laMax = walking ? 0.6 : 1.2, laL = la.length();
+  if (laL > laMax) la.multiplyScalar(laMax / laL);
+  springV(C.la, C.laV, la, 0.25, dt);
+  const cp = T4.copy(P.pos).add(C.la).add(C.rel).add(T5.set(FEEL.ox, FEEL.oy, FEEL.oz));
+  C.off.copy(cp).sub(P.pos);
   // keep the camera out of walls
   const toCam = T5.copy(cp).sub(P.pos), L = toCam.length(); toCam.divideScalar(L || 1);
   const hit = raycast(T6.copy(P.pos).addScaledVector(UP, 0.5), toCam, L, { bodies: false });
   if (hit.type === 'block' && !P.xray) cp.copy(P.pos).addScaledVector(UP, 0.5).addScaledVector(toCam, Math.max(1.2, hit.t - 0.6));
   if (cp.y < groundY(cp.x, cp.z) + 0.4 && !inBay(cp.z)) cp.y = 0.4;
   camera.position.copy(cp);
-  if (camState.shake > 0) {
-    const s = camState.shake * camState.shake * 0.35;
-    camera.position.add(T5.set(R(-1, 1) * s, R(-1, 1) * s, R(-1, 1) * s));
-    camState.shake = Math.max(0, camState.shake - dt * 2.2);
-  }
   camera.lookAt(T5.copy(camera.position).add(fwd));
-  // banking and speed FOV give flight its weight
-  camState.roll = lerp(camState.roll, -P.bank * 0.35, 1 - Math.exp(-5 * dt));
-  camera.rotateZ(camState.roll);
-  const mach = sp / soundSpeed(P.pos.y);
-  // speed FOV: the old kick saturated at ~Mach 1; this keeps growing (log) up to Mach 10+, and the sprint gets its own kick
-  const fovT = (combat ? 62 : 68) + Math.min(18, mach * 10 + sp * 0.02) + Math.min(14, Math.log2(1 + Math.max(0, mach - 1)) * 4.5) + run * 10 + (P.charging ? -Math.min(6, P.charge * 5) : 0);
-  camState.fov = lerp(camState.fov, fovT, 1 - Math.exp(-4 * dt));
-  camera.fov = camState.fov; camera.updateProjectionMatrix();
+  // banking roll gives flight its weight; trauma shake is rotational (pitch / yaw / roll), not a jitter
+  C.roll = lerp(C.roll, -P.bank * 0.35, 1 - Math.exp(-5 * dt));
+  camera.rotateY(FEEL.yaw); camera.rotateX(FEEL.pitch); camera.rotateZ(C.roll + FEEL.roll);
+  camera.fov = fov; camera.updateProjectionMatrix();
+  C.heroFrac = heroH / (2 * Math.max(0.5, cp.distanceTo(P.pos)) * tanH);
   updateSpeedLines(dt, sp, mach, run);
 }
 // speed lines: streaks of air rushing past the camera, from the sprint and from Mach 0.8 up
@@ -9895,7 +12426,7 @@ function updateHUD(dt) {
     chips.clap.classList.toggle('on', P.clapCD > 0.6); chips.fly.classList.toggle('on', P.flying);
   }
   const list = [];
-  if (currentInc) list.push({ pos: currentInc.marker(), cls: currentInc.m && currentInc.m.kryp ? 'kryp' : 'inc', label: currentInc.type === 'robbery' ? 'Robbery' : currentInc.type === 'fire' ? 'Fire' : currentInc.type === 'heli' ? 'Falling helicopter' : (currentInc.m && currentInc.m.kryp ? 'Kryptonite meteor' : 'Meteor'), sub: Math.round(currentInc.marker().distanceTo(P.pos) / 5) * 5 + ' m' });
+  if (currentInc) list.push({ pos: currentInc.marker(), cls: currentInc.m && currentInc.m.kryp ? 'kryp' : 'inc', label: currentInc.label || (currentInc.type === 'robbery' ? 'Robbery' : currentInc.type === 'fire' ? 'Fire' : currentInc.type === 'heli' ? 'Falling helicopter' : (currentInc.m && currentInc.m.kryp ? 'Kryptonite meteor' : 'Meteor')), sub: Math.round(currentInc.marker().distanceTo(P.pos) / 5) * 5 + ' m' });
   if (currentInc && currentInc.type === 'robbery') for (const p of currentInc.crew) if (p.tele > 0 && !p.cuffed) list.push({ pos: T1.copy(p.pos).setY(p.pos.y + 1.6).clone(), cls: 'hurt', label: '!', sub: 'shot coming' });
   // super hearing: one marker per heard source ("Cry for help · 240 m"); otherwise the old proximity/x-ray markers
   for (const s of HEAR.list) list.push({ pos: T1.copy(s.pos).setY(s.pos.y + 1.4).clone(), cls: HEAR_CLS[s.kind] + (s.look > 0.5 ? ' near' : ''), label: s.label, sub: Math.round(s.d / 5) * 5 + ' m' });
@@ -10332,7 +12863,8 @@ function frame(now) {
 // lightweight section profiler: __game.prof() returns ms per section since the last reset
 const PROF = { on: false, last: 0, acc: {}, t(name) { if (!this.on) return; const n = performance.now(); if (name !== '-') this.acc[name] = (this.acc[name] || 0) + n - this.last; this.last = n; } };
 function update(dt) {
-  if (hitStopT > 0) { hitStopT -= dt; dt *= 0.08; }
+  // hit-stop freezes the sim (then ramps back); the camera, its shake and the cape keep real time
+  const rdt = dt; dt *= FEEL.step(rdt);
   const wdt = dt * (P.slow ? 0.12 : 1);
   simT += dt;
   if (started) { ledger.time += dt; updatePlayer(dt); }
@@ -10373,17 +12905,21 @@ function update(dt) {
   updateBirds(wdt);
   updateRings(dt);
   PROF.t('-'); ADD.update(wdt); SMK.update(wdt); PROF.t('particles');
-  updateCape(dt, simT);
-  updateCamera(dt);
+  updateCape(rdt, simT);
+  updateCamera(rdt);
   updateAtmosphere(dt);
   if (started) { updateHearing(dt); updateHUD(dt); }
 }
 window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; }, MAP, setMapOpen, drawBigMap, mapPins,
   // power levels + super hearing
-  get POWER() { return POWER; }, setPower, PWR, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson,
+  get POWER() { return POWER; }, setPower, PWR, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson, grabBody, SAVE_HOPE_CAP,
   // street-level missions + NPC dialogue (js/missions.js)
   mapPinHooks, PIN_COL, BEACON_COL, toast, hopeAdd, hopeHit, addSave, SFX, AU, FX, PPL, placePerson, groundY, cars, HOSP, missions: window.SM_MISSIONS || null,
-  get heatOn() { return beams[0].visible; }, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
+  // feel pass (js/feel.js): feel = {lastHitStopMs, trauma, timeScale, ...}; events = test-hook log
+  feel: FEEL, events, emit, camState, addShake, shakeAt, hitStop, fovKick, takeoff, landing, superLanding,
+  get heatOn() { return beams[0].visible; },
+  // set pieces (js/setpieces.js)
+  endIncident, aimDir: (o) => aimDir(o), registerIncident(type, def) { INC_REG[type] = def; }, setpieces: window.SM_SETPIECES || null, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
 requestAnimationFrame(frame);
 })();
 

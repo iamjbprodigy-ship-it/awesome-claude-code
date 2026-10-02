@@ -58,7 +58,13 @@ Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, o
 
 **Map:** the minimap (bottom right) turns with you and zooms out as you speed up. Alerts appear as pins, with arrows on the rim when they're off-screen, and a tall coloured light beam rises from each one in the city: gold for emergencies, green for Kryptonite, red for the injured, blue for your waypoint.
 
+**The catch (`js/catch.js`):** to save someone who is falling, match their speed. If the speed difference when you grab them is over 12 m/s, they are hurt; over about 15 m/s, they are badly hurt. Helicopter and car occupants can take up to 18 m/s. While you carry someone, more than 6 g for a quarter of a second also hurts them, and that counts boosts, hard turns and walls. If you let go of the controls while carrying someone, you brake gently at no more than 4 g. Get within 2 m of a faller at a matched speed and you catch them automatically and gently. You can also press E. A g-arc around the crosshair shows the g on the person you're carrying: green under 3 g, amber from 3 to 6 g, red above 6 g. Within 30 m of a faller, a "match speed" bar compares your speed difference with the safe limit. During an emergency, a line under the timer reads "Saved X / Y at risk". Saving everyone unhurt with a gold medal earns "Everyone home". Saves earn at most +10 Hope per emergency.
+
 Gamepad: Back/View opens the map; the sticks fly and look; RT heat vision, LT freeze, RB punch, LB grab, X clap, Y x-ray.
+
+**Set pieces** (after the first few minutes, now and then):
+- **Runaway bus:** a packed bus loses its brakes on Centennial St and runs for the waterfront crosswalk. Standing passengers are hurt above about 1 g, so get in front early (about 40 m of stopping room at 25 m/s), press **E** on the front bumper and **hold E** for a smooth 0.85 g stop. **W** pushes harder and **S** eases off; the meter shows the deceleration. Tap E to let go. Blocking it dead, grabbing it from the side or punching it hurts the passengers.
+- **Falling airliner:** an airliner with an engine fire glides down over the bay. Hold freeze breath (**Q**) on the burning engine for about 5 s, or the wing fails at 25 s. Press **E** at a push point (nose, either wingtip, tail), then **W/Space** push up, **S/C** push down and **A/D** push sideways. Set it down on the water with vertical speed under 6 m/s and roll under 15° to save all 140 aboard.
 
 ## Develop
 - `node tools/playtest-bot.js [--shots]` drives every power, emergency, a tower collapse and the render budgets in headless Chromium. Needs Playwright.
