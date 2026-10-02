@@ -4,6 +4,7 @@
  *   node tools/playtest-bot.js [--shots] [--out DIR] [--quality low|shot] [--only name,name]
  *   (--only missions,dialogue,mission-shots for the street-level missions; mission-shots writes DIR/missions/*.png)
  *   (--only power-levels,ground-run,hearing for the power set; powers-shots writes DIR/powers/*.png)
+ *   (--only feel for hit-stop, shake, camera framing and the landing tiers; feel-shots writes DIR/feel/*.png)
  *
  * Drives the real game in headless Chromium (Playwright) through every power, every emergency
  * type and a full tower collapse, asserting physics and gameplay invariants, timing the CPU
@@ -418,6 +419,98 @@ SCENARIOS.push({
   },
   check: r => [['ground-run shots at speed', [1, 2, 3].every(l => r.info['run' + l].hs > 30 && Math.abs(r.info['run' + l].y) < 0.5), JSON.stringify(r.info)],
     ['screenshots written', r.shots.length === 5, r.shots.join(', ')]]
+});
+
+// feel pass (dream-features step 1 and §3): hit-stop, trauma shake, Mach 10 framing, charged takeoff, landing tiers
+SCENARIOS.push({
+  name: 'feel',
+  run: `(() => { const g = __game, F = g.feel, out = {}; g.begin(); g.setPower(3); g.step(30);
+    const sinceEv = (i, type) => g.events.slice(i).filter(e => e.type === type);
+    // 1) a full-charge punch on a parked car: the sim freezes for <= 150 ms of real time, the camera keeps shaking
+    const c = g.bodies.filter(b => b.kind === 'car' && !b.dead && b.pos.y < 3).sort((a, b) => Math.hypot(a.pos.x + 150, a.pos.z - 200) - Math.hypot(b.pos.x + 150, b.pos.z - 200))[0];
+    g.P.flying = true; g.P.vel.set(0, 0, 0); g.P.pos.set(c.pos.x, c.pos.y + 0.5, c.pos.z + 3.2); g.setYawPitch(0, -0.15); g.step(3); F.reset();
+    g.punch(4);
+    let frozen = 0, slow = 0, camMoved = 0; const q = g.camera.quaternion.clone();
+    for (let i = 0; i < 40; i++) { const s0 = g.simT; g.step(1); const ds = g.simT - s0;
+      if (ds < 1e-7) { frozen += 1000 / 60; if (q.angleTo(g.camera.quaternion) > 1e-6) camMoved++; } else if (ds < 1 / 60 - 1e-6) slow += 1000 / 60 - ds * 1000;
+      q.copy(g.camera.quaternion); }
+    out.punch = { ms: F.lastHitStopMs, frozen: Math.round(frozen), frozenMs: Math.round(F.frozenMs), rampLostMs: Math.round(slow), camMoved, carV: +c.vel.length().toFixed(1) };
+    // 2) a sonic boom: trauma rises, the shake is rotational and bounded, and it drains below 0.05 within 1.5 s
+    g.P.pos.set(0, 600, 0); g.P.vel.set(0, 0, 0); g.step(5); F.reset();
+    const p0 = g.camera.position.clone(); g.sonicBoom(); const tr0 = F.trauma;
+    let maxRot = 0, maxRoll = 0, trAt = []; const deg = 180 / Math.PI;
+    for (let i = 1; i <= 90; i++) { g.step(1); maxRot = Math.max(maxRot, Math.abs(F.pitch), Math.abs(F.yaw)) ; maxRoll = Math.max(maxRoll, Math.abs(F.roll)); if (i % 15 === 0) trAt.push(+F.trauma.toFixed(3)); }
+    out.boom = { tr0: +tr0.toFixed(2), tr15: F.trauma, curve: trAt, maxRotDeg: +(maxRot * deg).toFixed(2), maxRollDeg: +(maxRoll * deg).toFixed(2), maxPos: +Math.hypot(F.ox, F.oy, F.oz).toFixed(3) };
+    // shake slider at 0 kills it
+    window.SM_SETTINGS = { get: k => k === 'shake' ? 0 : undefined }; F.reset(); g.sonicBoom(); g.step(3);
+    out.boomOff = +(Math.abs(F.pitch) + Math.abs(F.yaw) + Math.abs(F.roll)).toFixed(6); delete window.SM_SETTINGS;
+    // 3) level 3 top speed (about Mach 10) at 2000 m: the camera stays within the screen-space band
+    g.P.flying = true; g.P.pos.set(0, 2000, 1500); g.P.vel.set(0, 0, 0); g.setYawPitch(0, -0.05); g.keys.clear(); g.keys.add('KeyW'); g.keys.add('ShiftLeft');
+    let dMin = 1e9, dMax = 0, fMin = 1, fMax = 0, bad = 0;
+    for (let i = 0; i < 300; i++) { g.step(1); if (i < 20) continue; const d = g.camera.position.distanceTo(g.P.pos), C = g.camState;
+      dMin = Math.min(dMin, d); dMax = Math.max(dMax, d); fMin = Math.min(fMin, C.heroFrac); fMax = Math.max(fMax, C.heroFrac);
+      if (d > C.maxDist + 0.05 || (g.P.vel.length() > 150 && d < C.minDist - 0.05)) bad++; }
+    const mach = g.P.vel.length() / Math.max(295, 340.3 - 0.0041 * g.P.pos.y); g.keys.clear();
+    out.mach10 = { mach: +mach.toFixed(1), dMin: +dMin.toFixed(2), dMax: +dMax.toFixed(2), fMin: +fMin.toFixed(3), fMax: +fMax.toFixed(3), bad, fov: Math.round(g.camera.fov), limits: [+g.camState.minDist.toFixed(2), +g.camState.maxDist.toFixed(2)] };
+    // 4) launch and land on the avenue
+    const street = () => { g.keys.clear(); g.P.flying = false; g.P.vel.set(0, 0, 0); g.P.pos.set(-150, 0.97, 200); g.setYawPitch(0, -0.1); g.step(20); F.reset(); };
+    street(); let i0 = g.events.length, dmg0 = g.ledger.damage;
+    g.keys.add('Space'); g.step(36); const crouchDrop = +g.P.poseDrop.toFixed(2); g.keys.delete('Space');
+    g.step(1); const vy1 = g.P.vel.y; g.step(1); const vy2 = g.P.vel.y; const tk = sinceEv(i0, 'takeoff')[0];
+    out.takeoff = { vy: +Math.max(vy1, vy2).toFixed(1), ev: tk || null, dmg: g.ledger.damage - dmg0, crouchDrop, tr: +F.peakTrauma.toFixed(2) };
+    const land = (setup, frames) => { street(); setup(); i0 = g.events.length; dmg0 = g.ledger.damage; F.reset(); F.peakTrauma = 0; let ev = null, dmgAt = 0, drop = 0;
+      for (let i = 0; i < frames && !ev; i++) { g.step(1); ev = sinceEv(i0, 'land')[0] || null; if (ev) dmgAt = g.ledger.damage - dmg0; }
+      g.step(12); drop = g.P.poseDrop; g.keys.clear(); return { tier: ev && ev.tier, v: ev && ev.v, dmg: dmgAt, tr: +F.peakTrauma.toFixed(2), stop: F.lastHitStopMs, drop: +drop.toFixed(2), n: sinceEv(i0, 'land').length }; };
+    out.soft = land(() => { g.P.pos.set(-150, 40, 200); g.step(1); g.keys.add('Space'); }, 900);
+    out.hero = land(() => { g.P.pos.set(-150, 5, 200); g.P.vel.set(0, -30, 0); }, 120);
+    out.crater = land(() => { g.P.pos.set(-150, 5, 200); g.P.vel.set(0, -60, 0); }, 120);
+    out.braked = land(() => { g.P.pos.set(-150, 6, 200); g.P.vel.set(0, -60, 0); g.step(1); g.keys.add('Space'); }, 120);
+    return out; })()`,
+  check: r => [
+    ['full-charge punch hit-stop is 100 ms (min(100, 20 + 20 x power))', r.punch.ms === 100, `${r.punch.ms} ms`],
+    ['sim freeze <= 150 ms of real time', r.punch.frozen <= 150 && r.punch.frozen >= 80, `${r.punch.frozen} ms frozen (feel ${r.punch.frozenMs}), ramp lost ${r.punch.rampLostMs} ms`],
+    ['camera shake keeps animating during hit-stop', r.punch.camMoved >= 3, `${r.punch.camMoved} frozen frames with camera motion`],
+    ['boom raises trauma', r.boom.tr0 >= 0.45, r.boom.tr0],
+    ['trauma decays below 0.05 within 1.5 s', r.boom.tr15 < 0.05, r.boom.curve.join(' ')],
+    ['shake is rotational and bounded (2.5 deg pitch/yaw, 4 deg roll, small position)', r.boom.maxRotDeg <= 2.5 && r.boom.maxRollDeg <= 4 && r.boom.maxPos <= 0.16, `${r.boom.maxRotDeg} / ${r.boom.maxRollDeg} deg, ${r.boom.maxPos} m`],
+    ['shake setting 0 removes the shake', r.boomOff === 0, r.boomOff],
+    ['level 3 reaches about Mach 10', r.mach10.mach >= 9, 'Mach ' + r.mach10.mach],
+    ['camera distance stays within the screen-space band at Mach 10', r.mach10.bad === 0, `${r.mach10.bad} frames outside; d ${r.mach10.dMin}-${r.mach10.dMax} m while accelerating, final limits ${r.mach10.limits} m, fov ${r.mach10.fov}`],
+    ['hero stays ~12-18% of screen height at speed', r.mach10.fMin >= 0.115 && r.mach10.fMax <= 0.25, `${r.mach10.fMin}-${r.mach10.fMax}`],
+    ['charged takeoff: vy >= 80 within 2 frames, charge >= 0.9', r.takeoff.vy >= 80 && r.takeoff.ev && r.takeoff.ev.charge >= 0.9, `vy ${r.takeoff.vy}, ${JSON.stringify(r.takeoff.ev)}`],
+    ['full-charge takeoff crouches, cracks the pavement ($5K) and shakes', r.takeoff.crouchDrop > 0.25 && r.takeoff.dmg === 5000 && r.takeoff.tr > 0.2, `drop ${r.takeoff.crouchDrop} m, $${r.takeoff.dmg}, trauma ${r.takeoff.tr}`],
+    ['flared drop from 40 m lands soft, no damage', r.soft.tier === 'soft' && r.soft.dmg === 0 && r.soft.n === 1, JSON.stringify(r.soft)],
+    ['30 m/s lands as a hero landing: kneel, small shake, no damage', r.hero.tier === 'hero' && r.hero.dmg === 0 && r.hero.drop > 0.3 && r.hero.tr > 0.1 && r.hero.tr < 0.4, JSON.stringify(r.hero)],
+    ['60 m/s unbraked lands as a crater: +$25K, big shake, 80 ms hit-stop', r.crater.tier === 'crater' && Math.abs(r.crater.dmg - 25000) <= 1 && r.crater.tr >= 0.3 && r.crater.stop === 80, JSON.stringify(r.crater)],
+    ['60 m/s braked lands as a hero landing, no crater bill', r.braked.tier === 'hero' && r.braked.dmg === 0, JSON.stringify(r.braked)]
+  ]
+});
+// screenshots: the hero landing (gameplay camera and a side view) and the flight framing at Mach 10: OUT/feel/*.png
+SCENARIOS.push({
+  name: 'feel-shots', shotsOnly: true,
+  page: async (p) => {
+    const dir = path.join(OUT, 'feel'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [], info = {};
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    await p.evaluate(() => { __game.begin(); __game.setPower(3); __game.step(30); });
+    info.hero = await p.evaluate(() => { const g = __game; g.keys.clear(); g.P.flying = false; g.P.pos.set(-150, 6, 200); g.P.vel.set(0, -32, 0); g.setYawPitch(0.5, -0.12);
+      let ev = null; const i0 = g.events.length; for (let i = 0; i < 60 && !ev; i++) { g.step(1); ev = g.events.slice(i0).find(e => e.type === 'land'); }
+      g.step(10); g.render(); return ev; });
+    await snap('hero-landing.png');
+    await p.evaluate(() => { const g = __game, P = g.P, f = new g.camera.position.constructor(-Math.sin(0.5), 0, -Math.cos(0.5)), r = new g.camera.position.constructor(Math.cos(0.5), 0, -Math.sin(0.5));
+      g.camera.position.copy(P.pos).addScaledVector(f, 3.4).addScaledVector(r, 2.2).setY(1.1); g.camera.lookAt(P.pos.x, 0.55, P.pos.z); g.camera.fov = 55; g.camera.updateProjectionMatrix(); g.render(); });
+    await snap('hero-landing-side.png');
+    info.crouch = await p.evaluate(() => { const g = __game; g.P.landT = 0; g.step(30); g.keys.add('Space'); g.step(34); g.render(); return +g.P.jumpCharge.toFixed(2); });
+    await snap('takeoff-crouch.png');
+    info.mach = await p.evaluate(() => { const g = __game; g.keys.clear(); g.step(5); g.P.flying = true; g.P.pos.set(0, 2000, 1500); g.P.vel.set(0, 0, 0); g.setYawPitch(0, -0.05);
+      g.keys.add('KeyW'); g.keys.add('ShiftLeft'); g.step(240); g.render();
+      return { mach: +(g.P.vel.length() / Math.max(295, 340.3 - 0.0041 * g.P.pos.y)).toFixed(1), frac: +g.camState.heroFrac.toFixed(3), d: +g.camera.position.distanceTo(g.P.pos).toFixed(2) }; });
+    await snap('flight-mach10.png');
+    return { info, shots };
+  },
+  check: r => [['hero landing captured', r.info.hero && r.info.hero.tier === 'hero', JSON.stringify(r.info)],
+    ['Mach 10 framing keeps him readable', r.info.mach.mach >= 9 && r.info.mach.frac >= 0.115, JSON.stringify(r.info.mach)],
+    ['screenshots written', r.shots.length === 4, r.shots.join(', ')]]
 });
 
 const RIGS = [

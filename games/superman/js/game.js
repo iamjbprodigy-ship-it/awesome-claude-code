@@ -3200,7 +3200,8 @@ function updatePlayer(dt) {
     if (P.kryp > 0.2) P.vel.y -= G * P.kryp * dt * 2;
   } else {
     // charged takeoff: hold Space on the ground to crouch and charge (0.15-0.6 s), release to launch
-    if (spaceDown && !P.spaceWas && P.grounded) { P.jumpCharging = true; P.jumpT = 0; P.jumpCharge = 0; }
+    if (spaceDown && !P.spaceWas && P.grounded && Math.abs(P.vel.y) < 2) { P.jumpCharging = true; P.jumpT = 0; P.jumpCharge = 0; }
+    if (P.jumpCharging && P.airT > 0.1) { P.jumpCharging = false; P.jumpCharge = 0; } // walked off an edge: no launch from mid-air
     if (P.jumpCharging) {
       if (spaceDown) { P.jumpT += dt; P.jumpCharge = clamp((P.jumpT - 0.15) / 0.45, 0, 1); const k = 1 - 0.85 * P.jumpCharge; mx *= k; mz *= k; }
       else { const c = P.jumpCharge; P.jumpCharging = false; P.jumpCharge = 0; takeoff(c); }
