@@ -59,7 +59,7 @@ Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, o
 
 **Metallo (the finale):** a 3 m chrome cyborg with a Kryptonite heart lands in a plaza and holds a crowd hostage. Press **F8** in game (or add `?metallo` to the address) to fight him; the demo sequencer calls `__game.metallo.start()`. His heart weakens you and drains solar charge within 40 m, so fight from range:
 - Dodge his telegraphed Kryptonite beam, radiation pulse (get 40 m away) and ground pound (get airborne).
-- Catch the cars he throws at the crowd (E).
+- Catch the cars and paving slabs he throws at the crowd (E). The hostages are bait: he only throws at them once you come within 150 m.
 - Freeze his armour with Q until it turns icy, then shatter a plate with a charged punch or a thrown object. He has six plates.
 - With the heart exposed, grab the lead-lined plate from the corner (E). Carrying it cuts the radiation by 80%. Close in and rip the heart out (E).
 

@@ -34,7 +34,8 @@
     arrive: 4,               // s of phase 1
     phase2: 14,              // s of beam / pulse before he starts throwing cars
     kryp: { full: 10, zero: 40, fullHeart: 12, zeroHeart: 46, shield: 0.2 }, // exposure 1 at `full` m -> 0 at `zero` m
-    drain: { aura: 0.03, beam: 0.06, pulse: 0.15, pound: 0.06 },          // solar charge per s (aura, beam) or per hit
+    drain: { aura: 0.05, beam: 0.06, pulse: 0.15, pound: 0.06 },          // solar charge per s (aura, beam) or per hit; the aura
+                             // outweighs the 0.02/s sunlight recharge, so standing in it always costs charge
     brittle: 0.75,           // the frost-shatter rule (same threshold as cars and debris)
     thaw: 0.05,              // frost lost per s
     shakeOff: 0.5,           // a shattering plate knocks this much frost off the others
@@ -42,6 +43,8 @@
     walk: 1.6,               // m/s
     tether: 9,               // m he roams from the plaza centre
     crowd: 8, crowdDist: 26, maxCasualties: 4,
+    engage: 150,             // m from the plaza: he only throws at the hostages once Superman is this close (they are bait)
+    hitsPerThrow: 2,         // bystanders one thrown car or slab can hurt
     collapse: 4,             // s at full Kryptonite exposure before Superman collapses
     pulse: { tele: 1.5, r: 40 }, beam: { tele: 1.2, dur: 1.6, range: 140, track: 0.55, hitR: 1.4 },
     pound: { tele: 1.1, r: 22 }, toss: { yank: 0.45, tele: 1.2, flight: 1.7, every: [6, 8] },
@@ -505,7 +508,8 @@
     const g = G(), P = g.P, dh = P.pos.distanceTo(S.pos), ph = S.phase;
     const alt = S.alt++ % 2;
     let kind = alt ? 'pulse' : 'beam';
-    if ((ph === 3 || ph === 4) && S.tossCD <= 0 && (tossCar() || G().spawnDebris) && crowdTarget(T4)) kind = 'toss';
+    const near = Math.hypot(P.pos.x - S.center.x, P.pos.z - S.center.z) < CFG.engage;
+    if ((ph === 3 || ph === 4) && near && S.tossCD <= 0 && (tossCar() || G().spawnDebris) && crowdTarget(T4)) kind = 'toss';
     else if (ph === 4 && dh < CFG.pound.r && P.pos.y - g.groundY(P.pos.x, P.pos.z) < 4 && Math.random() < 0.6) kind = 'pound';
     if (kind === 'beam' && dh > CFG.beam.range) kind = 'pulse';
     const a = { kind, t: 0, fired: false, tele: CFG[kind === 'toss' ? 'toss' : kind].tele, dur: 0, car: null, aim: new THREE.Vector3().copy(P.pos), target: new THREE.Vector3(), from: new THREE.Vector3() };
@@ -548,7 +552,7 @@
     } else if (a.kind === 'toss') {
       const c = a.car; teleRing.visible = false;
       if (c.dead || !c.held || P.hold === c) return;
-      c.held = false; c.sleeping = false; c.noDrag = true; c.mThrown = true; c.thrown = false; c.mT = 0; c.mLand = -1;
+      c.held = false; c.sleeping = false; c.noDrag = true; c.mThrown = true; c.thrown = false; c.mT = 0; c.mLand = -1; c.mHits = 0;
       const tf = CFG.toss.flight;
       c.vel.set((a.target.x - c.pos.x) / tf, (a.target.y - c.pos.y) / tf + 0.5 * 9.81 * tf, (a.target.z - c.pos.z) / tf);
       c.angVel.set(R(-1.5, 1.5), R(-1, 1), R(-1.5, 1.5));
@@ -615,10 +619,11 @@
       const sp = c.vel.length();
       if (sp > 6 && c.pos.y < 3.2) {
         for (const p of S.crowd) {
+          if (c.mHits >= CFG.hitsPerThrow) break;
           if (p.injured || (p.mode !== 'stuck' && p.mode !== 'free' && p.mode !== 'cheer')) continue;
           const dx = p.pos.x - c.pos.x, dz = p.pos.z - c.pos.z; if (dx * dx + dz * dz > 2.3 * 2.3) continue;
           p.mode = 'phys'; p.sleeping = false; p.onGround = false; p.age = 0; p.vel.copy(c.vel).multiplyScalar(0.55).setY(R(3, 5)); p.angVel.set(R(-3, 3), R(-1, 1), R(-3, 3));
-          g.injurePerson(p); S.hits++; ev('injure', { by: 'thrownCar' });
+          g.injurePerson(p); S.hits++; c.mHits++; ev('injure', { by: 'thrownCar' });
         }
       }
       if (c.mLand < 0 && c.mT > 0.3 && c.pos.y < 1.4 && c.vel.y <= 0.5) { c.mLand = c.mT; c.noDrag = false; g.SFX.punch(c.pos, 1); for (let k = 0; k < 16; k++) g.FX.dust(c.pos.x, 0.4, c.pos.z, R(-6, 6), R(0, 3), R(-6, 6), 1.3); }
@@ -691,6 +696,7 @@
     const k = exposure(P.pos);
     P.solar = Math.max(0, P.solar - (CFG.drain.aura * k) * dt);
     S.collapseT = P.kryp >= 0.98 ? S.collapseT + dt : 0;
+    if (S.collapseT > 1.5) hint('collapse', 'The Kryptonite is overwhelming you. Get clear of him, now!');
     if (P.solar <= 0.002) fail('solar');
     else if (S.collapseT >= CFG.collapse) fail('collapse');
     else if (hurtCount() >= CFG.maxCasualties) fail('casualties');

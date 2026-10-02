@@ -887,7 +887,7 @@ const METALLO_LIB = `const g = __game, M = g.metallo, P = g.P;
     P.flying = true; P.pos.set(s.pos.x + Math.cos(a) * d, (h === undefined ? 2.2 : h), s.pos.z + Math.sin(a) * d); P.vel.set(0, 0, 0); };
   const heartD = () => P.pos.distanceTo(S().pos.clone().setY(S().pos.y + 2.2));
   const catchCar = () => { const c = S().flying[0]; if (!c) return false; P.pos.copy(c.pos); P.pos.x += 1.6; P.pos.y += 0.4; P.vel.copy(c.vel); M.aim('car');
-    g.grabOrRelease(); const ok = P.hold === c; g.step(2); if (P.hold === c) { P.vel.set(0, 0, 0); g.grabOrRelease(); } return ok; };
+    g.grabOrRelease(); const ok = P.hold === c; g.step(2); if (P.hold === c) { P.vel.set(0, 0, 0); g.grabOrRelease(); } place(30, 3); return ok; }; // set it down, back out of the aura
   const grabLead = () => { const L = S().lead; P.pos.copy(L.pos); P.pos.x += 1.5; P.pos.y += 1.2; P.vel.set(0, 0, 0); M.aim('lead'); g.grabOrRelease(); return P.hold === L; };`;
 SCENARIOS.push({
   name: 'metallo', quality: 'high',
@@ -932,7 +932,7 @@ SCENARIOS.push({
     out.medalEvt = (g.events || []).some(e => e.type === 'medal' && e.attacker === 'metallo');
     if (P.hold) g.grabOrRelease();
     // 6. loss: solar charge runs dry -> soft fail, he escapes, and a retry works
-    M.start(); g.step(400); P.solar = 0; g.step(2); out.loss = I().result; out.incAfterLoss = g.currentInc ? g.currentInc.type : null; g.step(240);
+    P.pos.set(S().center.x + 70, 25, S().center.z); P.vel.set(0, 0, 0); M.start(); g.step(400); P.solar = 0; g.step(2); out.loss = I().result; out.incAfterLoss = g.currentInc ? g.currentInc.type : null; g.step(240);
     out.goneAfterLoss = !I().visible; out.retry = M.start(); g.step(2); out.retryPhase = I().phase;
     // 7. unattended: he escapes when time runs out, no softlock (10.7)
     for (let i = 0; i < 190; i++) { P.solar = 1; P.pos.set(0, 600, 400); P.vel.set(0, 0, 0); g.step(60); }
