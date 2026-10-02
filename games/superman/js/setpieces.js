@@ -171,7 +171,7 @@
       if (!p) continue; bus.disembarked++;
       if (i < hurt) { g.injurePerson(p); p.mode = 'down'; }
     }
-    const res = { type: 'bus', success, hurt, saved: B.aboard - hurt, lost: bus.lost, stopZ: bus.s, short: B.stopZ - bus.s, maxG: +bus.maxG.toFixed(2), blocked: bus.blocked, disembarked: bus.disembarked, insideBlock: bus.insideBlock, nan: bus.nan };
+    const res = { type: 'bus', success, hurt, saved: B.aboard - hurt, lost: bus.lost, stopZ: bus.s, short: B.stopZ - bus.s, maxG: +bus.maxG.toFixed(2), blocked: bus.blocked, vBlock: bus.vBlock || 0, disembarked: bus.disembarked, insideBlock: bus.insideBlock, nan: bus.nan };
     API.last = res; API.results.push(res);
     if (success) {
       busPaySaves(g, B.aboard - hurt, 'Bus passengers safe');
@@ -215,7 +215,7 @@
       if (!bus.attached && Math.abs(P.pos.x - B.x) < 1.7 && P.pos.y < B.h + 0.4 && P.pos.z >= bus.sPrev - 0.4 && P.pos.z <= bus.s + 0.6) {
         const rel = bus.v - P.vel.z;
         if (rel > 3) {
-          const v0 = bus.v; bus.vPrev = bus.v; bus.v = Math.max(0, P.vel.z); bus.blocked = true;
+          const v0 = bus.v; bus.vPrev = bus.v; bus.v = Math.max(0, P.vel.z); bus.blocked = true; bus.vBlock = +v0.toFixed(1);
           busHurt(Math.ceil(B.blockInj * (v0 - bus.v) / 25), 'You stopped it dead');
           bus.dmg += 180000; g.ledger.damage += 180000; if (g.currentInc === bus.inc) bus.inc.damage += 180000;
           g.SFX.punch(P.pos, 1.5); for (let k = 0; k < 18; k++) g.FX.spark(P.pos.x, P.pos.y, P.pos.z, (Math.random() - 0.5) * 12, Math.random() * 6, -Math.random() * 8);
@@ -232,7 +232,7 @@
           if (c.drive && c.drive.axis === 'z') { c.pos.z = bus.s - B.len - 2.5; c.drive.v = Math.min(c.drive.v, bus.v); continue; }
           c.drive = null; c.parked = false; c.sleeping = false; c.sleepT = 0;
           const sx = dx >= 0 ? 1 : -1; c.pos.x = B.x + sx * 2.7; c.vel.set(sx * 9, 2.5, bus.v * 0.7);
-          bus.v *= 0.97; bus.dmg += 25000; g.ledger.damage += 25000; if (g.currentInc === bus.inc) bus.inc.damage += 25000;
+          bus.v = Math.max(0, bus.v - 0.15); bus.dmg += 25000; g.ledger.damage += 25000; if (g.currentInc === bus.inc) bus.inc.damage += 25000;
           g.SFX.crumble(c.pos); g.toast('The bus clipped a car', '');
         }
       }

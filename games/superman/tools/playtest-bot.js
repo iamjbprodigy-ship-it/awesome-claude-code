@@ -597,7 +597,7 @@ const SP_DRIVE = `(() => {
       P.flying = true; P.pos.set(lane, 1.7, b.s + 2); P.vel.set(0, 0, b.v); g.setYawPitch(0, 0);
       S.press('KeyE'); attached = S.bus.attached;   // grab and keep holding E
     } else if (mode === 'hard') {
-      while (S.bus.v < 24.5 && t < 2400) step();
+      while (S.bus.v < 23.5 && S.bus.s < S.cfg.bus.stopZ - 70 && t < 2400) step();
       const b = S.bus; dist = S.cfg.bus.stopZ - b.s;
       P.flying = true; P.pos.set(lane, 1.7, b.s + 3); P.vel.set(0, 0, 0);
     }
@@ -651,7 +651,7 @@ SCENARIOS.push(
       ['both set pieces registered and in the late rotation', r.reg.bus && r.reg.airliner && r.reg.rotBus && r.reg.rotPlane, JSON.stringify(r.reg)],
       ['bus: braced 40 m+ early and held E, it stops before the crosswalk', r.gentle.dist >= 40 && r.gentle.attached && r.gentle.success && r.gentle.short > 0, `${r.gentle.dist} m out, stopped ${(r.gentle.short || 0).toFixed(1)} m short, peak ${r.gentle.maxG} g`],
       ['bus: gentle stop hurts nobody, 30 step off', r.gentle.hurt === 0 && r.gentle.disembarked === 30, `${r.gentle.hurt} hurt, ${r.gentle.disembarked} off`],
-      ['bus: a stationary block at 25 m/s hurts 10+', r.hard.blocked && r.hard.hurt >= 10, `${r.hard.hurt} hurt`],
+      ['bus: a stationary block at 25 m/s hurts 10+', r.hard.blocked && r.hard.hurt >= 10, `${r.hard.hurt} hurt (block at ${r.hard.vBlock} m/s)`],
       ['bus: left alone it fails within its limit (+5 s) with lives lost', r.alone.ended && r.alone.success === false && r.alone.seconds <= 50 && r.alone.lost > 0, `${r.alone.seconds} s, ${r.alone.lost} lost`],
       ['bus: never inside a live block, no NaN', ![r.gentle, r.hard, r.alone].some(x => x.insideAny || x.nanAny), ''],
       ['bus: sim cost under 6 ms/frame', r.alone.simMs < 6 && r.gentle.simMs < 6, `${r.gentle.simMs} / ${r.alone.simMs} ms`],
