@@ -26,9 +26,12 @@ On the title screen, press **Enter** or click **Start**. **Quality** cycles Low 
 | G / V | Thunder clap / slow time |
 | F | Switch between flying and walking |
 | P / N | Pause and read the Daily Planet |
-| M | Mute |
+| M / Tab | City map: click to set a waypoint, scroll to zoom |
+| K | Mute |
 
-Gamepad: the sticks fly and look; RT heat vision, LT freeze, RB punch, LB grab, X clap, Y x-ray.
+**Map:** the minimap (bottom right) turns with you and zooms out as you speed up. Alerts appear as pins, with arrows on the rim when they're off-screen, and a tall coloured light beam rises from each one in the city: gold for emergencies, green for Kryptonite, red for the injured, blue for your waypoint.
+
+Gamepad: Back/View opens the map; the sticks fly and look; RT heat vision, LT freeze, RB punch, LB grab, X clap, Y x-ray.
 
 ## Develop
 - `node tools/playtest-bot.js [--shots]` drives every power, emergency, a tower collapse and the render budgets in headless Chromium. Needs Playwright.

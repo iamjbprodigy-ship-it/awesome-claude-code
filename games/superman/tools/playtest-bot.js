@@ -23,6 +23,7 @@ const flag = n => args.includes('--' + n);
 const opt = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : d; };
 const OUT = path.resolve(opt('out', path.join(__dirname, '..', '.playtest')));
 const QUALITY = opt('quality', 'low');
+const SHOTS = flag('shots');
 const ONLY = (opt('only', '') || '').split(',').filter(Boolean);
 const GAME = 'file://' + path.resolve(opt('file', path.join(__dirname, '..', 'index.html')));
 fs.mkdirSync(OUT, { recursive: true });
@@ -49,6 +50,35 @@ const SCENARIOS = [
       return { unsupported, people: g.people.length, cars: g.bodies.filter(b => b.kind === 'car').length, buildings: g.buildings.length }; })()`,
     check: r => [['no floor starts unsupported', r.unsupported === 0, r.unsupported],
       ['city populated', r.people > 50 && r.cars > 40 && r.buildings > 30, `${r.people} people, ${r.cars} cars, ${r.buildings} towers`]]
+  },
+  {
+    name: 'map',
+    // a real emergency should put a pin on the minimap; M opens the city map, a click sets a waypoint
+    page: async (p) => {
+      await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: 120000 });
+      await p.evaluate(() => { const g = __game; g.begin(); g.P.pos.set(0, 120, 300); g.startIncident('fire'); g.step(30); g.render(); });
+      const pins = await p.evaluate(() => __game.mapPins().map(q => q[2]));
+      const miniShown = await p.isVisible('#minimap');
+      if (SHOTS) await p.screenshot({ path: path.join(OUT, 'map-minimap.png'), timeout: 300000 });
+      await p.keyboard.press('KeyM');
+      await p.waitForTimeout(300);
+      const opened = await p.isVisible('#bigmap');
+      const t0 = await p.evaluate(() => __game.simT);
+      await p.waitForTimeout(400);
+      const paused = (await p.evaluate(() => __game.simT)) === t0;
+      const box = await p.locator('#bigmap-c').boundingBox();
+      await p.mouse.click(box.x + box.width * 0.62, box.y + box.height * 0.4);
+      await p.waitForTimeout(300);
+      const way = await p.evaluate(() => !!__game.MAP.waypoint);
+      if (SHOTS) await p.screenshot({ path: path.join(OUT, 'map-city.png'), timeout: 300000 });
+      await p.keyboard.press('Escape');
+      await p.waitForTimeout(300);
+      const closed = !(await p.isVisible('#bigmap'));
+      return { pins, miniShown, opened, paused, way, closed };
+    },
+    check: r => [['emergency has a map pin', r.pins.includes('inc'), r.pins.join(',')], ['minimap shows in game', r.miniShown, ''],
+      ['M opens the city map', r.opened, ''], ['game pauses under the map', r.paused, ''],
+      ['clicking the map sets a waypoint', r.way, ''], ['Esc closes the map', r.closed, '']]
   },
   {
     name: 'flight',
@@ -171,7 +201,7 @@ async function page(browser, q) {
   const p = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const errs = [];
   p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
-  p.on('pageerror', e => errs.push('PAGEERROR ' + e.message));
+  p.on('pageerror', e => errs.push('PAGEERROR ' + e.message + ' @ ' + (e.stack || '').split('\n').slice(1, 3).join(' <- ')));
   await p.goto(GAME + '?q=' + q);
   await p.waitForFunction(() => window.__game, null, { timeout: 120000 });
   return { p, errs };

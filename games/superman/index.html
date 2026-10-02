@@ -57,6 +57,7 @@
   <div id="xh"><i></i><svg id="charge" viewBox="0 0 40 40"><circle cx="20" cy="20" r="16"/></svg></div>
   <div id="toasts"></div>
   <div id="markers"></div>
+  <canvas id="minimap" width="220" height="220" aria-label="Minimap"></canvas>
 </div>
 
 <div id="title" class="loading">
@@ -98,13 +99,27 @@
       <dt>V</dt><dd>Super-speed time slow</dd>
       <dt>F</dt><dd>Switch between flying and walking</dd>
       <dt>P / N</dt><dd>Pause and read the Daily Planet</dd>
-      <dt>M</dt><dd>Mute</dd>
+      <dt>M / Tab</dt><dd>City map: click to set a waypoint</dd>
+      <dt>K</dt><dd>Mute</dd>
       <dt>` or F3</dt><dd>Show frame rate and performance</dd>
       <dt>Gamepad</dt><dd>Sticks fly and look &middot; A up, B down, L3 speed &middot; RT heat, LT freeze &middot; RB punch, LB grab &middot; X clap, Y x-ray &middot; R3 hearing &middot; D-pad up time, down fly &middot; Start pause</dd>
     </dl>
     <button id="close-controls" type="button">Back</button>
   </div>
   <p class="legal">A fan-made physics sandbox. Superman and the S-shield are trademarks of DC. Not affiliated with or endorsed by DC or Warner Bros.</p>
+</div>
+
+<div id="bigmap" hidden>
+  <canvas id="bigmap-c"></canvas>
+  <div class="map-legend">
+    <h2>Metropolis</h2>
+    <ul>
+      <li><i class="lg inc"></i>Emergency</li><li><i class="lg kryp"></i>Kryptonite</li><li><i class="lg hurt"></i>Injured</li>
+      <li><i class="lg trap"></i>Trapped (hearing / x-ray)</li><li><i class="lg hosp"></i>Hospital</li><li><i class="lg way"></i>Your waypoint</li>
+    </ul>
+    <p>Click the map to set a waypoint (click it again to clear). Scroll to zoom. M, Tab or Esc closes.</p>
+    <button id="bigmap-close" type="button">Back to the city</button>
+  </div>
 </div>
 
 <div id="paused" hidden><div class="card paper" id="paper"></div></div>

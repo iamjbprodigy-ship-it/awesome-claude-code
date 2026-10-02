@@ -81,7 +81,7 @@ html, body {
   position: absolute; left: 50%; transform: translateX(-50%);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
   display: flex; flex-wrap: wrap; justify-content: center; gap: 6px;
-  max-width: min(780px, calc(100% - 500px));
+  max-width: min(780px, calc(100% - 520px));
 }
 .chip {
   display: flex; align-items: center; gap: 6px;
@@ -275,3 +275,20 @@ html, body {
 .bench-actions { display: flex; gap: 8px; margin-top: 10px; }
 .bench-actions button { padding: 9px 16px; border-radius: 4px; border: 1px solid var(--edge); background: rgba(226, 48, 42, 0.85); color: #fff; font: 700 14px var(--f-ui); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
 .bench-actions button + button { background: rgba(8, 12, 28, 0.6); }
+
+/* ---------------------------------------------------------------- minimap + city map */
+#minimap {
+  position: absolute; right: 16px; bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); width: 220px; height: 220px;
+  border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 197, 49, 0.55), 0 6px 22px rgba(0, 0, 0, 0.55); background: rgba(8, 12, 28, 0.5);
+}
+#bigmap { position: fixed; inset: 0; z-index: 7; display: grid; grid-template-columns: 1fr 300px; background: #121418; }
+#bigmap-c { width: 100%; height: 100%; display: block; cursor: crosshair; }
+.map-legend { padding: 24px 20px; background: rgba(8, 12, 28, 0.92); border-left: 1px solid var(--edge); overflow-y: auto; }
+.map-legend h2 { font-family: var(--f-display); text-transform: uppercase; letter-spacing: 0.08em; margin: 0 0 12px; }
+.map-legend ul { list-style: none; padding: 0; margin: 0 0 14px; display: grid; gap: 8px; font-size: 15px; }
+.map-legend p { color: var(--dim); font-size: 14px; line-height: 1.4; }
+.lg { display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border: 2px solid rgba(0, 0, 0, 0.7); }
+.lg.inc { background: #ffc531; transform: rotate(45deg); } .lg.kryp { background: #a6ff3d; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
+.lg.hurt { background: #ff6b6b; } .lg.trap { background: #9be6ff; } .lg.hosp { background: #57e39a; } .lg.way { background: #5aa9ff; border-radius: 50% 50% 50% 0; }
+#bigmap-close { margin-top: 10px; padding: 10px 16px; border-radius: 4px; border: 1px solid var(--edge); background: rgba(226, 48, 42, 0.85); color: #fff; font: 700 14px var(--f-ui); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+@media (max-width: 900px) { #bigmap { grid-template-columns: 1fr; grid-template-rows: 1fr auto; } #minimap { width: 150px; height: 150px; } }
