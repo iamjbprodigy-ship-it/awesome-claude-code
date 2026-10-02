@@ -2320,11 +2320,15 @@ function updateBullets(dt) {
 // ============================================================ emergencies (one at a time)
 let currentInc = null, nextIncT = 25, incCount = 0;
 const INC_TYPES = ['heli', 'meteor', 'fire', 'robbery'];
+// module-registered incident types (js/setpieces.js): { start(forced) -> inc, want(incCount, time) -> bool }
+const INC_REG = window.SM_INCIDENTS = window.SM_INCIDENTS || {};
 function startIncident(forced) {
   if (currentInc) endIncident(false, 'Emergency abandoned.');
-  const type = forced ? String(forced).replace('kryptonite', 'meteor') : INC_TYPES[incCount % INC_TYPES.length]; incCount++;
+  let type = forced ? String(forced).replace('kryptonite', 'meteor') : INC_TYPES[incCount % INC_TYPES.length]; incCount++;
+  if (!forced) for (const k in INC_REG) if (INC_REG[k].want && INC_REG[k].want(incCount, ledger.time)) { type = k; break; }
   let inc = null;
-  if (type === 'fire') inc = startFire();
+  if (INC_REG[type]) inc = INC_REG[type].start(forced);
+  else if (type === 'fire') inc = startFire();
   else if (type === 'heli') inc = startHeli();
   else if (type === 'robbery') inc = startRobbery();
   else inc = startMeteor(forced === 'kryptonite' || (!forced && incCount > 4 && rnd() < 0.6));
@@ -2365,6 +2369,7 @@ function updateIncident(dt) {
   const inc = currentInc; inc.age += dt;
   inc.update(dt);
   if (currentInc === inc && inc.age > inc.limit) inc.timeout();
+  if (currentInc === inc && inc.age > inc.limit + 20) endIncident(false, 'Out of time.'); // hard stop: every incident ends
 }
 // --- fire with trapped people
 function startFire() {
@@ -3717,7 +3722,7 @@ function updateHUD(dt) {
     chips.clap.classList.toggle('on', P.clapCD > 0.6); chips.fly.classList.toggle('on', P.flying);
   }
   const list = [];
-  if (currentInc) list.push({ pos: currentInc.marker(), cls: currentInc.m && currentInc.m.kryp ? 'kryp' : 'inc', label: currentInc.type === 'robbery' ? 'Robbery' : currentInc.type === 'fire' ? 'Fire' : currentInc.type === 'heli' ? 'Falling helicopter' : (currentInc.m && currentInc.m.kryp ? 'Kryptonite meteor' : 'Meteor'), sub: Math.round(currentInc.marker().distanceTo(P.pos) / 5) * 5 + ' m' });
+  if (currentInc) list.push({ pos: currentInc.marker(), cls: currentInc.m && currentInc.m.kryp ? 'kryp' : 'inc', label: currentInc.label || (currentInc.type === 'robbery' ? 'Robbery' : currentInc.type === 'fire' ? 'Fire' : currentInc.type === 'heli' ? 'Falling helicopter' : (currentInc.m && currentInc.m.kryp ? 'Kryptonite meteor' : 'Meteor')), sub: Math.round(currentInc.marker().distanceTo(P.pos) / 5) * 5 + ' m' });
   if (currentInc && currentInc.type === 'robbery') for (const p of currentInc.crew) if (p.tele > 0 && !p.cuffed) list.push({ pos: T1.copy(p.pos).setY(p.pos.y + 1.6).clone(), cls: 'hurt', label: '!', sub: 'shot coming' });
   // super hearing: one marker per heard source ("Cry for help · 240 m"); otherwise the old proximity/x-ray markers
   for (const s of HEAR.list) list.push({ pos: T1.copy(s.pos).setY(s.pos.y + 1.4).clone(), cls: HEAR_CLS[s.kind] + (s.look > 0.5 ? ' near' : ''), label: s.label, sub: Math.round(s.d / 5) * 5 + ' m' });
@@ -4205,6 +4210,8 @@ window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, ren
   get POWER() { return POWER; }, setPower, PWR, heard: () => HEAR.list.map(s => ({ kind: s.kind, label: s.label, d: Math.round(s.d), gain: +s.gain.toFixed(3) })), get hearOn() { return HEAR.on; }, HEAR, spawnMinorNeed, injurePerson,
   // street-level missions + NPC dialogue (js/missions.js)
   mapPinHooks, PIN_COL, BEACON_COL, toast, hopeAdd, hopeHit, addSave, SFX, AU, FX, PPL, placePerson, groundY, cars, HOSP, missions: window.SM_MISSIONS || null,
-  get heatOn() { return beams[0].visible; }, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
+  get heatOn() { return beams[0].visible; },
+  // set pieces (js/setpieces.js)
+  endIncident, aimDir: (o) => aimDir(o), registerIncident(type, def) { INC_REG[type] = def; }, setpieces: window.SM_SETPIECES || null, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
 requestAnimationFrame(frame);
 })();
