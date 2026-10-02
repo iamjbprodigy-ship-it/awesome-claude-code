@@ -1372,80 +1372,96 @@ const P = {
 let yaw = -0.54, pitch = -0.08;
 const hero = (() => {
   const g = new THREE.Group();
-  const suit = new THREE.MeshStandardMaterial({ color: lin(0x1c3fb8), roughness: 0.42, metalness: 0.08, emissive: new THREE.Color(0, 0, 0) });
-  const red = new THREE.MeshStandardMaterial({ color: lin(0xb3121a), roughness: 0.48, metalness: 0.05 });
-  const skin = new THREE.MeshStandardMaterial({ color: lin(0xe2a987), roughness: 0.62 });
-  const hair = new THREE.MeshStandardMaterial({ color: lin(0x0e0f12), roughness: 0.45 });
-  const gold = new THREE.MeshStandardMaterial({ color: lin(0xf2b705), roughness: 0.35, metalness: 0.4 });
-  const add = (geo, mat, x, y, z, parent, sx, sy, sz) => {
-    const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (sx) m.scale.set(sx, sy, sz);
-    m.castShadow = true; (parent || g).add(m); return m;
-  };
-  const sph = (r) => new THREE.SphereGeometry(r, 24, 16);
-  // turned silhouettes: profile points are [radius, y]
-  const lathe = (pts, seg) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg || 28);
-  // torso: a lathe-turned V-taper (narrow waist, broad lats and chest), flattened front to back
-  add(lathe([[0.0, -0.13], [0.152, -0.13], [0.158, -0.02], [0.175, 0.1], [0.212, 0.22], [0.232, 0.33], [0.226, 0.42], [0.17, 0.5], [0.09, 0.55], [0.0, 0.56]]), suit, 0, 0, 0, null, 1.24, 1, 0.66);
-  add(sph(0.13), suit, -0.088, 0.33, -0.07, null, 0.95, 0.66, 0.5);           // pecs
-  add(sph(0.13), suit, 0.088, 0.33, -0.07, null, 0.95, 0.66, 0.5);
-  add(sph(0.12), suit, -0.14, 0.47, 0.01, null, 1.1, 0.55, 0.85);              // traps
-  add(sph(0.12), suit, 0.14, 0.47, 0.01, null, 1.1, 0.55, 0.85);
-  add(sph(0.105), suit, -0.29, 0.425, 0, null, 1, 1.05, 1);                   // deltoids
-  add(sph(0.105), suit, 0.29, 0.425, 0, null, 1, 1.05, 1);
-  for (const sy of [0.06, 0.15]) for (const sx of [-0.045, 0.045]) add(sph(0.05), suit, sx, sy, -0.095, null, 1, 0.8, 0.45); // abs
-  // trunks, belt and buckle
-  add(lathe([[0.0, -0.32], [0.12, -0.32], [0.175, -0.25], [0.168, -0.13], [0.0, -0.13]]), red, 0, 0, 0, null, 1.18, 1, 0.74);
-  add(new THREE.TorusGeometry(0.163, 0.022, 8, 32), gold, 0, -0.115, 0, null, 1.17, 0.74, 1).rotation.x = Math.PI / 2;
-  add(new THREE.BoxGeometry(0.075, 0.05, 0.02), gold, 0, -0.115, -0.128);
-  // neck, head and the curl
-  add(lathe([[0.0, 0.5], [0.07, 0.5], [0.064, 0.6], [0.06, 0.66], [0.0, 0.66]], 16), skin, 0, 0, 0.005, null, 1.05, 1, 1);
-  add(sph(0.108), skin, 0, 0.735, -0.005, null, 0.88, 1.12, 1.0);              // cranium
-  add(new THREE.BoxGeometry(0.11, 0.07, 0.07), skin, 0, 0.655, -0.06);         // square jaw
-  add(sph(0.03), skin, 0, 0.62, -0.085, null, 1.3, 0.9, 1);                    // chin
-  add(sph(0.022), skin, -0.098, 0.73, 0.0, null, 0.5, 1, 0.8); add(sph(0.022), skin, 0.098, 0.73, 0.0, null, 0.5, 1, 0.8); // ears
-  add(new THREE.SphereGeometry(0.114, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), hair, 0, 0.758, 0.014, null, 0.94, 1.0, 1.04);
-  add(sph(0.05), hair, 0.03, 0.82, -0.075, null, 1.4, 0.55, 0.8);             // swept front
-  add(new THREE.TorusGeometry(0.02, 0.007, 6, 14, 4.6), hair, -0.012, 0.795, -0.11).rotation.y = 0.3; // the curl
-  // chest shield
-  const [ec, ex] = cnv(256, 224);
-  ex.scale(2, 2);
-  ex.fillStyle = '#f2b705'; ex.strokeStyle = '#b3121a'; ex.lineWidth = 9; ex.beginPath();
-  ex.moveTo(16, 8); ex.lineTo(112, 8); ex.lineTo(124, 36); ex.lineTo(64, 104); ex.lineTo(4, 36); ex.closePath(); ex.fill(); ex.stroke();
-  ex.fillStyle = '#b3121a'; ex.font = '900 66px Georgia, serif'; ex.textAlign = 'center'; ex.textBaseline = 'middle'; ex.fillText('S', 64, 52);
-  const emblem = new THREE.Mesh(new THREE.PlaneGeometry(0.23, 0.2), new THREE.MeshStandardMaterial({ map: tex(ec, true), transparent: true, roughness: 0.4, metalness: 0.2 }));
-  emblem.position.set(0, 0.315, -0.158); emblem.rotation.set(-0.16, Math.PI, 0); g.add(emblem);
-  // two-segment limbs: shoulder/hip pivots with elbow/knee pivots so poses read properly
-  const limb = (side, isArm) => {
-    const piv = new THREE.Group(), joint = new THREE.Group();
-    if (isArm) {
-      piv.position.set(side * 0.3, 0.42, 0); g.add(piv);
-      add(new THREE.CylinderGeometry(0.074, 0.062, 0.3, 16), suit, 0, -0.15, 0, piv);
-      add(sph(0.062), suit, 0, -0.13, -0.025, piv, 1, 1.5, 1);                 // bicep
-      add(sph(0.05), suit, 0, -0.15, 0.03, piv, 1, 1.4, 0.9);                 // tricep
-      joint.position.set(0, -0.29, 0); piv.add(joint);
-      add(sph(0.058), suit, 0, 0, 0, joint);                                  // elbow
-      add(new THREE.CylinderGeometry(0.06, 0.046, 0.26, 16), suit, 0, -0.13, 0, joint);
-      add(sph(0.052), skin, 0, -0.29, -0.004, joint, 0.95, 1.15, 1.1);         // fist
-    } else {
-      piv.position.set(side * 0.098, -0.22, 0); g.add(piv);
-      add(new THREE.CylinderGeometry(0.098, 0.07, 0.38, 16), suit, 0, -0.19, 0, piv);
-      add(sph(0.08), suit, 0, -0.13, -0.025, piv, 1, 1.6, 1);                 // quad
-      joint.position.set(0, -0.38, 0); piv.add(joint);
-      add(sph(0.066), suit, 0, 0, 0, joint);                                  // knee
-      add(new THREE.CylinderGeometry(0.068, 0.054, 0.3, 16), red, 0, -0.17, 0, joint);  // boot
-      add(sph(0.056), red, 0, -0.1, 0.03, joint, 1, 1.7, 1);                  // calf
-      add(new THREE.TorusGeometry(0.069, 0.012, 6, 20), red, 0, -0.03, 0, joint).rotation.x = Math.PI / 2; // boot cuff
-      add(new THREE.BoxGeometry(0.09, 0.06, 0.2), red, 0, -0.335, -0.045, joint); // foot
+  // sculpted body from js/hero-detail.js (window.SM_HERO); the primitive model below is the fallback
+  const SM = window.SM_HERO, aniso = renderer.capabilities.getMaxAnisotropy();
+  let suit = null, armL, armR, legL, legR, CW = 8, CH = 12;
+  if (SM && SM.build) {
+    try {
+      const b = SM.build(THREE, g, { aniso });
+      ({ suit, armL, armR, legL, legR } = b);
+      if (SM.CAPE) ({ CW, CH } = SM.CAPE);
+    } catch (e) {
+      console.warn('[hero] detailed model failed, using the simple one', e);
+      suit = null; while (g.children.length) g.remove(g.children[0]);
     }
-    piv.userData.joint = joint;
-    return piv;
-  };
-  const armL = limb(-1, true), armR = limb(1, true), legL = limb(-1, false), legR = limb(1, false);
+  }
+  const detailed = !!suit;
+  if (!suit) {
+    suit = new THREE.MeshStandardMaterial({ color: lin(0x1c3fb8), roughness: 0.42, metalness: 0.08, emissive: new THREE.Color(0, 0, 0) });
+    const red = new THREE.MeshStandardMaterial({ color: lin(0xb3121a), roughness: 0.48, metalness: 0.05 });
+    const skin = new THREE.MeshStandardMaterial({ color: lin(0xe2a987), roughness: 0.62 });
+    const hair = new THREE.MeshStandardMaterial({ color: lin(0x0e0f12), roughness: 0.45 });
+    const gold = new THREE.MeshStandardMaterial({ color: lin(0xf2b705), roughness: 0.35, metalness: 0.4 });
+    const add = (geo, mat, x, y, z, parent, sx, sy, sz) => {
+      const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (sx) m.scale.set(sx, sy, sz);
+      m.castShadow = true; (parent || g).add(m); return m;
+    };
+    const sph = (r) => new THREE.SphereGeometry(r, 24, 16);
+    // turned silhouettes: profile points are [radius, y]
+    const lathe = (pts, seg) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg || 28);
+    // torso: a lathe-turned V-taper (narrow waist, broad lats and chest), flattened front to back
+    add(lathe([[0.0, -0.13], [0.152, -0.13], [0.158, -0.02], [0.175, 0.1], [0.212, 0.22], [0.232, 0.33], [0.226, 0.42], [0.17, 0.5], [0.09, 0.55], [0.0, 0.56]]), suit, 0, 0, 0, null, 1.24, 1, 0.66);
+    add(sph(0.13), suit, -0.088, 0.33, -0.07, null, 0.95, 0.66, 0.5);           // pecs
+    add(sph(0.13), suit, 0.088, 0.33, -0.07, null, 0.95, 0.66, 0.5);
+    add(sph(0.12), suit, -0.14, 0.47, 0.01, null, 1.1, 0.55, 0.85);              // traps
+    add(sph(0.12), suit, 0.14, 0.47, 0.01, null, 1.1, 0.55, 0.85);
+    add(sph(0.105), suit, -0.29, 0.425, 0, null, 1, 1.05, 1);                   // deltoids
+    add(sph(0.105), suit, 0.29, 0.425, 0, null, 1, 1.05, 1);
+    for (const sy of [0.06, 0.15]) for (const sx of [-0.045, 0.045]) add(sph(0.05), suit, sx, sy, -0.095, null, 1, 0.8, 0.45); // abs
+    // trunks, belt and buckle
+    add(lathe([[0.0, -0.32], [0.12, -0.32], [0.175, -0.25], [0.168, -0.13], [0.0, -0.13]]), red, 0, 0, 0, null, 1.18, 1, 0.74);
+    add(new THREE.TorusGeometry(0.163, 0.022, 8, 32), gold, 0, -0.115, 0, null, 1.17, 0.74, 1).rotation.x = Math.PI / 2;
+    add(new THREE.BoxGeometry(0.075, 0.05, 0.02), gold, 0, -0.115, -0.128);
+    // neck, head and the curl
+    add(lathe([[0.0, 0.5], [0.07, 0.5], [0.064, 0.6], [0.06, 0.66], [0.0, 0.66]], 16), skin, 0, 0, 0.005, null, 1.05, 1, 1);
+    add(sph(0.108), skin, 0, 0.735, -0.005, null, 0.88, 1.12, 1.0);              // cranium
+    add(new THREE.BoxGeometry(0.11, 0.07, 0.07), skin, 0, 0.655, -0.06);         // square jaw
+    add(sph(0.03), skin, 0, 0.62, -0.085, null, 1.3, 0.9, 1);                    // chin
+    add(sph(0.022), skin, -0.098, 0.73, 0.0, null, 0.5, 1, 0.8); add(sph(0.022), skin, 0.098, 0.73, 0.0, null, 0.5, 1, 0.8); // ears
+    add(new THREE.SphereGeometry(0.114, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), hair, 0, 0.758, 0.014, null, 0.94, 1.0, 1.04);
+    add(sph(0.05), hair, 0.03, 0.82, -0.075, null, 1.4, 0.55, 0.8);             // swept front
+    add(new THREE.TorusGeometry(0.02, 0.007, 6, 14, 4.6), hair, -0.012, 0.795, -0.11).rotation.y = 0.3; // the curl
+    // chest shield
+    const [ec, ex] = cnv(256, 224);
+    ex.scale(2, 2);
+    ex.fillStyle = '#f2b705'; ex.strokeStyle = '#b3121a'; ex.lineWidth = 9; ex.beginPath();
+    ex.moveTo(16, 8); ex.lineTo(112, 8); ex.lineTo(124, 36); ex.lineTo(64, 104); ex.lineTo(4, 36); ex.closePath(); ex.fill(); ex.stroke();
+    ex.fillStyle = '#b3121a'; ex.font = '900 66px Georgia, serif'; ex.textAlign = 'center'; ex.textBaseline = 'middle'; ex.fillText('S', 64, 52);
+    const emblem = new THREE.Mesh(new THREE.PlaneGeometry(0.23, 0.2), new THREE.MeshStandardMaterial({ map: tex(ec, true), transparent: true, roughness: 0.4, metalness: 0.2 }));
+    emblem.position.set(0, 0.315, -0.158); emblem.rotation.set(-0.16, Math.PI, 0); g.add(emblem);
+    // two-segment limbs: shoulder/hip pivots with elbow/knee pivots so poses read properly
+    const limb = (side, isArm) => {
+      const piv = new THREE.Group(), joint = new THREE.Group();
+      if (isArm) {
+        piv.position.set(side * 0.3, 0.42, 0); g.add(piv);
+        add(new THREE.CylinderGeometry(0.074, 0.062, 0.3, 16), suit, 0, -0.15, 0, piv);
+        add(sph(0.062), suit, 0, -0.13, -0.025, piv, 1, 1.5, 1);                 // bicep
+        add(sph(0.05), suit, 0, -0.15, 0.03, piv, 1, 1.4, 0.9);                 // tricep
+        joint.position.set(0, -0.29, 0); piv.add(joint);
+        add(sph(0.058), suit, 0, 0, 0, joint);                                  // elbow
+        add(new THREE.CylinderGeometry(0.06, 0.046, 0.26, 16), suit, 0, -0.13, 0, joint);
+        add(sph(0.052), skin, 0, -0.29, -0.004, joint, 0.95, 1.15, 1.1);         // fist
+      } else {
+        piv.position.set(side * 0.098, -0.22, 0); g.add(piv);
+        add(new THREE.CylinderGeometry(0.098, 0.07, 0.38, 16), suit, 0, -0.19, 0, piv);
+        add(sph(0.08), suit, 0, -0.13, -0.025, piv, 1, 1.6, 1);                 // quad
+        joint.position.set(0, -0.38, 0); piv.add(joint);
+        add(sph(0.066), suit, 0, 0, 0, joint);                                  // knee
+        add(new THREE.CylinderGeometry(0.068, 0.054, 0.3, 16), red, 0, -0.17, 0, joint);  // boot
+        add(sph(0.056), red, 0, -0.1, 0.03, joint, 1, 1.7, 1);                  // calf
+        add(new THREE.TorusGeometry(0.069, 0.012, 6, 20), red, 0, -0.03, 0, joint).rotation.x = Math.PI / 2; // boot cuff
+        add(new THREE.BoxGeometry(0.09, 0.06, 0.2), red, 0, -0.335, -0.045, joint); // foot
+      }
+      piv.userData.joint = joint;
+      return piv;
+    };
+    armL = limb(-1, true); armR = limb(1, true); legL = limb(-1, false); legR = limb(1, false);
+  }
   // cape: verlet cloth simulated in the body frame
-  const CW = 8, CH = 12, pts = [], prev = [], rest = [], cons = [];
+  const pts = [], prev = [], rest = [], cons = [];
   for (let r = 0; r < CH; r++) for (let c = 0; c < CW; c++) {
     const t = r / (CH - 1), w = 0.4 + 0.3 * t;
-    const v = new V3((c / (CW - 1) - 0.5) * w, 0.48 - r * 0.112, 0.17 + t * 0.03);
+    const v = new V3((c / (CW - 1) - 0.5) * w, 0.48 - r * 0.112 * 11 / (CH - 1), (detailed ? 0.15 : 0.17) + t * 0.03);
     pts.push(v.clone()); prev.push(v.clone()); rest.push(v.clone());
   }
   const idx = (r, c) => r * CW + c;
@@ -1461,10 +1477,15 @@ const hero = (() => {
   for (let r = 0; r < CH; r++) for (let c = 0; c < CW; c++) { cuv[idx(r, c) * 2] = c / (CW - 1); cuv[idx(r, c) * 2 + 1] = 1 - r / (CH - 1); }
   for (let r = 0; r < CH - 1; r++) for (let c = 0; c < CW - 1; c++) { const a = idx(r, c), b = idx(r, c + 1), d = idx(r + 1, c), e = idx(r + 1, c + 1); cind.push(a, d, b, b, d, e); }
   cg.setAttribute('position', new THREE.BufferAttribute(cpos, 3)); cg.setAttribute('uv', new THREE.BufferAttribute(cuv, 2)); cg.setIndex(cind);
-  const capeMat = new THREE.MeshStandardMaterial({ color: lin(0xa80f16), roughness: 0.62, side: THREE.DoubleSide });
-  const cape = new THREE.Mesh(cg, capeMat); cape.castShadow = true; cape.frustumCulled = false; g.add(cape);
+  const capeMat = (SM && SM.capeMaterial && (() => { try { return SM.capeMaterial(THREE, { aniso }); } catch (e) { console.warn('[hero] cape material fallback', e); return null; } })())
+    || new THREE.MeshStandardMaterial({ color: lin(0xa80f16), roughness: 0.62, side: THREE.DoubleSide });
+  const cape = new THREE.Mesh(cg, capeMat); cape.name = 'hero-cape'; cape.userData.rest = rest; cape.castShadow = true; cape.frustumCulled = false; g.add(cape);
   scene.add(g);
-  return { g, suit, armL, armR, legL, legR, elbowL: armL.userData.joint, elbowR: armR.userData.joint, kneeL: legL.userData.joint, kneeR: legR.userData.joint, cape: { CW, CH, pts, prev, rest, cons, geo: cg, pos: cpos } };
+  return {
+    g, suit, armL, armR, legL, legR, elbowL: armL.userData.joint, elbowR: armR.userData.joint, kneeL: legL.userData.joint, kneeR: legR.userData.joint,
+    cape: { CW, CH, pts, prev, rest, cons, geo: cg, pos: cpos, minR: detailed ? 0.18 : 0.24 },
+    get visible() { return g.visible; }, set visible(v) { g.visible = v; }
+  };
 })();
 
 function updateCape(dt, t) {
@@ -1500,7 +1521,7 @@ function updateCape(dt, t) {
     for (let i = C.CW; i < n; i++) { // keep the cape outside the body capsule
       const p = C.pts[i];
       if (p.y > -1.0 && p.y < 0.55) {
-        const rr = Math.sqrt(p.x * p.x * 0.6 + p.z * p.z), minR = 0.24;
+        const rr = Math.sqrt(p.x * p.x * 0.6 + p.z * p.z), minR = C.minR || 0.24;
         if (rr < minR) { const k = minR / (rr || 1e-4); p.x *= k; p.z = p.z < 0 && Math.abs(p.x) < 0.25 ? -p.z : p.z * k; }
       }
     }

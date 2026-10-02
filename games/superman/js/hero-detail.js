@@ -177,13 +177,14 @@
       [0.17, 0.184, 0.114, 0.106, 0.0, 2.5],
       [0.27, 0.214, 0.125, 0.112, 0.0, 2.6],
       [0.35, 0.232, 0.124, 0.114, 0.0, 2.7],
-      [0.415, 0.24, 0.106, 0.11, 0.0, 2.9],
-      [0.46, 0.22, 0.088, 0.096, 0.0, 2.9],
-      [0.495, 0.168, 0.072, 0.082, 0.004, 2.6],
-      [0.525, 0.1, 0.062, 0.07, 0.006, 2.3],
-      [0.555, 0.066, 0.057, 0.062, 0.006, 2.1],
-      [0.62, 0.057, 0.052, 0.058, 0.004, 2.0],
-      [0.69, 0.054, 0.05, 0.056, 0.004, 2.0]
+      [0.415, 0.245, 0.108, 0.112, 0.0, 2.9],
+      [0.46, 0.232, 0.092, 0.1, 0.0, 2.9],
+      [0.5, 0.2, 0.078, 0.088, 0.004, 2.7],
+      [0.535, 0.148, 0.068, 0.078, 0.006, 2.4],
+      [0.565, 0.092, 0.064, 0.07, 0.008, 2.2],
+      [0.59, 0.07, 0.062, 0.066, 0.008, 2.1],
+      [0.64, 0.064, 0.058, 0.064, 0.006, 2.0],
+      [0.69, 0.06, 0.054, 0.06, 0.004, 2.0]
     ]);
     const p = sweep({ n: 72, m: 56, s0: -0.335, s1: 0.69, cap0: 0.035, cap1: 0.03, part: 0, ring: y => {
       const [x, f, b, cz, e] = T(y); return { c: [0, y, cz], up: x, un: x, wp: f, wn: b, e };
@@ -199,14 +200,14 @@
       ...[0.215, 0.18, 0.145].flatMap(y => sym({ c: [0.165, y, -0.055], r: [0.025, 0.011, 0.03], a: 0.0032 })),
       // lats flare, traps, scapulae, spine, glutes, collarbones, neck straps
       ...sym({ c: [0.172, 0.27, 0.055], r: [0.06, 0.06, 0.12, 0.1, 0.08, 0.08], a: 0.022 }),
-      ...sym({ c: [0.085, 0.5, 0.035], r: [0.07, 0.045, 0.06], a: 0.016 }),
+      ...sym({ c: [0.09, 0.53, 0.03], r: [0.07, 0.05, 0.06], a: 0.016 }),
       { c: [0, 0.39, 0.12], r: [0.09, 0.11, 0.06], a: 0.008 },
       ...sym({ c: [0.092, 0.33, 0.12], r: [0.05, 0.06, 0.05], a: 0.008 }),
       { c: [0, 0.2, 0.12], r: [0.011, 0.32, 0.05], a: -0.006 },
       ...sym({ c: [0.072, -0.225, 0.11], r: [0.07, 0.075, 0.07], a: 0.02 }),
-      ...sym({ c: [0.075, 0.5, -0.07], r: [0.06, 0.011, 0.04], a: 0.004 }),
-      ...sym({ c: [0.03, 0.585, -0.035], r: [0.012, 0.05, 0.02], a: 0.0045 }),
-      { c: [0, 0.59, -0.058], r: [0.009, 0.01, 0.02], a: 0.0028 }
+      ...sym({ c: [0.075, 0.525, -0.065], r: [0.06, 0.011, 0.04], a: 0.004 }),
+      ...sym({ c: [0.032, 0.6, -0.04], r: [0.012, 0.045, 0.02], a: 0.005 }),
+      { c: [0, 0.605, -0.064], r: [0.009, 0.01, 0.02], a: 0.0028 }
     ];
     displace(p, F); return p;
   }
@@ -240,8 +241,8 @@
       { c: [0, 0.757, -0.1], r: [0.012, 0.008, 0.025], a: 0.004 },                         // glabella
       ...sym({ c: [0.032, 0.744, -0.098], r: [0.017, 0.011, 0.03], a: -0.012, p: 1.3 }),  // eye sockets
       { c: [0, 0.737, -0.1], r: [0.0085, 0.016, 0.03], a: 0.007 },                         // nose bridge
-      { c: [0, 0.716, -0.1], r: [0.0095, 0.013, 0.03], a: 0.014 },                         // dorsum
-      { c: [0, 0.703, -0.1], r: [0.011, 0.009, 0.03], a: 0.02, p: 1.2 },                   // tip
+      { c: [0, 0.716, -0.1], r: [0.0095, 0.014, 0.03], a: 0.018 },                         // dorsum
+      { c: [0, 0.703, -0.1], r: [0.011, 0.009, 0.03], a: 0.026, p: 1.2 },                   // tip
       ...sym({ c: [0.0135, 0.7, -0.095], r: [0.0075, 0.0065, 0.02], a: 0.008 }),          // alae
       { c: [0, 0.693, -0.1], r: [0.012, 0.004, 0.03], a: -0.004 },                         // under the nose
       { c: [0, 0.684, -0.1], r: [0.004, 0.006, 0.03], a: 0.0015 },                         // philtrum
@@ -270,7 +271,7 @@
     ];
     displace(p, F, (x, y, z, i) => {
       const m = p.mask[i]; if (!m) return 0;
-      let d = 0.0085; for (const f of lift) d += field(f, x, y, z);
+      let d = 0.008 + 0.006 * sstep(0.76, 0.85, y); for (const f of lift) d += field(f, x, y, z);
       return d * m;
     });
     return p;
@@ -283,7 +284,7 @@
     displace(p, [{ c: [0.082, 0.742, 0.012], r: [0.006, 0.014, 0.009], a: -0.0035 }]);
     return p;
   }
-  const EYE = { x: 0.032, y: 0.744, z: -0.0772, r: 0.0125 };
+  const EYE = { x: 0.032, y: 0.744, z: -0.0745, r: 0.0125 };
   function eyePiece() {
     const r = EYE.r;
     return Object.assign(sweep({ n: 16, m: 24, s0: EYE.y + r, s1: EYE.y - r, cap0: r, cap1: r, part: 3, ring: y => ({ c: [EYE.x, y, EYE.z], up: r, un: r, wp: r, wn: r, e: 2 }) }), {});
@@ -297,16 +298,16 @@
   // right upper arm, pivot frame (shoulder joint at the origin)
   function upperArmPiece() {
     const A = profile([
-      [0.09, 0.06, 0.05, 0.065, 0.065, 2.2],
-      [0.05, 0.078, 0.058, 0.076, 0.076, 2.2],
-      [0.0, 0.088, 0.06, 0.08, 0.08, 2.2],
-      [-0.06, 0.076, 0.058, 0.07, 0.068, 2.2],
-      [-0.13, 0.06, 0.055, 0.064, 0.062, 2.2],
-      [-0.2, 0.054, 0.05, 0.06, 0.058, 2.2],
-      [-0.26, 0.05, 0.047, 0.052, 0.052, 2.2],
-      [-0.315, 0.046, 0.044, 0.046, 0.046, 2.2]
+      [0.08, 0.05, 0.045, 0.058, 0.058, 2.3],
+      [0.045, 0.07, 0.052, 0.068, 0.068, 2.3],
+      [0.0, 0.076, 0.054, 0.07, 0.07, 2.3],
+      [-0.06, 0.066, 0.052, 0.062, 0.06, 2.3],
+      [-0.13, 0.053, 0.049, 0.056, 0.054, 2.3],
+      [-0.2, 0.048, 0.045, 0.052, 0.05, 2.3],
+      [-0.26, 0.045, 0.042, 0.046, 0.046, 2.3],
+      [-0.315, 0.042, 0.04, 0.042, 0.042, 2.3]
     ]);
-    const p = sweep({ n: 36, m: 28, s0: 0.09, s1: -0.315, cap0: 0.06, cap1: 0.045, part: 4, ring: y => {
+    const p = sweep({ n: 36, m: 28, s0: 0.08, s1: -0.315, cap0: 0.05, cap1: 0.045, part: 4, ring: y => {
       const [o, i, f, b, e] = A(y); return { c: [0, y, 0], up: o, un: i, wp: f, wn: b, e };
     } });
     displace(p, [
@@ -552,13 +553,13 @@ float smWeave(vec3 p, float aa) {
 SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
   SmSurf s;
   vec3 SUIT = ${C(0x2246b4)}, RED = ${C(0xb5121b)}, YEL = ${C(0xf6c414)}, GOLD = ${C(0xe8a90c)}, BOOT = ${C(0xa30e17)};
-  vec3 SKIN = ${C(0xdfa283)}, LIP = ${C(0xb4685c)}, HAIR = ${C(0x0c0d11)};
+  vec3 SKIN = ${C(0xc98a68)}, LIP = ${C(0xb4685c)}, HAIR = ${C(0x0c0d11)};
   float e = max(aa * 0.75, 0.0004);
   float fab = 1.0;      // fabric weave amount
   s.col = SUIT; s.rough = 0.5; s.metal = 0.0; s.h = 0.0; s.skin = 0.0; s.sheen = 1.0;
   if (part < 0.5) {
     // torso: crew collar, shield, belt with buckle, trunks
-    float collarY = 0.53 + 0.032 * smoothstep(-0.05, 0.06, p.z);
+    float collarY = 0.548 + 0.03 * smoothstep(-0.05, 0.06, p.z);
     float neck = smoothstep(collarY - e, collarY + e, p.y);
     float bc = -0.113;
     float belt = smR(0.023 + e, 0.023 - e, abs(p.y - bc));
@@ -598,19 +599,19 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
     sk = mix(sk, sk * 0.35, lash * 0.75);
     s.col = mix(sk, HAIR, max(hair, brow * 0.9));
     s.skin = 1.0 - max(hair, brow); s.rough = mix(0.5, 0.36, hair) - lips * 0.12; fab = 0.0;
-    s.sheen = hair * 0.8;
+    s.sheen = hair * 0.35;
     float th = atan(p.x, -p.z);
-    s.h += hair * 0.00035 * sin(th * 150.0 + p.y * 260.0 + sin(p.y * 400.0 + th * 9.0) * 2.0) * (1.0 - smoothstep(0.2, 0.5, aa * 160.0));
+    s.h += hair * 0.00018 * (sin(th * 260.0 + 30.0 * smNoise(p * 90.0)) + 0.6 * smNoise(p * vec3(500.0, 120.0, 500.0))) * (1.0 - smoothstep(0.2, 0.5, aa * 260.0));
     s.h += (1.0 - hair) * 0.00007 * (smNoise(p * 1400.0) - 0.5) * (1.0 - smoothstep(0.1, 0.4, aa * 1400.0 / 6.0));
   } else if (part < 2.5) {
-    s.col = HAIR; s.rough = 0.36; s.sheen = 0.8; fab = 0.0;
+    s.col = HAIR; s.rough = 0.4; s.sheen = 0.3; fab = 0.0;
   } else if (part < 3.5) {
     // eye: sclera, blue iris with a dark limbal ring, pupil, upper-lid shadow
     vec3 d = normalize(p - vec3(side * ${EYE.x.toFixed(4)}, ${EYE.y.toFixed(4)}, ${EYE.z.toFixed(4)}));
     float c = -d.z;
-    float iris = smoothstep(0.855, 0.875, c), pupil = smoothstep(0.958, 0.968, c), limb = smR(0.035, 0.0, abs(c - 0.868));
+    float iris = smoothstep(0.885, 0.9, c), pupil = smoothstep(0.966, 0.974, c), limb = smR(0.03, 0.0, abs(c - 0.892));
     s.col = mix(${C(0xd8d2c8)}, ${C(0x3c6fb4)}, iris); s.col = mix(s.col, ${C(0x040405)}, max(pupil, limb * 0.6));
-    s.col *= mix(1.0, 0.35, smoothstep(0.15, 0.6, d.y));
+    s.col *= mix(1.0, 0.25, smoothstep(0.05, 0.45, d.y)) * mix(1.0, 0.7, smoothstep(0.2, 0.7, abs(d.x)));
     s.rough = 0.08; s.sheen = 0.0; fab = 0.0;
   } else if (part < 4.5) {
     // upper arm: seam down the outside
@@ -677,7 +678,7 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
     float nv = saturate(dot(geometry.normal, geometry.viewDir));
     float rim = pow(1.0 - nv, 4.0);
     vec3 sheenCol = mix(diffuseColor.rgb, vec3(1.0), 0.3);
-    reflectedLight.indirectSpecular += smS.sheen * 0.55 * rim * sheenCol * (irradiance + iblIrradiance) * RECIPROCAL_PI * ao;
+    reflectedLight.indirectSpecular += smS.sheen * 0.3 * rim * sheenCol * (irradiance + iblIrradiance) * RECIPROCAL_PI * ao;
     #if NUM_DIR_LIGHTS > 0
       vec3 L = directionalLights[0].direction;
       float ndl = dot(geometry.normal, L);
@@ -685,7 +686,7 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
       float wrap = max(0.0, (ndl + 0.5) / 1.5) - max(0.0, ndl);
       reflectedLight.directDiffuse += smS.skin * diffuseColor.rgb * directionalLights[0].color * wrap * vec3(1.0, 0.42, 0.3) * 0.8;
       // grazing sheen picks up the sun from behind
-      reflectedLight.directSpecular += smS.sheen * 0.3 * rim * sheenCol * directionalLights[0].color * saturate(dot(-geometry.viewDir, L) * 0.6 + 0.4) * saturate(ndl + 0.35);
+      reflectedLight.directSpecular += smS.sheen * 0.2 * rim * sheenCol * directionalLights[0].color * saturate(dot(-geometry.viewDir, L) * 0.6 + 0.4) * saturate(ndl + 0.35);
     #endif
   }`);
     };
@@ -772,5 +773,5 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
     return { suit: mat, armL, armR, legL, legR, meshes };
   }
 
-  window.SM_HERO = { build, capeMaterial, CAPE: { CW: 8, CH: 12 } };
+  window.SM_HERO = { build, capeMaterial, CAPE: { CW: 10, CH: 14 } };
 })();
