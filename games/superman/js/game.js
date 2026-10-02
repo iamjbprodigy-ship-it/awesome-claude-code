@@ -48,13 +48,18 @@ let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });
 } catch (e) { fail(); return; }
-const LOWQ = /[?&]q=low/.test(location.search), SHOTQ = /[?&]q=shot/.test(location.search);
-const PR = LOWQ ? 0.5 : SHOTQ ? 1 : Math.min(window.devicePixelRatio || 1, 1.5);
+// quality presets: ?q=low|medium|high|ultra (remembered), or ?q=shot for headless screenshots
+let storedQ = null; try { storedQ = localStorage.getItem('sm-quality'); } catch (_) { /* storage blocked */ }
+const QUALITY = (location.search.match(/[?&]q=(low|medium|high|ultra|shot)/) || [])[1] || storedQ || 'high';
+const LOWQ = QUALITY === 'low', SHOTQ = QUALITY === 'shot', MEDQ = QUALITY === 'medium', ULTRA = QUALITY === 'ultra';
+const DPR = window.devicePixelRatio || 1;
+const PR = LOWQ ? 0.5 : SHOTQ || MEDQ ? 1 : ULTRA ? Math.min(DPR, 2) : Math.min(DPR, 1.5);
 renderer.setPixelRatio(PR);
 renderer.shadowMap.enabled = !LOWQ;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 renderer.outputEncoding = THREE.LinearEncoding;
 renderer.toneMapping = THREE.NoToneMapping;
+renderer.info.autoReset = false; // the frame loop resets it, so counts cover every pass
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 450000);
@@ -62,8 +67,8 @@ camera.rotation.order = 'YXZ';
 
 const isGL2 = renderer.capabilities.isWebGL2;
 const rtOpts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
-const mainRT = isGL2 && !LOWQ && !SHOTQ && THREE.WebGLMultisampleRenderTarget
-  ? new THREE.WebGLMultisampleRenderTarget(4, 4, rtOpts) : new THREE.WebGLRenderTarget(4, 4, rtOpts);
+const mainRT = isGL2 && !LOWQ && !SHOTQ && !MEDQ && THREE.WebGLMultisampleRenderTarget
+  ? Object.assign(new THREE.WebGLMultisampleRenderTarget(4, 4, rtOpts), { samples: ULTRA ? 8 : 4 }) : new THREE.WebGLRenderTarget(4, 4, rtOpts);
 const composer = new THREE.EffectComposer(renderer, mainRT);
 composer.addPass(new THREE.RenderPass(scene, camera));
 const bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.6, 0.55, 1.0);
@@ -103,10 +108,10 @@ const hemi = new THREE.HemisphereLight(lin(0xa9c6ff), lin(0x5e5446), 0.35);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(lin(0xffd2a1), 3.3);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(ULTRA ? 4096 : MEDQ ? 1024 : 2048, ULTRA ? 4096 : MEDQ ? 1024 : 2048);
 {
   const sc = sun.shadow.camera;
-  sc.left = -150; sc.right = 150; sc.top = 150; sc.bottom = -150; sc.near = 10; sc.far = 1500;
+  const SR = ULTRA ? 200 : 150; sc.left = -SR; sc.right = SR; sc.top = SR; sc.bottom = -SR; sc.near = 10; sc.far = 1500;
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.6;
 }
 scene.add(sun, sun.target);
@@ -907,7 +912,7 @@ const colKey = (i, j) => (i & 2047) | ((j & 2047) << 11);
     THREE, scene, renderer, camera, lin, rnd, srand, R, clamp, pick,
     CONST: { CELL, STORY, LOTS, PITCH, HALF, WATER_Z, WATER_Y, FAR_SHORE, SEAFLOOR },
     lotInfo, buildings, HOSP, inBay, instancedFacade, makeFacadeMat, STYLE_COLORS,
-    isLowQuality: LOWQ, composer, bloom, grade, sun, hemi, SUN_DIR, skyMat, sky, getPlayer: () => P
+    isLowQuality: LOWQ, quality: QUALITY, composer, bloom, grade, sun, hemi, SUN_DIR, skyMat, sky, getPlayer: () => P
   };
   for (const plug of (window.SM_PLUGINS || [])) {
     try {
@@ -3356,23 +3361,93 @@ const titleEl = $('title');
 let titleReady = false;
 function titleStart(e) {
   if (!titleReady || started) return;
-  if (e && e.target && e.target.closest && e.target.closest('#controls-panel, #btn-controls, #btn-quality')) return;
+  if (e && e.target && e.target.closest && e.target.closest('#controls-panel, #btn-controls, #btn-quality, #btn-bench')) return;
   begin();
 }
 titleEl.addEventListener('click', titleStart);
+$('btn-bench').addEventListener('click', e => { e.stopPropagation(); if (titleReady) bench.start(); });
 $('btn-controls').addEventListener('click', e => { e.stopPropagation(); $('controls-panel').hidden = false; });
 $('close-controls').addEventListener('click', e => { e.stopPropagation(); $('controls-panel').hidden = true; });
-$('btn-quality').textContent = 'Quality: ' + (LOWQ ? 'Low' : 'High');
+const QNAMES = ['low', 'medium', 'high', 'ultra'], qLabel = q => q[0].toUpperCase() + q.slice(1);
+$('btn-quality').textContent = 'Quality: ' + qLabel(SHOTQ ? 'high' : QUALITY);
 $('btn-quality').addEventListener('click', e => {
   e.stopPropagation();
-  const url = location.href.replace(/[?&]q=\w+/, '');
-  location.href = url + (LOWQ ? '' : (url.includes('?') ? '&' : '?') + 'q=low');
+  const next = QNAMES[(QNAMES.indexOf(QUALITY) + 1) % QNAMES.length];
+  try { localStorage.setItem('sm-quality', next); } catch (_) { /* storage blocked: URL still carries it */ }
+  location.href = location.href.replace(/[?&]q=\w+/, '').replace(/[?&]bench\b/, '') + (location.href.includes('?') ? '&' : '?') + 'q=' + next;
 });
 requestAnimationFrame(() => requestAnimationFrame(() => {
   titleReady = true; titleEl.classList.remove('loading');
   $('press').textContent = 'PRESS ENTER OR CLICK TO START';
   $('menu').hidden = false; $('go').focus({ preventScroll: true });
+  if (/[?&]bench\b/.test(location.search)) bench.start();
 }));
+
+// ---------------------------------------------------------------- benchmark
+// Flies a fixed route through the heaviest scenes on the player's own GPU and reports real frame times.
+const bench = {
+  active: false, i: -1, t: 0, frames: [], results: [], calls: 0, tris: 0,
+  stages: [
+    { name: 'Street level', setup() { P.flying = false; P.pos.set(-150, 1.2, 152); }, tick(t) { yaw = -1.2 + t * 0.08; pitch = 0.06; P.vel.x = P.vel.z = 0; } },
+    { name: 'Avenue flight', setup() { P.flying = true; P.pos.set(-90, 22, 200); }, tick() { yaw = 0; pitch = -0.02; P.vel.set(0, 0, -60); } },
+    { name: 'Waterfront into the sun', setup() { P.flying = true; P.pos.set(40, 30, 236); }, tick(t) { yaw = Math.PI - 0.3 + t * 0.06; pitch = 0.05; P.vel.set(0, 0, 0); } },
+    { name: 'Aerial skyline', setup() { P.flying = true; P.pos.set(0, 260, 380); }, tick(t) { yaw = t * 0.1; pitch = -0.18; P.vel.set(0, 0, 0); } },
+    { name: 'Supersonic flight', setup() { P.flying = true; P.pos.set(0, 400, 1500); }, tick() { yaw = 0; pitch = 0; P.vel.set(0, 0, -480); } },
+    { name: 'Tower collapse', setup() {
+        const b = buildings.reduce((a, c) => (c.ny > a.ny ? c : a)); bench.tower = b;
+        P.flying = true; P.pos.set(b.x0 - 90, 70, b.z0 - 60);
+        for (let z = 0; z < b.nz; z++) for (let x = 0; x < b.nx; x++) for (let y = 0; y < 2; y++) breakBlock(cellIndex(b, x, y, z), T1.set(0, 0, 0), 4, 'blast');
+      }, tick() { const b = bench.tower, dx = (b.x0 + b.x1) / 2 - P.pos.x, dz = (b.z0 + b.z1) / 2 - P.pos.z; yaw = Math.atan2(-dx, -dz); pitch = 0.05; P.vel.set(0, 0, 0); } }
+  ],
+  start() {
+    if (!started) begin();
+    this.active = true; this.i = -1; this.results = []; nextIncT = 1e9; if (currentInc) endIncident(false, 'Benchmark running');
+    toast('Benchmark running \u2014 hands off for about 45 seconds', '');
+    this.next();
+  },
+  next() {
+    if (this.i >= 0) this.results.push(this.summarise());
+    this.i++; this.t = 0; this.frames = []; this.calls = 0; this.tris = 0;
+    if (this.i >= this.stages.length) return this.finish();
+    this.stages[this.i].setup();
+  },
+  tick(dt) {
+    const st = this.stages[this.i]; this.t += dt;
+    st.tick(this.t);
+    if (this.t > 1.2) { this.frames.push(dt); this.calls = Math.max(this.calls, renderer.info.render.calls); this.tris = Math.max(this.tris, renderer.info.render.triangles); }
+    if (this.t > 7.2) this.next();
+  },
+  summarise() {
+    const f = this.frames.slice().sort((a, b) => a - b), n = f.length || 1, sum = f.reduce((a, b) => a + b, 0) || 1;
+    const p99 = f[Math.min(f.length - 1, Math.floor(f.length * 0.99))] || 0;
+    return { name: this.stages[this.i].name, avgFps: Math.round(n / sum), low1: p99 ? Math.round(1 / p99) : 0, worstMs: Math.round((f[f.length - 1] || 0) * 1000), calls: this.calls, tris: this.tris };
+  },
+  finish() {
+    this.active = false;
+    const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+    const gpu = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    const minAvg = Math.min(...this.results.map(r => r.avgFps)), minLow = Math.min(...this.results.map(r => r.low1));
+    const advice = minAvg >= 80 && minLow >= 55 ? 'Plenty of headroom: try Ultra.' : minAvg >= 55 ? 'This preset suits your PC.' : minAvg >= 35 ? 'Try Medium for smoother play.' : 'Try Low for smoother play.';
+    const res = `${Math.round(canvas.clientWidth * PR)}\u00d7${Math.round(canvas.clientHeight * PR)}`;
+    const text = ['Superman Over Metropolis benchmark', `GPU: ${gpu}`, `Quality: ${QUALITY} \u00b7 render ${res} \u00b7 ${navigator.userAgent.match(/(Chrome|Firefox|Edg|Safari)\/[\d.]+/g)?.join(' ') || ''}`,
+      ...this.results.map(r => `${r.name}: ${r.avgFps} fps avg, ${r.low1} fps 1% low, ${r.worstMs} ms worst, ${r.calls} draws, ${(r.tris / 1e6).toFixed(2)}M tris`), `Verdict: ${advice}`].join('\n');
+    window.__bench = { gpu, quality: QUALITY, res, results: this.results, text };
+    const el = document.createElement('div'); el.id = 'bench-results'; el.className = 'card';
+    el.innerHTML = `<h2>Benchmark results</h2><p class="bench-gpu"></p><table><thead><tr><th>Scene</th><th>Avg fps</th><th>1% low</th><th>Worst</th><th>Draws</th></tr></thead><tbody>${
+      this.results.map(r => `<tr><td>${r.name}</td><td>${r.avgFps}</td><td>${r.low1}</td><td>${r.worstMs} ms</td><td>${r.calls}</td></tr>`).join('')}</tbody></table>
+      <p class="bench-verdict"></p><textarea readonly rows="5"></textarea><div class="bench-actions"><button id="bench-copy" type="button">Copy results</button><button id="bench-close" type="button">Play</button></div>`;
+    el.querySelector('.bench-gpu').textContent = `${gpu} \u00b7 ${QUALITY} quality \u00b7 ${res}`;
+    el.querySelector('.bench-verdict').textContent = advice + ' Paste the copied results to Claude to tune the game for your card.';
+    el.querySelector('textarea').value = text;
+    document.body.appendChild(el);
+    if (document.pointerLockElement) document.exitPointerLock();
+    el.querySelector('#bench-copy').addEventListener('click', () => {
+      const ta = el.querySelector('textarea');
+      (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(() => toast('Results copied', 'good'), () => { ta.select(); document.execCommand('copy'); toast('Results selected \u2014 copy them with Ctrl+C', ''); });
+    });
+    el.querySelector('#bench-close').addEventListener('click', () => { el.remove(); nextIncT = 20; });
+  }
+};
 
 // in-game performance meter (` or F3): real frame rate on the player's machine
 const fpsEl = document.createElement('div'); fpsEl.id = 'fps'; fpsEl.hidden = true; document.body.appendChild(fpsEl);
@@ -3381,6 +3456,7 @@ function frame(now) {
   requestAnimationFrame(frame);
   const rawDt = (now - last) / 1000;
   const dt = Math.min(0.05, rawDt); last = now;
+  if (bench.active) bench.tick(rawDt);
   if (!fpsEl.hidden) {
     fpsN++; fpsT += rawDt; fpsWorst = Math.max(fpsWorst, rawDt);
     if (fpsT > 0.5) {
@@ -3391,6 +3467,7 @@ function frame(now) {
   }
   pollPad();
   if (!paused) update(dt);
+  renderer.info.reset();
   composer.render();
 }
 // lightweight section profiler: __game.prof() returns ms per section since the last reset
@@ -3442,6 +3519,6 @@ function update(dt) {
   updateAtmosphere(dt);
   if (started) updateHUD(dt);
 }
-window.__game = { renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; } };
+window.__game = { bench, renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; } };
 requestAnimationFrame(frame);
 })();

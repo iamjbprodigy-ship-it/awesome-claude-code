@@ -7,7 +7,9 @@ A fan-made physics sandbox for PC: the whole power set in a destructible, golden
 
 **From the repo:** open `index.html` with the `js/`, `vendor/` and `style.css` files beside it.
 
-On the title screen, press **Enter** or click **Start**. If your PC struggles, pick **Quality: Low** on the title screen. Press `` ` `` or **F3** in game to show the frame rate.
+On the title screen, press **Enter** or click **Start**. **Quality** cycles Low / Medium / High / Ultra and remembers your choice. Press `` ` `` or **F3** in game to show the frame rate.
+
+**Test it on your GPU:** pick **Benchmark** on the title screen (or open the file with `?bench` added). It flies a fixed route through the heaviest scenes for about 45 s, then shows your GPU, average fps, 1% lows and draw calls per scene, with a **Copy results** button.
 
 ## Controls
 | Input | Action |

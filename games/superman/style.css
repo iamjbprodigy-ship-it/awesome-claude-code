@@ -263,3 +263,15 @@ html, body {
 @media (prefers-reduced-motion: reduce) { #title:not(.loading) .press { animation: none; } }
 
 #fps { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 8px); transform: translateX(-50%); z-index: 5; padding: 4px 10px; border-radius: 4px; background: rgba(0, 0, 0, 0.6); color: #9dff9d; font: 600 12px var(--f-num); pointer-events: none; white-space: nowrap; }
+
+#bench-results { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 6; width: min(640px, calc(100% - 32px)); max-height: 90vh; overflow-y: auto; cursor: default; }
+#bench-results h2 { font-family: var(--f-display); margin: 0 0 4px; text-transform: uppercase; }
+#bench-results .bench-gpu { font-family: var(--f-num); font-size: 13px !important; color: var(--sun) !important; margin-bottom: 10px; }
+#bench-results table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+#bench-results th, #bench-results td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--edge); font-size: 14px; }
+#bench-results th:first-child, #bench-results td:first-child { text-align: left; }
+#bench-results .bench-verdict { margin: 12px 0 8px; color: var(--text) !important; font-weight: 600; }
+#bench-results textarea { width: 100%; box-sizing: border-box; background: rgba(0, 0, 0, 0.35); color: var(--dim); border: 1px solid var(--edge); border-radius: 4px; font: 12px var(--f-num); padding: 8px; }
+.bench-actions { display: flex; gap: 8px; margin-top: 10px; }
+.bench-actions button { padding: 9px 16px; border-radius: 4px; border: 1px solid var(--edge); background: rgba(226, 48, 42, 0.85); color: #fff; font: 700 14px var(--f-ui); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+.bench-actions button + button { background: rgba(8, 12, 28, 0.6); }
