@@ -790,6 +790,108 @@ SCENARIOS.push({
     ['screenshots written', r.shots.length === 4, r.shots.join(', ')]]
 });
 
+// Metallo finale (dream-features #13, demo step 10): spawn + budget, radiation and the lead shield,
+// freeze-then-punch cracks a plate, a thrown car is intercepted, a scripted win under 180 s, the loss path.
+const METALLO_LIB = `const g = __game, M = g.metallo, P = g.P;
+  const S = () => M.state, I = () => M.info();
+  // put Superman d m from Metallo (horizontally, on the side away from the crowd), hovering at height h
+  const place = (d, h, side) => { const s = S(); const ax = s.pos.x - s.crowdC.x, az = s.pos.z - s.crowdC.z, a = Math.atan2(az, ax) + (side || 0);
+    P.flying = true; P.pos.set(s.pos.x + Math.cos(a) * d, (h === undefined ? 2.2 : h), s.pos.z + Math.sin(a) * d); P.vel.set(0, 0, 0); };
+  const heartD = () => P.pos.distanceTo(S().pos.clone().setY(S().pos.y + 2.2));
+  const catchCar = () => { const c = S().flying[0]; if (!c) return false; P.pos.copy(c.pos); P.pos.x += 1.6; P.pos.y += 0.4; P.vel.copy(c.vel); M.aim('car');
+    g.grabOrRelease(); const ok = P.hold === c; g.step(2); if (P.hold === c) { P.vel.set(0, 0, 0); g.grabOrRelease(); } return ok; };
+  const grabLead = () => { const L = S().lead; P.pos.copy(L.pos); P.pos.x += 1.5; P.pos.y += 1.2; P.vel.set(0, 0, 0); M.aim('lead'); g.grabOrRelease(); return P.hold === L; };`;
+SCENARIOS.push({
+  name: 'metallo', quality: 'high',
+  run: `(() => { ${METALLO_LIB}
+    const out = {}; g.begin(); g.step(5); const info = g.renderer.info; info.autoReset = false;
+    // 1. spawn: draw calls with him in view
+    out.started = M.start(); g.step(300); place(22, 3); M.aim('chest'); g.step(3); info.reset(); g.composer.render();
+    out.calls = info.render.calls; out.meshes = M.meshes(); out.phase = I().phase; out.label = g.currentInc && g.currentInc.label;
+    // 2. radiation: 10 m and 45 m from the heart, then 10 m behind the lead plate
+    M.calm(30); place(9.6, 2.2); g.step(1); out.k10 = +P.kryp.toFixed(3); out.heart10 = +heartD().toFixed(1);
+    const s0 = P.solar; g.step(120); out.solarDrop10 = +(s0 - P.solar).toFixed(3); out.k10b = +P.kryp.toFixed(3);
+    place(44.8, 2.2); g.step(1); out.k45 = +P.kryp.toFixed(3);
+    out.leadHeld = grabLead();
+    M.calm(30); place(9.6, 2.2); g.step(2); out.k10lead = +P.kryp.toFixed(3); out.leadCut = +(1 - out.k10lead / Math.max(1e-3, out.k10)).toFixed(3);
+    if (P.hold) g.grabOrRelease(); P.solar = 1;
+    // 3. armour: a charged punch on unfrozen armour does nothing; freeze breath (from range) then a charged punch cracks a plate
+    M.calm(30); place(6, 2.2); M.aim('chest'); g.punch(3); g.step(2); out.platesNoFreeze = I().plates;
+    place(26, 2.4); M.aim('chest', 0.66); g.keys.add('KeyQ'); let ft = 0; for (; ft < 300 && Math.max(...I().frost) <= 0.8; ft++) g.step(1); g.keys.delete('KeyQ'); out.freezeS = +(ft / 60).toFixed(2);
+    out.frost = I().frost; place(6, 2.2); M.aim('chest'); g.punch(3); g.step(2); out.platesAfter = I().plates;
+    // 4. a thrown car: caught = no bystander hit; then one left alone does hit the crowd
+    P.solar = 1; M.calm(0); M.forceAttack('toss'); let n = 0; while (!S().flying.length && n++ < 200) g.step(1);
+    g.step(20); const hurt0 = I().hurt; out.caughtCar = catchCar(); M.calm(5); g.step(180); out.hurtAfterCatch = I().hurt - hurt0; out.caught = I().caught;
+    M.calm(0); M.forceAttack('toss'); n = 0; while (!S().flying.length && n++ < 200) g.step(1); place(40, 30); M.calm(5); g.step(240); out.hurtUncaught = I().hurt - hurt0;
+    // telegraphs: every attack has a telegraph >= 1.0 s earlier (10.6)
+    const ev = M.events; out.badTele = ev.filter(e => e.type === 'attack').filter(a => !ev.some(t => t.type === 'telegraph' && t.kind === a.kind && t.t <= a.t - 0.999 && t.t > a.t - 3)).length;
+    out.attacks = ev.filter(e => e.type === 'attack').length;
+    // 5. scripted win: freeze, punch, intercept cars, dodge pulses, lead shield, rip the heart
+    P.solar = 1; M.start(); const t0 = g.simT; let guard = 0;
+    while (I().phase < 2) g.step(10);
+    while (I().plates > 0 && I().active && guard++ < 4000) {
+      const s = S(), a = s.atk;
+      if (s.flying.length) { catchCar(); continue; }
+      if (a && a.kind === 'pulse' && !a.fired) { place(48, 3); g.step(10); continue; }
+      const fr = s.plates.filter(p => p.alive).map(p => p.frost);
+      if (Math.max(...fr) <= 0.8) { place(28, 2.4); M.aim('chest', 0.66); g.keys.add('KeyQ'); g.step(10); g.keys.delete('KeyQ'); continue; }
+      place(6, 2.2); M.aim('chest'); g.punch(3); g.step(3); place(28, 2.4); g.step(3);
+    }
+    out.platesWin = I().plates; out.phaseWin = I().phase; out.solarWin = +P.solar.toFixed(2);
+    out.leadHeld2 = grabLead();
+    place(3.2, 2.0); M.aim('heart'); g.step(1); out.kShield = +P.kryp.toFixed(3); g.grabOrRelease(); g.step(30);
+    out.win = I().result; out.winSim = +(g.simT - t0).toFixed(1); out.contained = I().contained; out.incAfterWin = g.currentInc ? g.currentInc.type : null;
+    out.medalEvt = (g.events || []).some(e => e.type === 'medal' && e.attacker === 'metallo');
+    if (P.hold) g.grabOrRelease();
+    // 6. loss: solar charge runs dry -> soft fail, he escapes, and a retry works
+    M.start(); g.step(400); P.solar = 0; g.step(2); out.loss = I().result; out.incAfterLoss = g.currentInc ? g.currentInc.type : null; g.step(240);
+    out.goneAfterLoss = !I().visible; out.retry = M.start(); g.step(2); out.retryPhase = I().phase;
+    // 7. unattended: he escapes when time runs out, no softlock (10.7)
+    for (let i = 0; i < 190; i++) { P.solar = 1; P.pos.set(0, 600, 400); P.vel.set(0, 0, 0); g.step(60); }
+    out.unattended = I().result; out.incAfterTimeout = g.currentInc ? g.currentInc.type : null;
+    return out; })()`,
+  check: r => [
+    ['he spawns in the plaza (phase 2+)', r.started && r.phase >= 2 && r.label === 'Metallo', `phase ${r.phase}, label ${r.label}`],
+    ['draw calls within budget (400) with Metallo in view', r.calls <= 400, `${r.calls} calls, ${r.meshes} Metallo meshes`],
+    ['his model is 6-10 draw calls', r.meshes >= 6 && r.meshes <= 10, r.meshes],
+    ['radiation weakens at 10 m (P.kryp >= 0.5)', r.k10 >= 0.5 && r.k10b >= 0.5, `kryp ${r.k10} at ${r.heart10} m`],
+    ['radiation drains solar charge close in', r.solarDrop10 > 0.02, `-${r.solarDrop10} in 2 s`],
+    ['radiation fades by 45 m (<= 0.05)', r.k45 <= 0.05, r.k45],
+    ['the lead plate blocks >= 70% at 10 m', r.leadHeld && r.leadCut >= 0.7, `kryp ${r.k10} -> ${r.k10lead} (${Math.round(r.leadCut * 100)}%)`],
+    ['unfrozen armour shrugs off a punch', r.platesNoFreeze === 6, r.platesNoFreeze],
+    ['freeze then a charged punch cracks a plate', r.platesAfter === r.platesNoFreeze - 1, `frozen in ${r.freezeS} s ${JSON.stringify(r.frost)}; plates ${r.platesNoFreeze} -> ${r.platesAfter}`],
+    ['a thrown car is intercepted: no bystander hit', r.caughtCar && r.caught >= 1 && r.hurtAfterCatch === 0, `caught ${r.caught}, hurt +${r.hurtAfterCatch}`],
+    ['an uncaught car does hit the crowd', r.hurtUncaught >= 1, `hurt +${r.hurtUncaught}`],
+    ['every attack telegraphed >= 1.0 s earlier', r.attacks > 0 && r.badTele === 0, `${r.attacks} attacks, ${r.badTele} untelegraphed`],
+    ['scripted win: armour stripped, heart exposed', r.platesWin === 0 && r.phaseWin === 5, `plates ${r.platesWin}, phase ${r.phaseWin}, solar ${r.solarWin}`],
+    ['lead shield lets him close in', r.leadHeld2 && r.kShield < 0.45, `kryp ${r.kShield} at 3 m`],
+    ['win: heart contained, under 180 s of sim, medal computed', !!(r.win && r.win.win && r.contained && r.winSim < 180 && r.win.medal && r.medalEvt && r.incAfterWin !== 'metallo'), JSON.stringify(r.win) + ` sim ${r.winSim} s`],
+    ['loss: solar charge 0 -> soft fail', !!(r.loss && !r.loss.win && r.loss.reason === 'solar' && r.incAfterLoss !== 'metallo' && r.goneAfterLoss), JSON.stringify(r.loss)],
+    ['retry after a loss', r.retry && r.retryPhase === 1, `phase ${r.retryPhase}`],
+    ['unattended 180 s: he escapes, no softlock', !!(r.unattended && r.unattended.reason === 'escape' && r.incAfterTimeout !== 'metallo'), JSON.stringify(r.unattended)]
+  ]
+});
+// screenshots: OUT/metallo/*.png (reveal in the plaza, freezing him, the heart torn out)
+SCENARIOS.push({
+  name: 'metallo-shots', shotsOnly: true, quality: 'high',
+  page: async (p) => {
+    const dir = path.join(OUT, 'metallo'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [];
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    const info = {};
+    info.reveal = await p.evaluate(`(() => { ${METALLO_LIB} g.begin(); g.step(5); M.start(); g.step(330); M.calm(60); place(15, 1.6, 0.5); M.aim('chest', 1.2); g.step(40); M.aim('chest', 1.2); g.step(2); g.render(); return I(); })()`);
+    await snap('metallo-reveal.png');
+    info.freeze = await p.evaluate(`(() => { ${METALLO_LIB} M.calm(60); place(13, 2.6, 0.35); M.aim('chest', 0.66); g.keys.add('KeyQ'); g.step(70); M.aim('chest', 0.66); g.step(2); g.render(); g.keys.delete('KeyQ'); return I().frost; })()`);
+    await snap('metallo-freeze.png');
+    info.heart = await p.evaluate(`(() => { ${METALLO_LIB} for (const pl of S().plates) pl.alive = false; g.step(5);
+      grabLead(); place(3.2, 1.8, 0.7); M.aim('heart'); g.step(1); g.grabOrRelease(); g.step(50); place(5.5, 2.4, 0.9); M.aim('heart', 0.2); g.step(10); g.render(); return I(); })()`);
+    await snap('metallo-heart.png');
+    return { info, shots };
+  },
+  check: r => [['Metallo revealed', r.info.reveal.visible && r.info.reveal.phase >= 2, ''], ['plates frozen in the shot', Math.max(...r.info.freeze) > 0.5, JSON.stringify(r.info.freeze)],
+    ['heart torn out and contained', r.info.heart.contained, ''], ['screenshots written', r.shots.length === 3, r.shots.join(', ')]]
+});
+
 const RIGS = [
   ['title', null],
   ['aerial', `g.P.flying = true; g.P.pos.set(0, 260, 380); g.setYawPitch(0, -0.18);`],

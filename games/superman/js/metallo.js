@@ -858,6 +858,7 @@
       g.setYawPitch(Math.atan2(-dx, -dz), Math.atan2(dy, Math.hypot(dx, dz)));
       return true;
     },
+    calm(sec) { cancelAttack(); S.atk = null; beam.visible = teleRing.visible = false; S.beamHit = false; S.spike = 0; S.atkCD = sec; S.tossCD = Math.max(S.tossCD, sec); },
     forceAttack(kind) { if (!S.active) return false; cancelAttack(); S.atk = null; S.alt = kind === 'pulse' ? 1 : 0; S.tossCD = kind === 'toss' ? 0 : 99; if (kind === 'pound') S.phase = Math.max(S.phase, 4); chooseAttack(); return S.atk && S.atk.kind; },
     meshes() { let n = 0; body.traverse(o => { if (o.isMesh && o.visible) n++; }); return n + (beam.visible ? 1 : 0) + (teleRing.visible ? 1 : 0) + (waveRing.visible ? 1 : 0); },
     medalOf
