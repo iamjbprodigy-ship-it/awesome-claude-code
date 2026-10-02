@@ -37,6 +37,12 @@ fs.mkdirSync(OUT, { recursive: true });
 
 // Each scenario runs in a fresh page. `run` executes in the browser and returns a result object;
 // `check` turns it into a list of [label, pass, detail] assertions.
+// Sim-cost budgets are judged on main-thread CPU time (CDP Performance.ThreadTime over the scenario's
+// evaluate, divided by its frame count) when available. Wall-clock per frame on a shared, overloaded box
+// measured 2-3x the CPU cost with single "frames" of 1.3 s that were the process being descheduled, which
+// made these checks fail at random. Wall time is still printed next to it.
+const simCost = r => (r.cpuMs > 0 ? r.cpuMs : r.ms);
+const costNote = r => (r.cpuMs > 0 ? r.cpuMs.toFixed(2) + ' ms CPU avg (' + r.ms.toFixed(2) + ' wall)' : r.ms.toFixed(2) + ' ms wall avg');
 const SCENARIOS = [
   {
     name: 'title-start',
@@ -99,7 +105,7 @@ const SCENARIOS = [
       ['boost capped below 150 m', r.lowMax <= 305, `${r.lowMax.toFixed(0)} m/s`]]
   },
   {
-    name: 'punch-and-collapse',
+    name: 'punch-and-collapse', cpuFrames: 1805,
     run: `(() => { const g = __game; g.begin(); const b = g.buildings.reduce((a, c) => c.ny > a.ny ? c : a);
       const blocks0 = b.nx * b.ny * b.nz; let alive0 = 0;
       for (let k = 0; k < blocks0; k++) if (g.blockAt) {}
@@ -116,7 +122,7 @@ const SCENARIOS = [
       ['live debris stays under cap', r.peakLive <= r.cap, r.peakLive + ' / ' + r.cap],
       ['collapse finishes (queue drains)', r.queue === 0, r.queue],
       ['no NaN bodies', r.nan === 0, r.nan],
-      ['collapse sim cost (ms/frame, CPU)', r.ms < 12, r.ms.toFixed(2) + ' avg, ' + r.worstFrame.toFixed(1) + ' worst']]
+      ['collapse sim cost (ms/frame, CPU)', simCost(r) < 12, costNote(r) + ', ' + r.worstFrame.toFixed(1) + ' ms worst wall frame']]
   },
   {
     name: 'superpowers',
@@ -234,9 +240,9 @@ const SCENARIOS = [
       ['player position stays finite', r.pos.every(Number.isFinite), r.pos.join(',')]]
   },
   {
-    name: 'idle-sim-cost',
+    name: 'idle-sim-cost', cpuFrames: 660,
     run: `(() => { const g = __game; g.begin(); g.step(60); const t0 = performance.now(); g.step(600); return { ms: (performance.now() - t0) / 600 }; })()`,
-    check: r => [['idle sim cost (ms/frame, CPU)', r.ms < 6, r.ms.toFixed(2)]]
+    check: r => [['idle sim cost (ms/frame, CPU)', simCost(r) < 6, costNote(r)]]
   }
 ];
 
@@ -389,7 +395,12 @@ async function page(browser, q) {
     let p = null, errs = [], result, rows;
     try {
       ({ p, errs } = await page(browser, sc.quality || SCEN_QUALITY));
-      result = sc.page ? await sc.page(p) : await p.evaluate(sc.run); rows = sc.check(result);
+      let cdp = null, cpu0 = 0;
+      const threadTime = async () => (await cdp.send('Performance.getMetrics')).metrics.find(m => m.name === 'ThreadTime').value;
+      if (sc.cpuFrames) try { cdp = await p.context().newCDPSession(p); await cdp.send('Performance.enable'); cpu0 = await threadTime(); } catch (_) { cdp = null; }
+      result = sc.page ? await sc.page(p) : await p.evaluate(sc.run);
+      if (cdp) try { result.cpuMs = (await threadTime() - cpu0) * 1000 / sc.cpuFrames; } catch (_) { /* wall time only */ }
+      rows = sc.check(result);
     } catch (e) { rows = [['scenario ran', false, e.message.split('\n')[0]]]; }
     rows.push(['no console errors', errs.length === 0, errs.slice(0, 3).join(' | ')]);
     report.scenarios[sc.name] = { result, rows };
