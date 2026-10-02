@@ -3,6 +3,8 @@
  *
  *   node tools/playtest-bot.js [--shots] [--out DIR] [--quality low|shot] [--only name,name]
  *   (--only missions,dialogue,mission-shots for the street-level missions; mission-shots writes DIR/missions/*.png)
+ *   Hang protection: --slow N scales every scenario's watchdog (default 8 min each), --max-minutes N caps the run,
+ *   --timeout MS caps page loads; a hung scenario is a FAIL row, the browser is relaunched and the run goes on.
  *
  * Drives the real game in headless Chromium (Playwright) through every power, every emergency
  * type and a full tower collapse, asserting physics and gameplay invariants, timing the CPU
@@ -105,7 +107,7 @@ const SCENARIOS = [
       ['boost capped below 150 m', r.lowMax <= 305, `${r.lowMax.toFixed(0)} m/s`]]
   },
   {
-    name: 'punch-and-collapse', cpuFrames: 1805,
+    name: 'punch-and-collapse', minutes: 10, cpuFrames: 1805,
     run: `(() => { const g = __game; g.begin(); const b = g.buildings.reduce((a, c) => c.ny > a.ny ? c : a);
       const blocks0 = b.nx * b.ny * b.nz; let alive0 = 0;
       for (let k = 0; k < blocks0; k++) if (g.blockAt) {}
@@ -125,7 +127,7 @@ const SCENARIOS = [
       ['collapse sim cost (ms/frame, CPU)', simCost(r) < 12, costNote(r) + ', ' + r.worstFrame.toFixed(1) + ' ms worst wall frame']]
   },
   {
-    name: 'superpowers',
+    name: 'superpowers', minutes: 10,
     run: `(() => { const g = __game; g.begin(); const out = {};
       const b = g.buildings.reduce((a, c) => c.ny > a.ny ? c : a);
       const zc = (b.z0 + b.z1) / 2, y = 30, alive0 = g.bodies.length + g.rubble.length;
@@ -168,7 +170,7 @@ const SCENARIOS = [
       ['clap and freeze run', r.clap && r.freeze, ''], ['fall and land', r.landed, '']]
   },
   {
-    name: 'emergencies',
+    name: 'emergencies', minutes: 15,
     run: `(() => { const g = __game; g.begin(); const res = {};
       for (const type of ['heli', 'meteor', 'kryptonite', 'fire', 'robbery']) {
         g.startIncident(type); const inc = g.currentInc; res[type] = { started: !!inc, title: inc && inc.title };
@@ -190,7 +192,7 @@ const SCENARIOS = [
     check: r => [['scene render targets have >= 24-bit depth', r.renderTarget1 >= 24 && r.renderTarget2 >= 24, `${r.renderTarget1} / ${r.renderTarget2} bits, ${r.samples}x MSAA`]]
   },
   {
-    name: 'emergency-endings',
+    name: 'emergency-endings', minutes: 10,
     // every emergency must end: a chopper set down on a roof or in the bay, a meteor dropped in the bay, and
     // a meteor carried around past its limit all used to leave the incident running forever (no new alerts)
     run: `(() => { const g = __game, P = g.P; g.begin(); g.deferIncident(1e6); g.step(5); const out = {};
@@ -212,7 +214,7 @@ const SCENARIOS = [
       .concat(['heliOnRoof', 'heliInBay', 'meteorInBay', 'meteorHeld'].map(k => [`${k}: counted as a save (medal, Hope up)`, r[k].resolved === 1 && r[k].medals && r[k].hope > 0, `resolved ${r[k].resolved}, Hope ${r[k].hope >= 0 ? '+' : ''}${r[k].hope}`]))
   },
   {
-    name: 'render-budget', quality: 'high',
+    name: 'render-budget', minutes: 12, quality: 'high',
     // GPU work per frame in the heaviest views (draw calls and triangles, all passes incl. shadows and post)
     run: `(() => { const g = __game, out = {}; g.begin(); const info = g.renderer.info; info.autoReset = false;
       const rigs = { street: [-150, 1.2, 152, -1.2, 0.06, false], waterfront: [40, 30, 236, Math.PI, -0.05, true], aerial: [0, 260, 380, 0, -0.18, true] };
@@ -291,7 +293,7 @@ const DRIVE_MISSION = `(type) => {
 }`;
 SCENARIOS.push(
   {
-    name: 'missions',
+    name: 'missions', minutes: 12,
     run: `(() => { const g = __game, M = g.missions; g.begin(); g.step(30); const drive = ${DRIVE_MISSION}; const out = { types: {} };
       for (const t of ${JSON.stringify(MISSION_TYPES)}) out.types[t] = drive(t);
       // a request nobody finishes times out gracefully and costs Hope
@@ -386,45 +388,96 @@ async function page(browser, q) {
   return { p, errs };
 }
 
+// ---------------------------------------------------------------- runner, with hang protection
+// A SwiftShader page can hang with the renderer at 0% CPU (seen: two runs stuck ~27 min, evaluate never
+// returning). So every scenario runs under a watchdog, a dead or wedged browser is relaunched, and a global
+// wall-clock cap always leaves a (partial) report.json behind.
+//   --slow N          multiply every scenario budget (default 1; use 2-3 on a heavily shared machine)
+//   --max-minutes N   global cap for the whole run (default 120)
+const SLOW = Math.max(0.001, +opt('slow', 1));
+const MAX_MS = +opt('max-minutes', 120) * 60000;
+const T_START = Date.now();
+const BROWSER_ARGS = ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'];
+const budgetMs = sc => (sc.minutes || 8) * 60000 * SLOW;
+class Hung extends Error {}
+const watchdog = (promise, ms, what) => {
+  let t; const timer = new Promise((_, rej) => { t = setTimeout(() => rej(new Hung(`${what} hung (> ${Math.round(ms / 1000)} s)`)), ms); });
+  return Promise.race([promise, timer]).finally(() => clearTimeout(t));
+};
+const settle = (promise, ms) => watchdog(promise, ms, 'cleanup').catch(() => {}); // close() itself can hang
+
+const report = { when: new Date().toISOString(), quality: QUALITY, scenarios: {}, shots: [], failures: 0, hung: [], relaunches: 0 };
+const writeReport = () => { try { fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2)); } catch (_) { /* best effort */ } };
+const record = (name, rows, result) => {
+  report.scenarios[name] = { result, rows };
+  for (const [label, ok, detail] of rows) {
+    if (!ok) report.failures++;
+    console.log(`${ok ? 'PASS' : 'FAIL'}  ${name.padEnd(20)} ${label}${detail !== '' && detail !== undefined ? '  (' + detail + ')' : ''}`);
+  }
+  writeReport(); // partial results survive a crash or a kill
+};
+// last line of defence: even if the event loop is stuck awaiting a wedged browser call, exit with a report
+setTimeout(() => { report.aborted = 'global cap reached'; report.failures++; writeReport(); console.log(`\nABORTED: run exceeded ${MAX_MS / 60000} min  ->  ${path.join(OUT, 'report.json')}`); process.exit(1); }, MAX_MS + 120000).unref();
+
+let browser = null;
+async function ensureBrowser(force) {
+  if (browser && browser.isConnected() && !force) return browser;
+  if (browser) { report.relaunches++; console.log('  (relaunching the browser)'); await settle(browser.close(), 20000); }
+  browser = await chromium.launch({ args: BROWSER_ARGS });
+  return browser;
+}
+
+async function runScenario(sc) {
+  let p = null, errs = [], result;
+  const body = (async () => {
+    ({ p, errs } = await page(await ensureBrowser(), sc.quality || SCEN_QUALITY));
+    let cdp = null, cpu0 = 0;
+    const threadTime = async () => (await cdp.send('Performance.getMetrics')).metrics.find(m => m.name === 'ThreadTime').value;
+    if (sc.cpuFrames) try { cdp = await p.context().newCDPSession(p); await cdp.send('Performance.enable'); cpu0 = await threadTime(); } catch (_) { cdp = null; }
+    result = sc.page ? await sc.page(p) : await p.evaluate(sc.run);
+    if (cdp) try { result.cpuMs = (await threadTime() - cpu0) * 1000 / sc.cpuFrames; } catch (_) { /* wall time only */ }
+    return sc.check(result);
+  })();
+  let rows;
+  try { rows = await watchdog(body, budgetMs(sc), 'scenario'); }
+  catch (e) {
+    rows = [[e instanceof Hung ? 'scenario hung' : 'scenario ran', false, e.message.split('\n')[0]]];
+    if (e instanceof Hung) { report.hung.push(sc.name); body.catch(() => {}); await ensureBrowser(true); p = null; } // a wedged page can wedge the browser
+    else if (!browser || !browser.isConnected()) await ensureBrowser(true);
+  }
+  rows.push(['no console errors', errs.length === 0, errs.slice(0, 3).join(' | ')]);
+  if (p) await settle(p.close(), 20000);
+  return { rows, result };
+}
+
 (async () => {
-  const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-  const report = { when: new Date().toISOString(), quality: QUALITY, scenarios: {}, shots: [], failures: 0 };
   for (const sc of SCENARIOS) {
     if (ONLY.length && !ONLY.includes(sc.name)) continue;
     if (sc.shotsOnly && !SHOTS && !ONLY.includes(sc.name)) continue; // screenshot scenarios run with --shots
-    let p = null, errs = [], result, rows;
-    try {
-      ({ p, errs } = await page(browser, sc.quality || SCEN_QUALITY));
-      let cdp = null, cpu0 = 0;
-      const threadTime = async () => (await cdp.send('Performance.getMetrics')).metrics.find(m => m.name === 'ThreadTime').value;
-      if (sc.cpuFrames) try { cdp = await p.context().newCDPSession(p); await cdp.send('Performance.enable'); cpu0 = await threadTime(); } catch (_) { cdp = null; }
-      result = sc.page ? await sc.page(p) : await p.evaluate(sc.run);
-      if (cdp) try { result.cpuMs = (await threadTime() - cpu0) * 1000 / sc.cpuFrames; } catch (_) { /* wall time only */ }
-      rows = sc.check(result);
-    } catch (e) { rows = [['scenario ran', false, e.message.split('\n')[0]]]; }
-    rows.push(['no console errors', errs.length === 0, errs.slice(0, 3).join(' | ')]);
-    report.scenarios[sc.name] = { result, rows };
-    for (const [label, ok, detail] of rows) {
-      if (!ok) report.failures++;
-      console.log(`${ok ? 'PASS' : 'FAIL'}  ${sc.name.padEnd(20)} ${label}${detail !== '' && detail !== undefined ? '  (' + detail + ')' : ''}`);
-    }
-    if (p) await p.close().catch(() => {});
-    fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2)); // partial results survive a crash
+    if (Date.now() - T_START > MAX_MS) { record(sc.name, [['skipped: global time cap reached', false, `${MAX_MS / 60000} min`]]); continue; }
+    const { rows, result } = await runScenario(sc);
+    record(sc.name, rows, result);
   }
   if (flag('shots')) {
     for (const [name, setup] of RIGS) {
       if (ONLY.length && !ONLY.includes('shot:' + name)) continue;
-      const { p } = await page(browser, QUALITY);
-      if (setup) await p.evaluate(`(() => { const g = __game; g.begin(); ${setup} g.step(45); })()`);
-      else { await p.waitForFunction(() => window.__game.titleReady, null, { timeout: LOAD_TIMEOUT }); await p.evaluate(() => __game.step(150)); }
-      const file = path.join(OUT, `rig-${name}.png`);
-      await p.screenshot({ path: file, timeout: 300000 });
-      report.shots.push(file); console.log('SHOT  ' + file);
-      await p.close();
+      if (Date.now() - T_START > MAX_MS) { record('shot:' + name, [['skipped: global time cap reached', false, '']]); continue; }
+      let p = null;
+      try {
+        await watchdog((async () => {
+          ({ p } = await page(await ensureBrowser(), QUALITY));
+          if (setup) await p.evaluate(`(() => { const g = __game; g.begin(); ${setup} g.step(45); })()`);
+          else { await p.waitForFunction(() => window.__game.titleReady, null, { timeout: LOAD_TIMEOUT }); await p.evaluate(() => __game.step(150)); }
+          const file = path.join(OUT, `rig-${name}.png`);
+          await p.screenshot({ path: file, timeout: 300000 });
+          report.shots.push(file); console.log('SHOT  ' + file);
+        })(), 8 * 60000 * SLOW, 'screenshot');
+      } catch (e) { record('shot:' + name, [[e instanceof Hung ? 'scenario hung' : 'shot taken', false, e.message.split('\n')[0]]]); if (e instanceof Hung) { await ensureBrowser(true); p = null; } }
+      if (p) await settle(p.close(), 20000);
     }
   }
-  fs.writeFileSync(path.join(OUT, 'report.json'), JSON.stringify(report, null, 2));
-  console.log(`\n${report.failures === 0 ? 'ALL PASS' : report.failures + ' FAILURE(S)'}  ->  ${path.join(OUT, 'report.json')}`);
-  await browser.close();
+  writeReport();
+  console.log(`\n${report.failures === 0 ? 'ALL PASS' : report.failures + ' FAILURE(S)'}${report.hung.length ? '  (hung: ' + report.hung.join(', ') + ')' : ''}  ->  ${path.join(OUT, 'report.json')}`);
+  if (browser) await settle(browser.close(), 20000);
   process.exit(report.failures ? 1 : 0);
 })();
