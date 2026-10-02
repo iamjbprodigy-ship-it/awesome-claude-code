@@ -609,7 +609,7 @@ const SP_DRIVE = `(() => {
   function plane(mode) {
     reset(); P.flying = true; P.pos.set(-1400, 300, 900); g.step(2);
     const h0 = g.ledger.hope, med0 = Object.assign({}, g.ledger.medals); S.start('airliner'); const inc = g.currentInc;
-    let t = 0, ms = 0, frames = 0, fireOut = null;
+    let t = 0, ms = 0, frames = 0, fire = null;
     const step = () => { const a = performance.now(); g.step(1); ms += performance.now() - a; frames++; t++; };
     const eng = new V(), hp = new V();
     if (mode !== 'none') {
@@ -619,7 +619,7 @@ const SP_DRIVE = `(() => {
         const pl = S.plane; S.hardpoint('engine', eng);
         P.flying = true; P.pos.copy(eng).addScaledVector(pl.vel, -10 / pl.vel.length()).add(new V(0, -4, 0)); P.vel.copy(pl.vel); aimAt(eng); step();
       }
-      g.keys.delete('KeyQ'); fireOut = S.plane ? { out: S.plane.fire <= 0, breath: +S.plane.breath.toFixed(2), age: +S.plane.age.toFixed(1) } : null;
+      g.keys.delete('KeyQ'); fire = S.plane ? { out: S.plane.fire <= 0, breath: +S.plane.breath.toFixed(2), age: +S.plane.age.toFixed(1) } : null;
     }
     if (mode === 'guide') {
       S.hardpoint('nose', hp); P.pos.copy(hp); P.vel.copy(S.plane.vel); S.press('KeyE'); S.release('KeyE');
@@ -630,7 +630,7 @@ const SP_DRIVE = `(() => {
       }
       S.push(null);
     } else while (g.currentInc === inc && t < 60 * 90) step();
-    const res = Object.assign({ mode, seconds: +(t / 60).toFixed(1), ended: g.currentInc !== inc, fireOut, simMs: +(ms / frames).toFixed(2) }, S.last || {});
+    const res = Object.assign({ mode, seconds: +(t / 60).toFixed(1), ended: g.currentInc !== inc, fire, simMs: +(ms / frames).toFixed(2) }, S.last || {});
     const medal = ['gold', 'silver', 'bronze'].find(k => g.ledger.medals[k] > med0[k]) || null;
     res.medal = medal; res.hopeGain = +(g.ledger.hope - h0).toFixed(1);
     g.step(360); const pl = S.plane; res.after = pl ? { phase: pl.phase, y: +pl.pos.y.toFixed(2), standers: pl.standers, speed: +Math.hypot(pl.vel.x, pl.vel.z).toFixed(1) } : null;
@@ -655,7 +655,7 @@ SCENARIOS.push(
       ['bus: left alone it fails within its limit (+5 s) with lives lost', r.alone.ended && r.alone.success === false && r.alone.seconds <= 50 && r.alone.lost > 0, `${r.alone.seconds} s, ${r.alone.lost} lost`],
       ['bus: never inside a live block, no NaN', ![r.gentle, r.hard, r.alone].some(x => x.insideAny || x.nanAny), ''],
       ['bus: sim cost under 6 ms/frame', r.alone.simMs < 6 && r.gentle.simMs < 6, `${r.gentle.simMs} / ${r.alone.simMs} ms`],
-      ['airliner: freeze breath puts the fire out in 6 s or less', r.guide.fireOut && r.guide.fireOut.out && r.guide.fireOut.breath <= 6, JSON.stringify(r.guide.fireOut)],
+      ['airliner: freeze breath puts the fire out in 6 s or less', r.guide.fire && r.guide.fire.out && r.guide.fire.breath <= 6, JSON.stringify(r.guide.fire)],
       ['airliner: guided down within limits (v/s < 6, roll < 15), 140 saved', r.guide.success && r.guide.kind === 'ditch' && r.guide.vs < 6 && r.guide.roll < 15 && r.guide.saved === 140, `v/s ${r.guide.vs}, roll ${r.guide.roll}, ${r.guide.saved} saved at ${r.guide.seconds} s`],
       ['airliner: floats afterwards, people on the wings', r.guide.after && r.guide.after.phase === 'float' && Math.abs(r.guide.after.y - 0.5) < 1 && r.guide.after.standers > 0, JSON.stringify(r.guide.after)],
       ['airliner: Hope gain capped (+10 passengers + medal)', r.guide.hopeGain <= 10 + ({ gold: 10, silver: 5, bronze: 1 }[r.guide.medal] || 0), `+${r.guide.hopeGain} (${r.guide.medal})`],

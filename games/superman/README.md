@@ -62,6 +62,10 @@ Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, o
 
 Gamepad: Back/View opens the map; the sticks fly and look; RT heat vision, LT freeze, RB punch, LB grab, X clap, Y x-ray.
 
+**Set pieces** (after the first few minutes, now and then):
+- **Runaway bus:** a packed bus loses its brakes on Centennial St and runs for the waterfront crosswalk. Standing passengers are hurt above about 1 g, so get in front early (about 40 m of stopping room at 25 m/s), press **E** on the front bumper and **hold E** for a smooth 0.85 g stop. **W** pushes harder and **S** eases off; the meter shows the deceleration. Tap E to let go. Blocking it dead, grabbing it from the side or punching it hurts the passengers.
+- **Falling airliner:** an airliner with an engine fire glides down over the bay. Hold freeze breath (**Q**) on the burning engine for about 5 s, or the wing fails at 25 s. Press **E** at a push point (nose, either wingtip, tail), then **W/Space** push up, **S/C** push down and **A/D** push sideways. Set it down on the water with vertical speed under 6 m/s and roll under 15° to save all 140 aboard.
+
 ## Develop
 - `node tools/playtest-bot.js [--shots]` drives every power, emergency, a tower collapse and the render budgets in headless Chromium. Needs Playwright.
 - `node tools/build-single.js` rebuilds `dist/superman-over-metropolis.html`.
