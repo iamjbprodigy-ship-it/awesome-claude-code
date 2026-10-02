@@ -184,6 +184,19 @@ const SCENARIOS = [
       .concat([['supersonic flight sim cost (ms/frame, CPU)', r.fastFlightMs < 6, r.fastFlightMs.toFixed(2) + ' ms at ' + r.fast.speed + ' m/s']])
   },
   {
+    name: 'robustness',
+    // bad inputs must be rejected, not poison the sim: a NaN dt froze simT, and a NaN position made
+    // buildingAt() index lotInfo[NaN] and throw every frame
+    run: `(() => { const g = __game; g.begin(); g.step(5); const out = { threw: [] };
+      for (const dt of [undefined, NaN, Infinity, -0.02]) { try { g.update(dt); } catch (e) { out.threw.push(String(dt) + ': ' + e.message); } }
+      try { out.nanBlock = g.blockAt(NaN, 2, NaN); } catch (e) { out.threw.push('blockAt(NaN): ' + e.message); }
+      try { g.step(10); } catch (e) { out.threw.push('step after: ' + e.message); }
+      out.simT = g.simT; out.pos = g.P.pos.toArray(); return out; })()`,
+    check: r => [['bad dt / NaN position never throw', r.threw.length === 0, r.threw.join(' | ')],
+      ['simT stays finite', Number.isFinite(r.simT), String(r.simT)], ['NaN lookup is a miss', r.nanBlock === -1, String(r.nanBlock)],
+      ['player position stays finite', r.pos.every(Number.isFinite), r.pos.join(',')]]
+  },
+  {
     name: 'idle-sim-cost',
     run: `(() => { const g = __game; g.begin(); g.step(60); const t0 = performance.now(); g.step(600); return { ms: (performance.now() - t0) / 600 }; })()`,
     check: r => [['idle sim cost (ms/frame, CPU)', r.ms < 6, r.ms.toFixed(2)]]

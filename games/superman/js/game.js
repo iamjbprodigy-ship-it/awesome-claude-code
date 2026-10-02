@@ -621,7 +621,9 @@ for (const m of typeMesh) { m.instanceMatrix.needsUpdate = true; if (m.instanceC
 
 function buildingAt(x, z) {
   const i = Math.floor((x + HALF) / PITCH), j = Math.floor((z + HALF) / PITCH);
-  if (i < 0 || j < 0 || i >= LOTS || j >= LOTS) return null;
+  // written as a positive range test so a NaN coordinate is rejected too (NaN fails every comparison, so
+  // the old `i < 0 || ...` form let it through and lotInfo[NaN].b threw every frame, freezing the loop)
+  if (!(i >= 0 && j >= 0 && i < LOTS && j < LOTS)) return null;
   return lotInfo[j * LOTS + i].b;
 }
 const cellIndex = (b, x, y, z) => b.start + (y * b.nz + z) * b.nx + x;
@@ -3779,6 +3781,9 @@ function frame(now) {
 // lightweight section profiler: __game.prof() returns ms per section since the last reset
 const PROF = { on: false, last: 0, acc: {}, t(name) { if (!this.on) return; const n = performance.now(); if (name !== '-') this.acc[name] = (this.acc[name] || 0) + n - this.last; this.last = n; } };
 function update(dt) {
+  // a non-finite or negative step (a bad caller, e.g. update(undefined)) would poison simT and every
+  // integrator for good; the frame loop never produces one, so just ignore it
+  if (!Number.isFinite(dt) || dt < 0) return;
   if (hitStopT > 0) { hitStopT -= dt; dt *= 0.08; }
   const wdt = dt * (P.slow ? 0.12 : 1);
   simT += dt;
