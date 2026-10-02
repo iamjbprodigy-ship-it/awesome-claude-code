@@ -36,6 +36,7 @@ Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, o
 | P / N | Pause and read the Daily Planet |
 | M / Tab | City map: click to set a waypoint, scroll to zoom |
 | K | Mute |
+| F8 | Start (or retry) the Metallo finale |
 
 **Power levels:** one dial scales the whole power set. Earned unlocks still stack on top.
 
@@ -55,6 +56,14 @@ Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, o
 **Super speed on foot:** Shift while walking (F toggles walking) is a real run, not a hover. He stays planted on the street and sidewalks with arms pumping and a forward lean. Dust and paper fly off to the sides, and the bow wave shoves cars and pedestrians out of his path. A whip-crack sounds at top speed. The camera drops low and pulls back.
 
 **Why Mach 3 used to stall:** the *speed* unlock promised "Mach 3 at sea level", but it only raised the cap above 150 m. Below 150 m, boosted flight was always clamped to 300 m/s. Dropping under that line also braked you at 400 m/s² back down to it. Without the unlock, the top speed was 480 m/s (about Mach 1.4) until the thin air above roughly 10 km. On top of that, each block he smashed through cost 1-3% of his speed on every one of up to 80 sub-steps a frame, so one pass through a tower bled off most of a Mach 3 run. Now each power level sets its own top speed and its own low cap (Level 3 allows Mach 5 low down), and smash losses shrink as speed rises.
+
+**Metallo (the finale):** a 3 m chrome cyborg with a Kryptonite heart lands in a plaza and holds a crowd hostage. Press **F8** in game (or add `?metallo` to the address) to fight him; the demo sequencer calls `__game.metallo.start()`. His heart weakens you and drains solar charge within 40 m, so fight from range:
+- Dodge his telegraphed Kryptonite beam, radiation pulse (get 40 m away) and ground pound (get airborne).
+- Catch the cars he throws at the crowd (E).
+- Freeze his armour with Q until it turns icy, then shatter a plate with a charged punch or a thrown object. He has six plates.
+- With the heart exposed, grab the lead-lined plate from the corner (E). Carrying it cuts the radiation by 80%. Close in and rip the heart out (E).
+
+Medals depend on bystanders unhurt, property damage and time. If your solar charge runs out, the Kryptonite floors you, too many people get hurt or 180 s pass, he escapes, and F8 retries.
 
 **Map:** the minimap (bottom right) turns with you and zooms out as you speed up. Alerts appear as pins, with arrows on the rim when they're off-screen, and a tall coloured light beam rises from each one in the city: gold for emergencies, green for Kryptonite, red for the injured, blue for your waypoint.
 
