@@ -480,6 +480,8 @@ SCENARIOS.push({
     g.step(15); thrown.tracked = inc.atRisk > thrown.risk0;
     let ok = false; for (let i = 0; i < 120 && !ok; i++) { if (q.mode === 'phys' && !q.onGround && q.vel.y < 0) { P.flying = true; P.pos.copy(q.pos).add(new V(1.2, 0, 0)); P.vel.copy(q.vel); g.step(1); ok = q.mode === 'held'; } else g.step(1); }
     thrown.caught = ok; thrown.hurt = q.injured; out.thrown = thrown; clearAll(); g.step(2);
+    // let everyone the blast threw come down before the next emergency starts counting who is at risk
+    let settle = 0; while (g.people.some(r => r.danger && r.mode === 'phys') && settle < 900) { g.step(10); settle += 10; }
     // 5. the helicopter, caught at matched speed, then set down: no injuries, success
     g.startIncident('heli'); inc = g.currentInc; let h = inc.h; let n = 0;
     while (h.phase !== 'falling' && n < 900) { g.step(5); n += 5; } for (let i = 0; i < 90; i++) g.step(1);
@@ -560,7 +562,7 @@ SCENARIOS.push({
       k = 0; while (M.phase === 'fall' && m.fallV > -8 && k < 300) { g.step(1); k++; }
       P.slow = false; m.slowOn = true;
       const v = m.victim.pos; P.pos.set(v.x + m.f.nx * 4.5, v.y - 0.4, v.z + m.f.nz * 4.5); P.vel.set(0, m.fallV, 0);
-      g.setYawPitch(Math.atan2(m.f.nx, m.f.nz) + 0.5, 0.05); g.step(1); g.render();
+      g.setYawPitch(Math.atan2(m.f.nx, m.f.nz) + 0.5, 0.05); g.step(3); g.render();
       return { fallV: +m.fallV.toFixed(1), state: C.state() }; });
     await snap('washer-closing.png');
     info.caught = await p.evaluate(() => { const g = __game, P = g.P, M = g.missions, C = window.SM_CATCH, m = M.current();
@@ -571,7 +573,7 @@ SCENARIOS.push({
     return { info, shots };
   },
   check: r => [['g-meter on mid-catch', r.info.meter.hud, JSON.stringify(r.info.meter)],
-    ['match-speed shown while closing on the washer', r.info.washer.state && r.info.washer.state.faller === 'person', JSON.stringify(r.info.washer)],
+    ['match-speed shown while closing on the washer', r.info.washer.state && r.info.washer.state.faller === 'person' && r.info.washer.state.hud, JSON.stringify(r.info.washer)],
     ['washer caught smoothly, unhurt', r.info.caught && r.info.caught.held && !r.info.caught.hurt, JSON.stringify(r.info.caught)],
     ['screenshots written', r.shots.length === 3, r.shots.join(', ')]]
 });

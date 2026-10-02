@@ -201,7 +201,8 @@
     scanT -= dt;
     if (scanT <= 0) {
       scanT = 0.2;
-      for (const p of game.people) if (p.danger && !p.thug && p.mode !== 'gone' && !tracked(p)) risk.push({ p, st: 'risk' });
+      // newly endangered people (thrown, knocked off a roof); trapped ones belong to their own fire's list
+      for (const p of game.people) if (p.danger && !p.thug && p.mode !== 'gone' && p.mode !== 'trapped' && !tracked(p)) risk.push({ p, st: 'risk' });
     }
     let total = 0, saved = 0, lost = 0, hurt = 0;
     for (const e of risk) {
