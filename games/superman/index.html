@@ -59,11 +59,29 @@
   <div id="markers"></div>
 </div>
 
-<div id="intro">
-  <div class="card">
-    <p class="kicker">Metropolis &middot; Golden hour &middot; 49 city blocks</p>
-    <h1>Superman<span>Over Metropolis</span></h1>
-    <p class="lede">A physics sandbox for the whole power set. Every tower is built from five-metre floor blocks with real mass, so whatever you knock loose falls, breaks apart and piles up on whatever is underneath.</p>
+<div id="title" class="loading">
+  <div class="title-logo">
+    <svg class="shield" viewBox="0 0 128 112" aria-hidden="true">
+      <defs>
+        <linearGradient id="shg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e8352c"/><stop offset="1" stop-color="#8e0d12"/></linearGradient>
+        <linearGradient id="shy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset="1" stop-color="#e3a10c"/></linearGradient>
+      </defs>
+      <path d="M18 6 L110 6 L124 34 L64 106 L4 34 Z" fill="url(#shg)" stroke="#5c0a0d" stroke-width="2"/>
+      <path d="M24 14 L104 14 L114 34 L64 94 L14 34 Z" fill="url(#shy)"/>
+      <text x="64" y="66" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="900" font-size="58" fill="url(#shg)" stroke="#5c0a0d" stroke-width="1.2">S</text>
+    </svg>
+    <h1>SUPERMAN</h1>
+    <p class="title-sub">OVER METROPOLIS</p>
+    <p id="press" class="press">LOADING METROPOLIS&hellip;</p>
+    <nav id="menu" class="menu" hidden>
+      <button id="go" type="button">Start</button>
+      <button id="btn-controls" type="button">Controls</button>
+      <button id="btn-quality" type="button">Quality: High</button>
+    </nav>
+    <div id="boot-error" class="boot-error" hidden></div>
+  </div>
+  <div id="controls-panel" class="card controls-card" hidden>
+    <h2>Controls</h2>
     <dl class="controls">
       <dt>Mouse</dt><dd>Look and aim</dd>
       <dt>W A S D</dt><dd>Fly or walk</dd>
@@ -80,17 +98,27 @@
       <dt>F</dt><dd>Switch between flying and walking</dd>
       <dt>P / N</dt><dd>Pause and read the Daily Planet</dd>
       <dt>M</dt><dd>Mute</dd>
+      <dt>` or F3</dt><dd>Show frame rate and performance</dd>
       <dt>Gamepad</dt><dd>Sticks fly and look &middot; A up, B down, L3 speed &middot; RT heat, LT freeze &middot; RB punch, LB grab &middot; X clap, Y x-ray &middot; R3 hearing &middot; D-pad up time, down fly &middot; Start pause</dd>
     </dl>
-    <button id="go" type="button">Take flight</button>
-    <p class="fine">Turn sound on. Click the city to capture the mouse; Esc releases it.</p>
+    <button id="close-controls" type="button">Back</button>
   </div>
+  <p class="legal">A fan-made physics sandbox. Superman and the S-shield are trademarks of DC. Not affiliated with or endorsed by DC or Warner Bros.</p>
 </div>
 
 <div id="paused" hidden><div class="card paper" id="paper"></div></div>
 
 <div id="err" hidden><div class="card small"><h2>WebGL is unavailable</h2><p>This game needs WebGL. Try a current Chrome, Edge, Firefox or Safari with hardware acceleration turned on.</p></div></div>
 
+<script>
+window.addEventListener('error', function (e) {
+  var el = document.getElementById('boot-error'), press = document.getElementById('press');
+  if (!el) return;
+  el.hidden = false;
+  el.textContent = 'Something went wrong while loading: ' + (e.message || e.type) + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : '') + '. Try a current Chrome or Edge, or add ?q=low to the address.';
+  if (press) press.textContent = 'COULD NOT START';
+});
+</script>
 <script src="vendor/three.min.js"></script>
 <script src="vendor/three-postprocessing.js"></script>
 <script src="js/facade-ext.js"></script>

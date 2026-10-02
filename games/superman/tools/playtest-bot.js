@@ -24,12 +24,25 @@ const opt = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i
 const OUT = path.resolve(opt('out', path.join(__dirname, '..', '.playtest')));
 const QUALITY = opt('quality', 'low');
 const ONLY = (opt('only', '') || '').split(',').filter(Boolean);
-const GAME = 'file://' + path.resolve(__dirname, '..', 'index.html');
+const GAME = 'file://' + path.resolve(opt('file', path.join(__dirname, '..', 'index.html')));
 fs.mkdirSync(OUT, { recursive: true });
 
 // Each scenario runs in a fresh page. `run` executes in the browser and returns a result object;
 // `check` turns it into a list of [label, pass, detail] assertions.
 const SCENARIOS = [
+  {
+    name: 'title-start',
+    // real user path: wait for the title to say it's ready, then click Start / press Enter
+    page: async (p) => {
+      await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: 120000 });
+      const press = await p.textContent('#press');
+      await p.click('#go');
+      await p.waitForTimeout(500);
+      const clicked = await p.evaluate(() => window.__game.started);
+      return { press, clicked };
+    },
+    check: r => [['title says ready', /START/.test(r.press), r.press], ['clicking Start starts the game', r.clicked, '']]
+  },
   {
     name: 'boot',
     run: `(() => { const g = __game; const unsupported = g.unsupportedAtStart(); g.begin(); g.step(60);
@@ -104,6 +117,21 @@ const SCENARIOS = [
       .concat([['ledger sane', r.ledger.hope >= 0 && r.ledger.hope <= 100, JSON.stringify(r.ledger)]])
   },
   {
+    name: 'render-budget', quality: 'high',
+    // GPU work per frame in the heaviest views (draw calls and triangles, all passes incl. shadows and post)
+    run: `(() => { const g = __game, out = {}; g.begin(); const info = g.renderer.info; info.autoReset = false;
+      const rigs = { street: [-150, 1.2, 152, -1.2, 0.06, false], waterfront: [40, 30, 236, Math.PI, -0.05, true], aerial: [0, 260, 380, 0, -0.18, true] };
+      for (const k in rigs) { const r = rigs[k]; g.P.flying = r[5]; g.P.pos.set(r[0], r[1], r[2]); g.P.vel.set(0, 0, 0); g.setYawPitch(r[3], r[4]); g.step(20);
+        info.reset(); g.composer.render(); out[k] = { calls: info.render.calls, tris: info.render.triangles }; }
+      g.P.pos.set(0, 300, 400); g.P.vel.set(0, 0, -680); g.setYawPitch(0, 0); g.keys.add('KeyW'); g.keys.add('ShiftLeft');
+      const t0 = performance.now(); g.step(240); out.fastFlightMs = (performance.now() - t0) / 240; g.keys.clear();
+      info.reset(); g.composer.render(); out.fast = { calls: info.render.calls, tris: info.render.triangles, speed: Math.round(g.P.vel.length()) };
+      info.autoReset = true; return out; })()`,
+    check: r => ['street', 'waterfront', 'aerial', 'fast'].map(k => [`${k} draw calls within budget (400)`, r[k].calls <= 400, `${r[k].calls} calls, ${(r[k].tris / 1e6).toFixed(2)}M tris`])
+      .concat(['street', 'waterfront', 'aerial', 'fast'].map(k => [`${k} triangles within budget (3M incl. shadow pass)`, r[k].tris <= 3e6, (r[k].tris / 1e6).toFixed(2) + 'M']))
+      .concat([['supersonic flight sim cost (ms/frame, CPU)', r.fastFlightMs < 6, r.fastFlightMs.toFixed(2) + ' ms at ' + r.fast.speed + ' m/s']])
+  },
+  {
     name: 'idle-sim-cost',
     run: `(() => { const g = __game; g.begin(); g.step(60); const t0 = performance.now(); g.step(600); return { ms: (performance.now() - t0) / 600 }; })()`,
     check: r => [['idle sim cost (ms/frame, CPU)', r.ms < 6, r.ms.toFixed(2)]]
@@ -111,6 +139,7 @@ const SCENARIOS = [
 ];
 
 const RIGS = [
+  ['title', null],
   ['aerial', `g.P.flying = true; g.P.pos.set(0, 260, 380); g.setYawPitch(0, -0.18);`],
   ['street', `g.P.flying = false; g.P.pos.set(-150, 1.2, 152); g.setYawPitch(-1.2, 0.06);`],
   ['avenue', `g.P.flying = true; g.P.pos.set(-90, 22, 180); g.setYawPitch(0, -0.02);`],
@@ -132,9 +161,9 @@ async function page(browser, q) {
   const report = { when: new Date().toISOString(), quality: QUALITY, scenarios: {}, shots: [], failures: 0 };
   for (const sc of SCENARIOS) {
     if (ONLY.length && !ONLY.includes(sc.name)) continue;
-    const { p, errs } = await page(browser, 'low');
+    const { p, errs } = await page(browser, sc.quality || 'low');
     let result, rows;
-    try { result = await p.evaluate(sc.run); rows = sc.check(result); }
+    try { result = sc.page ? await sc.page(p) : await p.evaluate(sc.run); rows = sc.check(result); }
     catch (e) { rows = [['scenario ran', false, e.message.split('\n')[0]]]; }
     rows.push(['no console errors', errs.length === 0, errs.slice(0, 3).join(' | ')]);
     report.scenarios[sc.name] = { result, rows };
@@ -148,7 +177,8 @@ async function page(browser, q) {
     for (const [name, setup] of RIGS) {
       if (ONLY.length && !ONLY.includes('shot:' + name)) continue;
       const { p } = await page(browser, QUALITY);
-      await p.evaluate(`(() => { const g = __game; g.begin(); ${setup} g.step(45); })()`);
+      if (setup) await p.evaluate(`(() => { const g = __game; g.begin(); ${setup} g.step(45); })()`);
+      else { await p.waitForFunction(() => window.__game.titleReady, null, { timeout: 120000 }); await p.evaluate(() => __game.step(150)); }
       const file = path.join(OUT, `rig-${name}.png`);
       await p.screenshot({ path: file, timeout: 300000 });
       report.shots.push(file); console.log('SHOT  ' + file);

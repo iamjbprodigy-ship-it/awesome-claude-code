@@ -5,7 +5,7 @@
 'use strict';
 
 const errEl = document.getElementById('err');
-function fail() { errEl.hidden = false; document.getElementById('intro').hidden = true; }
+function fail() { errEl.hidden = false; const t = document.getElementById('title'); if (t) t.hidden = true; }
 if (!window.THREE || !THREE.EffectComposer) { fail(); return; }
 
 // ============================================================ constants
@@ -789,7 +789,41 @@ function hideBlock(g) { const t = blkT[g]; typeMesh[t].setMatrixAt(blkSub[g], ZE
       for (let s = -8; s <= 8; s += 1.6) { x.fillRect(P(rc2 + 11), P(rc + s), 2.5 * m, 0.7 * m); x.fillRect(P(rc + s), P(rc2 + 11), 0.7 * m, 2.5 * m); }
     }
   }
-  const city = new THREE.Mesh(new THREE.PlaneGeometry(480, 480), new THREE.MeshStandardMaterial({ map: tex(c, true), roughness: 0.92, metalness: 0 }));
+  const cityMat = new THREE.MeshStandardMaterial({ map: tex(c, true), roughness: 0.92, metalness: 0 });
+  // asphalt detail in world space: aggregate grain, cracks, sealed seams, polished wheel tracks, oil, wet patches
+  cityMat.onBeforeCompile = sh => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vAWP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvAWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+varying vec3 vAWP;
+float aHash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float aNoise(vec2 p) { vec2 i = floor(p), f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(aHash(i), aHash(i + vec2(1, 0)), u.x), mix(aHash(i + vec2(0, 1)), aHash(i + vec2(1, 1)), u.x), u.y); }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+float aMask = 1.0 - smoothstep(0.035, 0.07, dot(diffuseColor.rgb, vec3(0.333)));
+vec2 ap = vAWP.xz;
+float aRough = 0.92;
+if (aMask > 0.0) {
+  float grain = aHash(floor(ap * 14.0)) * 0.5 + aNoise(ap * 2.3) * 0.35 + aNoise(ap * 0.31) * 0.45;
+  vec3 aCol = diffuseColor.rgb * (0.82 + 0.3 * grain);
+  float crack = 1.0 - smoothstep(0.0, 0.012, abs(aNoise(ap * 0.42 + 7.0) - 0.5));
+  crack *= step(0.55, aNoise(ap * 0.07));
+  aCol *= 1.0 - 0.45 * crack;
+  float seam = step(0.86, aNoise(vec2(ap.x * 0.05, 3.0))) * step(abs(fract(ap.y * 0.1) - 0.5), 0.02);
+  aCol = mix(aCol, aCol * 0.55, seam);
+  vec2 off = mod(ap + 210.0, 60.0) - 30.0; off = 30.0 - abs(off);   // distance to the nearest road centreline, per axis
+  float lane = min(off.x, off.y);
+  float tracks = max(smoothstep(0.5, 0.0, abs(lane - 2.6)), smoothstep(0.5, 0.0, abs(lane - 4.4)));
+  aCol *= 1.0 + 0.1 * tracks; aRough -= 0.22 * tracks;
+  float oil = smoothstep(0.62, 0.8, aNoise(ap * 0.9)) * smoothstep(0.7, 0.0, abs(lane - 3.5));
+  aCol *= 1.0 - 0.35 * oil; aRough -= 0.3 * oil;
+  float wet = smoothstep(0.74, 0.8, aNoise(ap * 0.045 + 13.0)) * smoothstep(0.35, 0.6, aNoise(ap * 0.4));
+  aCol *= 1.0 - 0.35 * wet; aRough = mix(aRough, 0.04, wet);
+  diffuseColor.rgb = mix(diffuseColor.rgb, aCol, aMask);
+}`)
+      .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = mix(roughness, clamp(aRough, 0.03, 1.0), aMask);');
+  };
+  const city = new THREE.Mesh(new THREE.PlaneGeometry(480, 480), cityMat);
   city.rotation.x = -Math.PI / 2; city.position.y = 0.02; city.receiveShadow = true; scene.add(city);
   const land = new THREE.Mesh(new THREE.PlaneGeometry(800000, 400000), new THREE.MeshStandardMaterial({ color: lin(0x5f604c), roughness: 1 }));
   land.rotation.x = -Math.PI / 2; land.position.z = WATER_Z - 200000; land.receiveShadow = true; scene.add(land);
@@ -1306,44 +1340,63 @@ const hero = (() => {
     const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); if (sx) m.scale.set(sx, sy, sz);
     m.castShadow = true; (parent || g).add(m); return m;
   };
-  const sph = (r) => new THREE.SphereGeometry(r, 20, 14);
-  // torso: V-taper built from stacked ellipsoids
-  add(new THREE.CylinderGeometry(0.235, 0.165, 0.62, 20), suit, 0, 0.17, 0, null, 1.2, 1, 0.74);
-  add(sph(0.2), suit, -0.085, 0.33, -0.05, null, 0.9, 0.62, 0.62);            // pecs
-  add(sph(0.2), suit, 0.085, 0.33, -0.05, null, 0.9, 0.62, 0.62);
-  add(sph(0.2), suit, 0, 0.44, 0, null, 1.55, 0.5, 0.8);                      // shoulders / traps
-  add(sph(0.11), suit, -0.28, 0.43, 0, null, 1, 1, 1);                        // deltoids
-  add(sph(0.11), suit, 0.28, 0.43, 0, null, 1, 1, 1);
-  add(new THREE.CylinderGeometry(0.172, 0.18, 0.2, 20), red, 0, -0.2, 0, null, 1.12, 1, 0.8);   // trunks
-  add(new THREE.CylinderGeometry(0.184, 0.184, 0.055, 20), gold, 0, -0.105, 0, null, 1.12, 1, 0.8); // belt
-  add(new THREE.BoxGeometry(0.07, 0.05, 0.02), gold, 0, -0.105, -0.15);
-  add(new THREE.CylinderGeometry(0.062, 0.075, 0.12, 12), skin, 0, 0.59, 0);
-  add(sph(0.115), skin, 0, 0.73, -0.005, null, 0.9, 1.12, 1.0);
-  add(new THREE.BoxGeometry(0.11, 0.05, 0.05), skin, 0, 0.64, -0.075);         // jaw
-  add(new THREE.SphereGeometry(0.122, 20, 12, 0, Math.PI * 2, 0, Math.PI * 0.52), hair, 0, 0.755, 0.012, null, 0.95, 1.05, 1.04);
-  add(new THREE.TorusGeometry(0.022, 0.008, 6, 12, 4.5), hair, 0.01, 0.83, -0.105);     // the curl
+  const sph = (r) => new THREE.SphereGeometry(r, 24, 16);
+  // turned silhouettes: profile points are [radius, y]
+  const lathe = (pts, seg) => new THREE.LatheGeometry(pts.map(([r, y]) => new THREE.Vector2(r, y)), seg || 28);
+  // torso: a lathe-turned V-taper (narrow waist, broad lats and chest), flattened front to back
+  add(lathe([[0.0, -0.13], [0.152, -0.13], [0.158, -0.02], [0.175, 0.1], [0.212, 0.22], [0.232, 0.33], [0.226, 0.42], [0.17, 0.5], [0.09, 0.55], [0.0, 0.56]]), suit, 0, 0, 0, null, 1.24, 1, 0.66);
+  add(sph(0.13), suit, -0.088, 0.33, -0.07, null, 0.95, 0.66, 0.5);           // pecs
+  add(sph(0.13), suit, 0.088, 0.33, -0.07, null, 0.95, 0.66, 0.5);
+  add(sph(0.12), suit, -0.14, 0.47, 0.01, null, 1.1, 0.55, 0.85);              // traps
+  add(sph(0.12), suit, 0.14, 0.47, 0.01, null, 1.1, 0.55, 0.85);
+  add(sph(0.105), suit, -0.29, 0.425, 0, null, 1, 1.05, 1);                   // deltoids
+  add(sph(0.105), suit, 0.29, 0.425, 0, null, 1, 1.05, 1);
+  for (const sy of [0.06, 0.15]) for (const sx of [-0.045, 0.045]) add(sph(0.05), suit, sx, sy, -0.095, null, 1, 0.8, 0.45); // abs
+  // trunks, belt and buckle
+  add(lathe([[0.0, -0.32], [0.12, -0.32], [0.175, -0.25], [0.168, -0.13], [0.0, -0.13]]), red, 0, 0, 0, null, 1.18, 1, 0.74);
+  add(new THREE.TorusGeometry(0.163, 0.022, 8, 32), gold, 0, -0.115, 0, null, 1.17, 0.74, 1).rotation.x = Math.PI / 2;
+  add(new THREE.BoxGeometry(0.075, 0.05, 0.02), gold, 0, -0.115, -0.128);
+  // neck, head and the curl
+  add(lathe([[0.0, 0.5], [0.07, 0.5], [0.064, 0.6], [0.06, 0.66], [0.0, 0.66]], 16), skin, 0, 0, 0.005, null, 1.05, 1, 1);
+  add(sph(0.108), skin, 0, 0.735, -0.005, null, 0.88, 1.12, 1.0);              // cranium
+  add(new THREE.BoxGeometry(0.11, 0.07, 0.07), skin, 0, 0.655, -0.06);         // square jaw
+  add(sph(0.03), skin, 0, 0.62, -0.085, null, 1.3, 0.9, 1);                    // chin
+  add(sph(0.022), skin, -0.098, 0.73, 0.0, null, 0.5, 1, 0.8); add(sph(0.022), skin, 0.098, 0.73, 0.0, null, 0.5, 1, 0.8); // ears
+  add(new THREE.SphereGeometry(0.114, 24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), hair, 0, 0.758, 0.014, null, 0.94, 1.0, 1.04);
+  add(sph(0.05), hair, 0.03, 0.82, -0.075, null, 1.4, 0.55, 0.8);             // swept front
+  add(new THREE.TorusGeometry(0.02, 0.007, 6, 14, 4.6), hair, -0.012, 0.795, -0.11).rotation.y = 0.3; // the curl
   // chest shield
-  const [ec, ex] = cnv(128, 112);
+  const [ec, ex] = cnv(256, 224);
+  ex.scale(2, 2);
   ex.fillStyle = '#f2b705'; ex.strokeStyle = '#b3121a'; ex.lineWidth = 9; ex.beginPath();
   ex.moveTo(16, 8); ex.lineTo(112, 8); ex.lineTo(124, 36); ex.lineTo(64, 104); ex.lineTo(4, 36); ex.closePath(); ex.fill(); ex.stroke();
   ex.fillStyle = '#b3121a'; ex.font = '900 66px Georgia, serif'; ex.textAlign = 'center'; ex.textBaseline = 'middle'; ex.fillText('S', 64, 52);
   const emblem = new THREE.Mesh(new THREE.PlaneGeometry(0.23, 0.2), new THREE.MeshStandardMaterial({ map: tex(ec, true), transparent: true, roughness: 0.4, metalness: 0.2 }));
-  emblem.position.set(0, 0.31, -0.165); emblem.rotation.set(-0.12, Math.PI, 0); g.add(emblem);
+  emblem.position.set(0, 0.315, -0.158); emblem.rotation.set(-0.16, Math.PI, 0); g.add(emblem);
+  // two-segment limbs: shoulder/hip pivots with elbow/knee pivots so poses read properly
   const limb = (side, isArm) => {
-    const piv = new THREE.Group();
+    const piv = new THREE.Group(), joint = new THREE.Group();
     if (isArm) {
       piv.position.set(side * 0.3, 0.42, 0); g.add(piv);
-      add(new THREE.CylinderGeometry(0.075, 0.062, 0.32, 14), suit, 0, -0.16, 0, piv);
-      add(sph(0.07), suit, 0, -0.12, -0.02, piv, 1, 1.4, 1);                  // bicep
-      add(new THREE.CylinderGeometry(0.062, 0.05, 0.3, 14), suit, 0, -0.45, 0, piv);
-      add(sph(0.062), skin, 0, -0.64, 0, piv, 0.9, 1.1, 1);                   // fist
+      add(new THREE.CylinderGeometry(0.074, 0.062, 0.3, 16), suit, 0, -0.15, 0, piv);
+      add(sph(0.062), suit, 0, -0.13, -0.025, piv, 1, 1.5, 1);                 // bicep
+      add(sph(0.05), suit, 0, -0.15, 0.03, piv, 1, 1.4, 0.9);                 // tricep
+      joint.position.set(0, -0.29, 0); piv.add(joint);
+      add(sph(0.058), suit, 0, 0, 0, joint);                                  // elbow
+      add(new THREE.CylinderGeometry(0.06, 0.046, 0.26, 16), suit, 0, -0.13, 0, joint);
+      add(sph(0.052), skin, 0, -0.29, -0.004, joint, 0.95, 1.15, 1.1);         // fist
     } else {
-      piv.position.set(side * 0.1, -0.22, 0); g.add(piv);
-      add(new THREE.CylinderGeometry(0.095, 0.072, 0.48, 14), suit, 0, -0.24, 0, piv);
-      add(new THREE.CylinderGeometry(0.074, 0.064, 0.34, 14), red, 0, -0.6, 0, piv);
-      add(sph(0.06), red, 0, -0.5, 0.03, piv, 1, 1.6, 1);                     // calf
-      add(new THREE.BoxGeometry(0.1, 0.07, 0.22), red, 0, -0.74, -0.04, piv);
+      piv.position.set(side * 0.098, -0.22, 0); g.add(piv);
+      add(new THREE.CylinderGeometry(0.098, 0.07, 0.38, 16), suit, 0, -0.19, 0, piv);
+      add(sph(0.08), suit, 0, -0.13, -0.025, piv, 1, 1.6, 1);                 // quad
+      joint.position.set(0, -0.38, 0); piv.add(joint);
+      add(sph(0.066), suit, 0, 0, 0, joint);                                  // knee
+      add(new THREE.CylinderGeometry(0.068, 0.054, 0.3, 16), red, 0, -0.17, 0, joint);  // boot
+      add(sph(0.056), red, 0, -0.1, 0.03, joint, 1, 1.7, 1);                  // calf
+      add(new THREE.TorusGeometry(0.069, 0.012, 6, 20), red, 0, -0.03, 0, joint).rotation.x = Math.PI / 2; // boot cuff
+      add(new THREE.BoxGeometry(0.09, 0.06, 0.2), red, 0, -0.335, -0.045, joint); // foot
     }
+    piv.userData.joint = joint;
     return piv;
   };
   const armL = limb(-1, true), armR = limb(1, true), legL = limb(-1, false), legR = limb(1, false);
@@ -1370,7 +1423,7 @@ const hero = (() => {
   const capeMat = new THREE.MeshStandardMaterial({ color: lin(0xa80f16), roughness: 0.62, side: THREE.DoubleSide });
   const cape = new THREE.Mesh(cg, capeMat); cape.castShadow = true; cape.frustumCulled = false; g.add(cape);
   scene.add(g);
-  return { g, suit, armL, armR, legL, legR, cape: { CW, CH, pts, prev, rest, cons, geo: cg, pos: cpos } };
+  return { g, suit, armL, armR, legL, legR, elbowL: armL.userData.joint, elbowR: armR.userData.joint, kneeL: legL.userData.joint, kneeR: legR.userData.joint, cape: { CW, CH, pts, prev, rest, cons, geo: cg, pos: cpos } };
 })();
 
 function updateCape(dt, t) {
@@ -2393,9 +2446,10 @@ addEventListener('mousemove', e => {
 });
 document.addEventListener('pointerlockchange', () => { if (started && document.pointerLockElement !== canvas && !paused) setPaused(true); });
 function onKey(code) {
-  if (!started) { if (code === 'Enter' || code === 'Space') begin(); return; }
+  if (!started) { if ((code === 'Enter' || code === 'Space' || code === 'NumpadEnter') && titleReady) begin(); return; }
   if (code === 'KeyP') { setPaused(!paused); return; }
   if (paused) { if (code === 'KeyN') return; return; }
+  if (code === 'Backquote' || code === 'F3') { fpsEl.hidden = !fpsEl.hidden; return; }
   if (code === 'KeyM') { AU.muted = !AU.muted; if (AU.master) AU.master.gain.value = AU.muted ? 0 : 0.75; toast(AU.muted ? 'Sound off' : 'Sound on'); }
   if (code === 'KeyE') grabOrRelease();
   if (code === 'KeyF') { P.flying = !P.flying; if (P.flying) P.vel.y = Math.max(P.vel.y, 6); toast(P.flying ? 'Flying' : 'Walking'); }
@@ -2425,7 +2479,7 @@ function pollPad() {
   pad.lx = dz(gp.axes[0] || 0); pad.ly = dz(gp.axes[1] || 0); pad.rx = dz(gp.axes[2] || 0); pad.ry = dz(gp.axes[3] || 0);
   const b = i => gp.buttons[i] && gp.buttons[i].pressed;
   const edge = i => b(i) && !pad.prev[i];
-  if (!started) { if (edge(0) || edge(9)) begin(); }
+  if (!started) { if ((edge(0) || edge(9)) && titleReady) begin(); }
   else {
     if (edge(9)) setPaused(!paused);
     if (!paused) {
@@ -2957,13 +3011,14 @@ function updateHeroPose(dt, fwd) {
   hero.g.position.copy(P.pos); hero.g.quaternion.copy(P.quat);
   // limbs
   const t = simT;
-  let aL = 0.12, aR = 0.12, aLz = 0.1, aRz = -0.1, lL = 0, lR = 0;
+  // arm z: negative swings the left arm outward, positive the right (mirror image)
+  let aL = 0.12, aR = 0.12, aLz = -0.1, aRz = 0.1, lL = 0, lR = 0;
   const sp2 = P.vel.length();
   P.idleT = sp2 < 2 && !P.hold && !P.charging && P.punchT <= 0 ? (P.idleT || 0) + dt : 0;
   if (P.flying && sp2 > 80) { aR = Math.PI * 0.96; aRz = 0.05; aL = 0.15; lL = 0.05; lR = -0.02; }
-  else if (P.flying && f > 0.5) { aR = 0.35; aL = 0.35; aLz = 0.2; aRz = -0.2; lL = 0.05; lR = -0.02; }
-  else if (P.idleT > 1.5) { aL = -0.25; aR = -0.25; aLz = -0.75; aRz = 0.75; lL = 0.06; lR = -0.06; }
-  else if (P.flying) { aL = 0.25 + Math.sin(t * 2) * 0.05; aR = 0.25 + Math.cos(t * 2) * 0.05; aLz = 0.35; aRz = -0.35; lL = 0.12 + Math.sin(t * 1.6) * 0.06; lR = -0.05; }
+  else if (P.flying && f > 0.5) { aR = 0.35; aL = 0.35; aLz = -0.2; aRz = 0.2; lL = 0.05; lR = -0.02; }
+  else if (P.idleT > 1.5) { aL = -0.3; aR = -0.3; aLz = -0.55; aRz = 0.55; lL = 0.06; lR = -0.06; }
+  else if (P.flying) { aL = 0.25 + Math.sin(t * 2) * 0.05; aR = 0.25 + Math.cos(t * 2) * 0.05; aLz = -0.22; aRz = 0.22; lL = 0.12 + Math.sin(t * 1.6) * 0.06; lR = -0.05; }
   else if (P.grounded) { const s = Math.sin(P.walkPhase); lL = s * 0.7; lR = -s * 0.7; aL = -s * 0.5; aR = s * 0.5; }
   if (P.landT > 0) { lL = -0.8; lR = 0.4; aL = 0.6; aR = 0.2; aRz = -0.6; }
   if (P.hold) {
@@ -2974,7 +3029,22 @@ function updateHeroPose(dt, fwd) {
   if (P.clapT > 0) P.clapT -= dt;
   if (P.charging) { aR = -0.6; aRz = -0.3; }
   if (P.kryp > 0.3) { aL = 1.3; aLz = 0.6; aR = 0.1; lL = 0.25; }
+  // elbows (x bends forward, z bends toward the body) and knees (negative x bends back)
+  let eLx = 0.15, eRx = 0.15, eLz = 0, eRz = 0, kL = -0.05, kR = -0.05;
+  if (P.flying && sp2 > 80) { eRx = 0; eLx = 0.1; kL = -0.05; kR = -0.35; }
+  else if (P.flying && f > 0.5) { eLx = eRx = 0.35; kL = -0.15; kR = -0.4; }
+  else if (P.idleT > 1.5) { eLx = eRx = -0.1; eLz = 1.45; eRz = -1.45; }
+  else if (P.flying) { eLx = eRx = 0.3; kL = -0.25 - Math.sin(t * 1.6) * 0.08; kR = -0.12; }
+  else if (P.grounded) { const s = P.walkPhase; kL = -Math.max(0, Math.sin(s + 1.6)) * 0.9; kR = -Math.max(0, Math.sin(s + 1.6 + Math.PI)) * 0.9; eLx = eRx = 0.35; }
+  if (P.landT > 0) { kL = -1.4; kR = -0.35; eRx = 0.3; }
+  if (P.hold) { const big = Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) > 1; eLx = eRx = big ? 0.25 : 0.9; }
+  if (P.punchT > 0) { eRx = 0; if (P.clapT > 0) eLx = eRx = 0.15; }
+  if (P.charging) { eRx = 1.9; }
+  if (P.kryp > 0.3) { eLx = 1.5; eLz = 0.6; }
   const k = 1 - Math.exp(-14 * dt);
+  hero.elbowL.rotation.x = lerp(hero.elbowL.rotation.x, eLx, k); hero.elbowR.rotation.x = lerp(hero.elbowR.rotation.x, eRx, k);
+  hero.elbowL.rotation.z = lerp(hero.elbowL.rotation.z, eLz, k); hero.elbowR.rotation.z = lerp(hero.elbowR.rotation.z, eRz, k);
+  hero.kneeL.rotation.x = lerp(hero.kneeL.rotation.x, kL, k); hero.kneeR.rotation.x = lerp(hero.kneeR.rotation.x, kR, k);
   hero.armL.rotation.x = lerp(hero.armL.rotation.x, aL, k); hero.armR.rotation.x = lerp(hero.armR.rotation.x, aR, k);
   hero.armL.rotation.z = lerp(hero.armL.rotation.z, aLz, k); hero.armR.rotation.z = lerp(hero.armR.rotation.z, aRz, k);
   hero.legL.rotation.x = lerp(hero.legL.rotation.x, lL, k); hero.legR.rotation.x = lerp(hero.legR.rotation.x, lR, k);
@@ -3107,14 +3177,26 @@ function cool(dt) {
 }
 
 // ============================================================ camera
+const titleAngle = () => 0.55 + Math.sin(simT * 0.07) * 0.35;
 function updateCamera(dt) {
+  if (!started) {
+    // cinematic title framing: hero in the right third, slow drift around him
+    const ta = titleAngle();
+    camera.position.set(P.pos.x + Math.sin(ta) * 6.2, P.pos.y + 0.35, P.pos.z + Math.cos(ta) * 6.2);
+    const rx = Math.cos(ta), rz = -Math.sin(ta);
+    camera.lookAt(T5.set(P.pos.x - rx * 2.1, P.pos.y + 0.25, P.pos.z - rz * 2.1));
+    if (camera.fov !== 48) { camera.fov = 48; camState.fov = 48; camera.updateProjectionMatrix(); }
+    return;
+  }
   const fwd = aimDir(T1), right = T2.set(Math.cos(yaw), 0, -Math.sin(yaw));
   const sp = P.vel.length();
   const combat = currentInc && currentInc.type === 'robbery' && currentInc.marker().distanceTo(P.pos) < 70;
-  let dist = combat ? 5.2 : 6.8 + Math.min(9, sp * 0.025);
+  const walking = !P.flying && started;
+  let dist = combat ? 5.2 : walking ? 8.4 + Math.min(4, sp * 0.05) : 6.8 + Math.min(9, sp * 0.025);
   if (P.hold) dist += Math.min(8, Math.max(P.hold.half.x, P.hold.half.y, P.hold.half.z) * 1.4);
   if (!started) dist = 9;
-  const want = T3.copy(fwd).multiplyScalar(-dist).addScaledVector(UP, combat ? 1.1 : 1.5).addScaledVector(right, combat ? 1.2 : 0.95);
+  // walking frames him low and off-centre, like a third-person street camera; flight keeps him central
+  const want = T3.copy(fwd).multiplyScalar(-dist).addScaledVector(UP, combat ? 1.1 : walking ? 2.4 : 1.5).addScaledVector(right, combat ? 1.2 : walking ? 0.85 : 0.95);
   camState.off.lerp(want, 1 - Math.exp(-(combat ? 6 : 9) * dt));
   const cp = T4.copy(P.pos).add(camState.off);
   // keep the camera out of walls
@@ -3261,17 +3343,52 @@ addEventListener('resize', onResize); onResize();
 function begin() {
   if (started) return;
   started = true; initAudio();
-  $('intro').hidden = true; hud.hidden = false;
+  yaw = 0; pitch = -0.08; // face up the avenue into the city
+  $('title').classList.add('out'); setTimeout(() => { $('title').hidden = true; }, 650); hud.hidden = false;
   try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (_) { }
   canvas.focus();
   toast('W A S D to fly, mouse to aim. Space climbs, C dives.', '');
   onboard.t0 = 0;
 }
-$('go').addEventListener('click', begin);
+// ---------------------------------------------------------------- title screen
+// Everything above has finished building the city by the time this runs, so Start is live.
+const titleEl = $('title');
+let titleReady = false;
+function titleStart(e) {
+  if (!titleReady || started) return;
+  if (e && e.target && e.target.closest && e.target.closest('#controls-panel, #btn-controls, #btn-quality')) return;
+  begin();
+}
+titleEl.addEventListener('click', titleStart);
+$('btn-controls').addEventListener('click', e => { e.stopPropagation(); $('controls-panel').hidden = false; });
+$('close-controls').addEventListener('click', e => { e.stopPropagation(); $('controls-panel').hidden = true; });
+$('btn-quality').textContent = 'Quality: ' + (LOWQ ? 'Low' : 'High');
+$('btn-quality').addEventListener('click', e => {
+  e.stopPropagation();
+  const url = location.href.replace(/[?&]q=\w+/, '');
+  location.href = url + (LOWQ ? '' : (url.includes('?') ? '&' : '?') + 'q=low');
+});
+requestAnimationFrame(() => requestAnimationFrame(() => {
+  titleReady = true; titleEl.classList.remove('loading');
+  $('press').textContent = 'PRESS ENTER OR CLICK TO START';
+  $('menu').hidden = false; $('go').focus({ preventScroll: true });
+}));
 
+// in-game performance meter (` or F3): real frame rate on the player's machine
+const fpsEl = document.createElement('div'); fpsEl.id = 'fps'; fpsEl.hidden = true; document.body.appendChild(fpsEl);
+let fpsN = 0, fpsT = 0, fpsWorst = 0;
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const rawDt = (now - last) / 1000;
+  const dt = Math.min(0.05, rawDt); last = now;
+  if (!fpsEl.hidden) {
+    fpsN++; fpsT += rawDt; fpsWorst = Math.max(fpsWorst, rawDt);
+    if (fpsT > 0.5) {
+      const i = renderer.info.render;
+      fpsEl.textContent = `${Math.round(fpsN / fpsT)} fps \u00b7 ${(1000 * fpsT / fpsN).toFixed(1)} ms avg \u00b7 ${(fpsWorst * 1000).toFixed(0)} ms worst \u00b7 ${i.calls} draws \u00b7 ${(i.triangles / 1e6).toFixed(2)}M tris \u00b7 ${liveDebrisCount} live debris`;
+      fpsN = 0; fpsT = 0; fpsWorst = 0;
+    }
+  }
   pollPad();
   if (!paused) update(dt);
   composer.render();
@@ -3284,9 +3401,11 @@ function update(dt) {
   simT += dt;
   if (started) { ledger.time += dt; updatePlayer(dt); }
   else {
-    // attract mode: hover over the avenue while the camera circles
-    yaw += dt * 0.12; pitch = -0.12 + Math.sin(simT * 0.3) * 0.05;
-    P.pos.y = 45 + Math.sin(simT * 0.8) * 0.4; updateHeroPose(dt, aimDir(T1));
+    // title screen: hover above the waterfront facing the camera, skyline behind, sun on his face
+    const ta = titleAngle();
+    P.pos.set(-40, 128 + Math.sin(simT * 0.8) * 0.4, 200); P.vel.set(0, 0, 0); P.flying = true;
+    yaw = Math.atan2(-Math.sin(ta), -Math.cos(ta)); pitch = 0;
+    updateHeroPose(dt, aimDir(T1));
   }
   PROF.t('-'); updateCars(wdt); PROF.t('cars'); updatePeople(wdt); PROF.t('people'); updateIncident(wdt); updateFires(wdt); PROF.t('fires'); updateBullets(wdt);
   physAcc += wdt; let n = 0;
@@ -3323,6 +3442,6 @@ function update(dt) {
   updateAtmosphere(dt);
   if (started) updateHUD(dt);
 }
-window.__game = { prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; } };
+window.__game = { renderer, composer, get started() { return started; }, get titleReady() { return titleReady; }, prof(reset) { const r = PROF.acc; if (reset !== false) PROF.acc = {}; PROF.on = true; return r; }, fires, fallQueue, get simT() { return simT; }, update: (dt) => update(dt), camera, scene, unsupportedAtStart() { let n = 0; for (const b of buildings) { structuralCheck(b); } n = fallQueue.length; fallQueue.forEach(g => pendingFall[g] = 0); fallQueue.length = 0; return n; }, step(n, dt) { for (let i = 0; i < n; i++) update(dt || 1 / 60); }, keys, render() { composer.render(); }, setMouse(l, r) { mouseL = l; mouseR = r; }, P, ledger, bodies, people, buildings, rubble, explode, startIncident, breakBlock, blockAt, cellIndex, get liveDebrisCount() { return liveDebrisCount; }, get currentInc() { return currentInc; }, begin, punch, clap, sonicBoom, grabOrRelease, throwHeld, setYawPitch(y, p) { yaw = y; pitch = p; } };
 requestAnimationFrame(frame);
 })();
