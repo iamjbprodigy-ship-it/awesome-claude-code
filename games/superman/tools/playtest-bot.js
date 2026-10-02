@@ -175,6 +175,15 @@ const SCENARIOS = [
       .concat([['ledger sane', r.ledger.hope >= 0 && r.ledger.hope <= 100, JSON.stringify(r.ledger)]])
   },
   {
+    name: 'depth-buffer', quality: 'high',
+    // the scene targets must have a 24-bit depth buffer: three r128 gives 16-bit depth to any render target
+    // without a stencil buffer, which made stacked road layers z-fight away at range
+    run: `(() => { const g = __game, r = g.renderer, gl = r.getContext(), out = {};
+      for (const k of ['renderTarget1', 'renderTarget2']) { r.setRenderTarget(g.composer[k]); out[k] = gl.getParameter(gl.DEPTH_BITS); }
+      r.setRenderTarget(null); out.samples = g.composer.renderTarget1.samples || 0; return out; })()`,
+    check: r => [['scene render targets have >= 24-bit depth', r.renderTarget1 >= 24 && r.renderTarget2 >= 24, `${r.renderTarget1} / ${r.renderTarget2} bits, ${r.samples}x MSAA`]]
+  },
+  {
     name: 'emergency-endings',
     // every emergency must end: a chopper set down on a roof or in the bay, a meteor dropped in the bay, and
     // a meteor carried around past its limit all used to leave the incident running forever (no new alerts)

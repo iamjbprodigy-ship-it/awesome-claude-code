@@ -74,7 +74,11 @@ const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 450000);
 camera.rotation.order = 'YXZ';
 
 const isGL2 = renderer.capabilities.isWebGL2;
-const rtOpts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+// stencilBuffer: three r128 gives a render target without stencil a DEPTH_COMPONENT16 renderbuffer (MSAA
+// included); with stencil it allocates DEPTH24_STENCIL8. 16-bit log depth over a 450 km far plane resolves
+// only ~2e-4 x distance, so the road layers a few cm apart (asphalt, underlay, markings) z-fought and
+// dropped out beyond ~100 m. The composer's second buffer is a clone, so it inherits this.
+const rtOpts = { type: THREE.HalfFloatType, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, stencilBuffer: true };
 const mainRT = isGL2 && !LOWQ && !SHOTQ && !MEDQ && THREE.WebGLMultisampleRenderTarget
   ? Object.assign(new THREE.WebGLMultisampleRenderTarget(4, 4, rtOpts), { samples: ULTRA && PR < 1.4 ? 8 : 4 }) : new THREE.WebGLRenderTarget(4, 4, rtOpts);
 const composer = new THREE.EffectComposer(renderer, mainRT);
