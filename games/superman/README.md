@@ -78,6 +78,18 @@ Medals depend on bystanders unhurt, property damage and time. If your solar char
 
 Gamepad: Back/View opens the map; the sticks fly and look; RT heat vision, LT freeze, RB punch, LB grab, X clap, Y x-ray.
 
+**Settings (`js/settings.js`):** open **Settings** on the title menu, or on the pause front page (Enter, or Y on a gamepad). Menus work with the keyboard (arrows or W/S to select, left/right or A/D to adjust, Enter to change, Q/E or Tab to switch tabs, Backspace for the default, Esc to go back) and with a gamepad (D-pad or left stick, A, B to go back, LB/RB for tabs, X for the default). Choices are saved in the browser.
+- **Controls:** remap every keyboard action, with a main and an alternate key each. A key already in use swaps places, and Delete clears a slot. Also invert Y and mouse sensitivity.
+- **Camera:** field-of-view offset, camera distance, screen shake from 0 to 100%, hit-stop on or off, reduced motion, and the strength of motion blur and speed lines.
+- **Display:** quality preset, supersampling and ambient occlusion (these three take effect when you pick **Apply and reload**), the FPS meter and HUD scale.
+- **Audio:** master, effects, radio and music volume.
+- **Accessibility:**
+  - Subtitle size and background, for the radio card, mission cards and street speech bubbles.
+  - A colour-blind-safe (Okabe–Ito) palette for map pins and light beams.
+  - Hold-to-toggle for heat vision, freeze breath and the charge punch.
+  - QTE assist: timing rings close 60% slower, and a burning airliner wing lasts 60% longer.
+  - Reduced flashing.
+
 **Set pieces** (after the first few minutes, now and then):
 - **Runaway bus:** a packed bus loses its brakes on Centennial St and runs for the waterfront crosswalk. Standing passengers are hurt above about 1 g, so get in front early (about 40 m of stopping room at 25 m/s), press **E** on the front bumper and **hold E** for a smooth 0.85 g stop. **W** pushes harder and **S** eases off; the meter shows the deceleration. Tap E to let go. Blocking it dead, grabbing it from the side or punching it hurts the passengers.
 - **Falling airliner:** an airliner with an engine fire glides down over the bay. Hold freeze breath (**Q**) on the burning engine for about 5 s, or the wing fails at 25 s. Press **E** at a push point (nose, either wingtip, tail), then **W/Space** push up, **S/C** push down and **A/D** push sideways. Set it down on the water with vertical speed under 6 m/s and roll under 15° to save all 140 aboard.

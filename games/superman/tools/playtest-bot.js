@@ -6,6 +6,7 @@
  *   (--only power-levels,ground-run,hearing for the power set; powers-shots writes DIR/powers/*.png)
  *   (--only feel for hit-stop, shake, camera framing and the landing tiers; feel-shots writes DIR/feel/*.png)
  *   (--only comms for the radio calls; comms-shots writes DIR/comms/*.png)
+ *   (--only settings for the settings menu, key remapping and accessibility; settings-shots writes DIR/settings/*.png)
  *   Hang protection: --slow N scales every scenario's watchdog (default 8 min each), --max-minutes N caps the run,
  *   --timeout MS caps page loads; a hung scenario is a FAIL row, the browser is relaunched and the run goes on.
  *
@@ -1172,6 +1173,183 @@ SCENARIOS.push({
     ['each chapter starts 25-40 s after the previous one ends', r.gaps.length === 5 && r.gaps.every(x => x >= 25 && x <= 41), r.gaps.join(', ')],
     ['demo completes and opens the front page', r.done && r.paused, `done ${r.done}, paused ${r.paused}`],
     ['front page leads with a Metallo headline', /METALLO/.test(r.headline || ''), r.headline]]
+});
+
+// settings menu + accessibility suite (js/settings.js): open it from the title, remap heat vision with the keyboard,
+// prove the new key fires the action and the old one doesn't, the remap layer feeds missions.js's capture listener,
+// hold-to-toggle, shake 0 = no shake, the colour-blind palette, audio buses, persistence across a reload, the pause
+// entry point and gamepad navigation (a stubbed pad)
+SCENARIOS.push({
+  name: 'settings',
+  page: async (p) => {
+    await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: LOAD_TIMEOUT });
+    const out = {};
+    out.api = await p.evaluate(() => { const S = window.SM_SETTINGS; return !!S && ['get', 'set', 'on'].every(f => typeof S[f] === 'function') && S.get('shake') === 1 && S.get('hitStop') === true; });
+    // ---- open from the title menu and remap heat vision to J with the keyboard alone
+    await p.click('#btn-settings');
+    await p.waitForTimeout(200);
+    out.opened = await p.evaluate(() => SM_SETTINGS.isOpen && !document.getElementById('sm-settings').hidden && !__game.started && SM_SETTINGS.tab === 'controls');
+    for (let i = 0; i < 40; i++) { if ((await p.textContent('.sms-info-h')) === 'Heat vision') break; await p.keyboard.press('ArrowDown'); }
+    out.heatRow = await p.textContent('.sms-info-h');
+    await p.keyboard.press('Enter');
+    out.capture = await p.isVisible('.sms-capture');
+    await p.keyboard.press('KeyJ');
+    out.bound = await p.evaluate(() => SM_SETTINGS.get('binds').heat.slice());
+    out.cellText = await p.evaluate(() => document.querySelector('.sms-row.focus .sms-key').textContent);
+    // ---- tabs cycle with E; Screen shake to 0 % with the arrow keys on the Camera tab
+    const tabs = [];
+    for (let i = 0; i < 5; i++) { tabs.push(await p.evaluate(() => SM_SETTINGS.tab)); await p.keyboard.press('KeyE'); }
+    out.tabs = tabs;
+    await p.keyboard.press('KeyE'); // controls -> camera
+    for (let i = 0; i < 10; i++) { if ((await p.textContent('.sms-info-h')) === 'Screen shake') break; await p.keyboard.press('ArrowDown'); }
+    for (let i = 0; i < 24; i++) await p.keyboard.press('ArrowLeft');
+    out.shake0 = await p.evaluate(() => SM_SETTINGS.get('shake'));
+    out.shakeText = await p.evaluate(() => document.querySelector('.sms-row.focus .sms-val').textContent);
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(150);
+    out.closed = await p.evaluate(() => !SM_SETTINGS.isOpen && !__game.started);
+    // ---- play: J fires heat vision, R no longer does
+    await p.evaluate(() => { const g = __game; g.begin(); g.P.flying = true; g.P.pos.set(0, 140, 300); g.P.vel.set(0, 0, 0); g.step(10); });
+    const heat = async () => p.evaluate(() => { const g = __game; g.step(4); return { keyR: g.keys.has('KeyR'), heat: g.heatOn }; });
+    await p.keyboard.down('KeyJ'); out.jDown = await heat();
+    await p.keyboard.up('KeyJ'); out.jUp = await heat();
+    await p.keyboard.down('KeyR'); out.rDown = await heat();
+    await p.keyboard.up('KeyR'); out.rUp = await heat();
+    // ---- the remap feeds the capture-phase listeners of missions.js / setpieces.js: grab -> B
+    out.grabSeen = await p.evaluate(() => { window.__seen = []; addEventListener('keydown', e => window.__seen.push(e.code), true); return SM_SETTINGS.bind('grab', 0, 'KeyB'); });
+    await p.keyboard.press('KeyB'); await p.keyboard.press('KeyE');
+    out.seen = await p.evaluate(() => window.__seen.slice());
+    // ---- hold-to-toggle heat: tap J once = on and stays on, tap again = off
+    await p.evaluate(() => SM_SETTINGS.set('toggleHeat', true));
+    await p.keyboard.press('KeyJ'); out.tog1 = await heat();
+    await p.evaluate(() => __game.step(20)); out.tog1b = await heat();
+    await p.keyboard.press('KeyJ'); out.tog2 = await heat();
+    await p.evaluate(() => SM_SETTINGS.set('toggleHeat', false));
+    // ---- shake 0 means zero shake; the default 1 shakes
+    out.shake = await p.evaluate(() => {
+      const g = __game, F = g.feel, mag = () => Math.abs(F.pitch) + Math.abs(F.yaw) + Math.abs(F.roll) + Math.abs(F.ox) + Math.abs(F.oy) + Math.abs(F.oz);
+      F.reset(); g.addShake(1); g.feel.kick(1, 0, 0, 1); let z = 0; for (let i = 0; i < 6; i++) { g.step(1); z = Math.max(z, mag()); }
+      SM_SETTINGS.set('shake', 1); F.reset(); g.addShake(1); let o = 0; for (let i = 0; i < 6; i++) { g.step(1); o = Math.max(o, mag()); }
+      SM_SETTINGS.set('shake', 0); F.reset();
+      return { zero: z, one: o, trauma: F.trauma };
+    });
+    // ---- colour-blind palette swaps PIN_COL / BEACON_COL (and restores them)
+    out.cb = await p.evaluate(() => {
+      const g = __game, inc0 = g.PIN_COL.inc, kr0 = g.PIN_COL.kryp, b0 = g.BEACON_COL.kryp.getHexString();
+      SM_SETTINGS.set('colorblind', true);
+      const inc1 = g.PIN_COL.inc, kr1 = g.PIN_COL.kryp, b1 = g.BEACON_COL.kryp.getHexString(), cls = document.body.classList.contains('sm-cb');
+      SM_SETTINGS.set('colorblind', false);
+      const back = g.PIN_COL.inc === inc0 && g.BEACON_COL.kryp.getHexString() === b0;
+      SM_SETTINGS.set('colorblind', true);
+      return { inc0, inc1, kr0, kr1, b0, b1, cls, back };
+    });
+    // ---- camera, display, audio and accessibility settings reach the game
+    out.wired = await p.evaluate(async () => {
+      const g = __game, S = SM_SETTINGS;
+      S.set('fovOffset', 10); S.set('camDist', 1.3); S.set('invertY', true); S.set('mouseSens', 1.5); S.set('reducedFlash', true); S.set('hudScale', 1.25); S.set('fps', true);
+      await new Promise(r => setTimeout(r, 300));
+      S.set('master', 0.5); S.set('sfx', 0.4); S.set('music', 0.3);
+      let musicHeard = null; S.on('music', v => { musicHeard = v; }); S.set('music', 0.6);
+      const C = g.camState, AU = g.AU;
+      return { fov: C.fovOff, dist: C.distK, invY: C.invY, sens: C.sens, flashK: g.FX.flashK, hud: getComputedStyle(document.documentElement).getPropertyValue('--sm-hud').trim(),
+        fps: !document.getElementById('fps').hidden, out: AU.out ? +AU.out.gain.value.toFixed(3) : null, sfx: AU.sfxBus ? +AU.sfxBus.gain.value.toFixed(3) : null,
+        musicBus: AU.musicBus ? +AU.musicBus.gain.value.toFixed(3) : null, musicHeard, radio: +S.vol('radio').toFixed(3), ctx: !!AU.ctx };
+    });
+    await p.evaluate(() => { SM_SETTINGS.set('qteAssist', true); SM_SETTINGS.set('shake', 0.25); SM_SETTINGS.set('ss', '1.25'); });
+    // ---- the pause front page opens settings too; Esc goes back to the paper
+    await p.evaluate(() => { __game.setPaused(true); });
+    await p.waitForTimeout(150);
+    out.pauseBtn = await p.isVisible('#pause-settings');
+    await p.click('#pause-settings');
+    await p.waitForTimeout(150);
+    out.pauseOpen = await p.evaluate(() => SM_SETTINGS.isOpen && __game.paused);
+    await p.keyboard.press('Escape');
+    await p.waitForTimeout(150);
+    out.pauseBack = await p.evaluate(() => !SM_SETTINGS.isOpen && __game.paused);
+    // ---- persistence across a reload
+    await p.reload({ timeout: LOAD_TIMEOUT });
+    await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: LOAD_TIMEOUT });
+    await p.waitForTimeout(300);
+    out.persist = await p.evaluate(() => {
+      const S = SM_SETTINGS, g = __game; let raw = null; try { raw = JSON.parse(localStorage.getItem('sm-settings')); } catch (_) {}
+      return { heat: S.get('binds').heat[0], grab: S.get('binds').grab[0], shake: S.get('shake'), qte: S.get('qteAssist'), cb: S.get('colorblind'), pin: g.PIN_COL.inc,
+        fov: g.camState.fovOff, master: S.get('master'), stored: !!raw && raw.shake === 0.25, url: location.search, chip: document.querySelector('.chip[data-p="grab"] kbd').textContent };
+    });
+    // ---- gamepad: Y opens settings on the title, RB changes tab, B backs out, and the game never starts
+    out.pad = await p.evaluate(async () => {
+      const pad = { connected: true, id: 'bot pad', buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })), axes: [0, 0, 0, 0] };
+      Object.defineProperty(navigator, 'getGamepads', { value: () => [pad], configurable: true });
+      dispatchEvent(new Event('gamepadconnected'));
+      const frames = n => new Promise(r => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); });
+      // hold a button until the menu reacts (one poll is enough; holding longer could auto-repeat the D-pad)
+      const tap = async (i, cond) => { pad.buttons[i].pressed = true; pad.buttons[i].value = 1; for (let k = 0; k < 60 && !cond(); k++) await frames(1); pad.buttons[i].pressed = false; pad.buttons[i].value = 0; await frames(3); };
+      const S = SM_SETTINGS, r = {};
+      const row = () => document.querySelector('.sms-info-h').textContent;
+      await tap(3, () => S.isOpen); r.open = S.isOpen; r.tab0 = S.tab;
+      await tap(5, () => S.tab !== 'controls'); r.tab1 = S.tab;
+      const row0 = row(); await tap(13, () => row() !== row0); r.row = row();
+      await tap(1, () => !S.isOpen); r.closed = !S.isOpen; r.started = __game.started;
+      delete navigator.getGamepads;
+      return r;
+    });
+    return out;
+  },
+  check: r => [
+    ['SM_SETTINGS API with defaults', r.api, ''],
+    ['Settings opens from the title menu', r.opened, ''],
+    ['keyboard remap: Heat vision captured and bound to J', r.capture && r.heatRow === 'Heat vision' && r.bound[0] === 'KeyJ' && r.cellText === 'J', `${r.heatRow} -> ${JSON.stringify(r.bound)} "${r.cellText}"`],
+    ['E cycles the five tabs', r.tabs.join(',') === 'controls,camera,display,audio,access', r.tabs.join(',')],
+    ['arrow keys take Screen shake to 0%', r.shake0 === 0 && r.shakeText === '0%', `${r.shake0} "${r.shakeText}"`],
+    ['Esc closes it without starting the game', r.closed, ''],
+    ['the new key (J) fires heat vision', r.jDown.heat && r.jDown.keyR && !r.jUp.heat, JSON.stringify([r.jDown, r.jUp])],
+    ['the old key (R) no longer does', !r.rDown.heat && !r.rDown.keyR && !r.rUp.heat, JSON.stringify(r.rDown)],
+    ['remapped grab reaches capture-phase listeners as KeyE; physical E is swallowed', r.grabSeen && r.seen.includes('KeyE') && !r.seen.includes('KeyB') && r.seen.filter(c => c === 'KeyE').length === 1, r.seen.join(',')],
+    ['hold-to-toggle: one tap keeps heat on, a second turns it off', r.tog1.heat && r.tog1b.heat && !r.tog2.heat, JSON.stringify([r.tog1.heat, r.tog1b.heat, r.tog2.heat])],
+    ['shake 0 gives zero shake (trauma still tracked)', r.shake.zero === 0 && r.shake.one > 0, `0%: ${r.shake.zero}, 100%: ${r.shake.one.toFixed(4)}`],
+    ['colour-blind palette changes PIN_COL and the beams', r.cb.inc1 !== r.cb.inc0 && r.cb.kr1 !== r.cb.kr0 && r.cb.b1 !== r.cb.b0 && r.cb.cls, `${r.cb.inc0} -> ${r.cb.inc1}, ${r.cb.kr0} -> ${r.cb.kr1}`],
+    ['turning the palette off restores the originals', r.cb.back, ''],
+    ['camera, display and accessibility settings reach the game', r.wired.fov === 10 && r.wired.dist === 1.3 && r.wired.invY && r.wired.sens === 1.5 && r.wired.flashK < 1 && r.wired.hud === '1.25' && r.wired.fps, JSON.stringify(r.wired)],
+    ['audio buses: master, effects, music (+ on("music")), radio', !r.wired.ctx || (r.wired.out === 0.5 && r.wired.sfx === 0.4 && r.wired.musicBus === 0.6 && r.wired.musicHeard === 0.6 && r.wired.radio === 0.5), `ctx ${r.wired.ctx} out ${r.wired.out} sfx ${r.wired.sfx} music ${r.wired.musicBus} radio ${r.wired.radio}`],
+    ['pause front page has Settings; Esc returns to the paper', r.pauseBtn && r.pauseOpen && r.pauseBack, `${r.pauseBtn} ${r.pauseOpen} ${r.pauseBack}`],
+    ['settings persist across a reload (sm-settings)', r.persist.stored && r.persist.heat === 'KeyJ' && r.persist.grab === 'KeyB' && r.persist.shake === 0.25 && r.persist.qte && r.persist.cb && r.persist.fov === 10 && r.persist.master === 0.5, JSON.stringify(r.persist)],
+    ['after the reload the palette and HUD key labels apply at boot', r.persist.pin === '#f0e442' && r.persist.chip === 'B', `${r.persist.pin} chip ${r.persist.chip}`],
+    ['supersampling choice travels in the URL at boot', /ss=1\.25/.test(r.persist.url), r.persist.url],
+    ['gamepad: Y opens, RB next tab, D-pad moves, B backs out, title never starts', r.pad.open && r.pad.tab0 === 'controls' && r.pad.tab1 === 'camera' && r.pad.row === 'Camera distance' && r.pad.closed && !r.pad.started, JSON.stringify(r.pad)]
+  ]
+});
+
+// screenshots of every settings tab over the title scene, the rebind prompt and the pause entry: OUT/settings/*.png
+SCENARIOS.push({
+  name: 'settings-shots', shotsOnly: true,
+  page: async (p) => {
+    const dir = path.join(OUT, 'settings'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [];
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: LOAD_TIMEOUT });
+    await p.evaluate(() => { __game.step(150); SM_SETTINGS.bind('heat', 1, 'KeyJ'); });
+    await p.waitForTimeout(300);
+    await snap('settings-title-menu.png');
+    const focusOn = async (label) => { for (let i = 0; i < 40; i++) { if ((await p.textContent('.sms-info-h')) === label) return; await p.keyboard.press('ArrowDown'); } };
+    const plan = [['controls', 'Heat vision'], ['camera', 'Screen shake'], ['display', 'Quality preset'], ['audio', 'Radio'], ['access', 'Subtitle size']];
+    for (const [tab, row] of plan) {
+      await p.evaluate(t => SM_SETTINGS.open(t), tab);
+      await focusOn(row);
+      if (tab === 'controls') { await p.keyboard.press('ArrowRight'); }
+      await p.waitForTimeout(350);
+      await snap('settings-' + tab + '.png');
+    }
+    await focusOn('Colour-blind palette'); await p.keyboard.press('Enter'); await p.waitForTimeout(300);
+    await snap('settings-access-palette.png');
+    await p.evaluate(() => SM_SETTINGS.open('controls'));
+    await focusOn('Grab / interact'); await p.keyboard.press('Enter'); await p.waitForTimeout(300);
+    await snap('settings-rebind.png');
+    await p.keyboard.press('Escape'); await p.keyboard.press('Escape');
+    await p.evaluate(() => { const g = __game; g.begin(); g.P.flying = true; g.P.pos.set(-60, 140, 260); g.setYawPitch(-0.3, -0.12); g.step(30); g.setPaused(true); });
+    await p.waitForTimeout(400);
+    await snap('settings-pause.png');
+    return { shots };
+  },
+  check: r => [['settings screenshots written', r.shots.length === 9, r.shots.join(', ')]]
 });
 
 const RIGS = [
