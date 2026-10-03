@@ -7,6 +7,7 @@
  *   (--only feel for hit-stop, shake, camera framing and the landing tiers; feel-shots writes DIR/feel/*.png)
  *   (--only comms for the radio calls; comms-shots writes DIR/comms/*.png)
  *   (--only settings for the settings menu, key remapping and accessibility; settings-shots writes DIR/settings/*.png)
+ *   (--only photo,frontpage for photo mode and the living front page; photo-shots writes DIR/photo/*.png)
  *   Hang protection: --slow N scales every scenario's watchdog (default 8 min each), --max-minutes N caps the run,
  *   --timeout MS caps page loads; a hung scenario is a FAIL row, the browser is relaunched and the run goes on.
  *
@@ -1437,6 +1438,181 @@ SCENARIOS.push({
       ['real music is audible and does not clip (SKIP without audio)', realOn ? r.meter.peak > 0.005 && r.meter.peak < 1 && !r.meter.nan : true, realOn ? `${r.real.layer}: peak ${r.meter.peak}, rms ${r.meter.rms}` : 'SKIP']
     ];
   }
+});
+
+// photo mode (js/photo.js): O freezes the sim, a free camera takes the lens, filters apply, capture writes a PNG,
+// and exiting restores the HUD and the gameplay camera
+SCENARIOS.push({
+  name: 'photo',
+  page: async (p) => {
+    await p.evaluate(() => {
+      const g = __game; g.begin(); g.deferIncident(1e9);
+      g.P.flying = false; g.P.pos.set(-150, 1.2, 152); g.P.vel.set(0, 0, 0); g.setYawPitch(-1.2, 0.06); g.step(40);
+      window.__phFrames = 0; (function f() { window.__phFrames++; requestAnimationFrame(f); })();
+    });
+    await p.waitForTimeout(300);
+    const o = {};
+    o.before = await p.evaluate(() => { const g = __game, c = g.camera.position; return { hud: getComputedStyle(document.getElementById('hud')).display, cam: [c.x, c.y, c.z], camD: c.distanceTo(g.P.pos) }; });
+    await p.keyboard.press('KeyO');
+    await p.waitForTimeout(200);
+    o.enter = await p.evaluate(() => {
+      const g = __game, ph = g.photo, c = g.camera.position;
+      window.__ph0 = { simT: g.simT, frames: window.__phFrames, cam: c.clone() };
+      return { has: !!ph, active: ph && ph.active, frozen: g.freeze.on, hold: g.camState.hold, hud: getComputedStyle(document.getElementById('hud')).display,
+        panel: !!document.querySelector('#photo .ph-panel') && !document.getElementById('photo').hidden,
+        dofIn: g.composer.passes.includes(ph.passes.dof), lookIn: g.composer.passes.includes(ph.passes.look) };
+    });
+    // fly the free camera: W forward with Shift, Q roll, then try to leave the 40 m range
+    await p.keyboard.down('ShiftLeft'); await p.keyboard.down('KeyW'); await p.waitForTimeout(700); await p.keyboard.up('KeyW'); await p.keyboard.up('ShiftLeft');
+    await p.keyboard.down('KeyQ'); await p.waitForTimeout(350); await p.keyboard.up('KeyQ');
+    await p.keyboard.press('KeyE'); // E rolls; it must not grab or reach the frozen game
+    o.moved = await p.evaluate(() => {
+      const g = __game, ph = g.photo, a = window.__ph0;
+      const r = { frames: window.__phFrames - a.frames, simDt: g.simT - a.simT, camMove: g.camera.position.distanceTo(a.cam), roll: +(ph.state.roll * 180 / Math.PI).toFixed(1),
+        held: !!g.P.hold, hero: g.camera.position.distanceTo(g.hero.g.position) };
+      ph.state.cam.set(g.hero.g.position.x + 500, g.hero.g.position.y + 300, g.hero.g.position.z); // a jump far out of range
+      return r;
+    });
+    await p.waitForTimeout(150);
+    o.range = await p.evaluate(() => +__game.camera.position.distanceTo(__game.hero.g.position).toFixed(2));
+    // filters and poses: T cycles the look (newsprint first), Y the pose, the DOF row turns the bokeh pass on
+    await p.keyboard.press('KeyT');
+    await p.evaluate(() => { const ph = __game.photo; ph.setPose('hips'); ph.set('aperture', 0.6); ph.setFrame('planet'); ph.frameHero(4.5, 30, 0.4); });
+    await p.waitForTimeout(400);
+    o.look = await p.evaluate(() => {
+      const g = __game, ph = g.photo, h = g.hero;
+      return { look: ph.look, uLook: ph.passes.look.uniforms.uLook.value, pose: ph.pose, elbowZ: +h.elbowL.rotation.z.toFixed(2), dof: ph.passes.dof.enabled, blur: +ph.passes.dof.uniforms.uMaxBlur.value.toFixed(1), frame: ph.frame, simDt: g.simT - window.__ph0.simT };
+    });
+    o.cap = await p.evaluate(async () => {
+      const g = __game, r = await g.photo.capture({ download: false }), cv = g.renderer.domElement;
+      return r ? { size: r.size, w: r.width, h: r.height, cw: cv.width, ch: cv.height, type: r.type } : null;
+    });
+    await p.waitForTimeout(300);
+    o.lead = await p.evaluate(() => { const l = __game.photo.lead; return l ? l.length : 0; });
+    await p.keyboard.press('KeyO');
+    await p.waitForTimeout(200);
+    o.exit = await p.evaluate(() => {
+      const g = __game, ph = g.photo, t0 = g.simT;
+      const r = { active: ph.active, frozen: g.freeze.on, hold: g.camState.hold, hud: getComputedStyle(document.getElementById('hud')).display,
+        dofIn: g.composer.passes.includes(ph.passes.dof), lookIn: g.composer.passes.includes(ph.passes.look), panel: document.getElementById('photo').hidden,
+        elbowZ: +g.hero.elbowL.rotation.z.toFixed(2) };
+      g.step(10); r.simDt = g.simT - t0; r.camD = g.camera.position.distanceTo(g.P.pos); r.fov = g.camera.fov;
+      return r;
+    });
+    await p.waitForTimeout(400);
+    o.after = await p.evaluate(() => ({ simAdv: __game.simT - window.__ph0.simT }));
+    // the pause page entry
+    await p.evaluate(() => __game.setPaused(true));
+    await p.waitForTimeout(100);
+    o.pauseBtn = await p.evaluate(() => { const b = document.getElementById('pause-photo'); if (!b) return { btn: false }; b.click(); return { btn: true, active: __game.photo.active, paused: __game.paused }; });
+    await p.keyboard.press('Escape');
+    o.esc = await p.evaluate(() => __game.photo.active);
+    return o;
+  },
+  check: r => {
+    const e = r.enter, m = r.moved, l = r.look, c = r.cap, x = r.exit;
+    return [
+      ['O enters photo mode: sim frozen, lens held, HUD hidden', e.has && e.active && e.frozen && e.hold && e.hud === 'none' && e.panel, JSON.stringify(e)],
+      ['bokeh and film passes join the composer only in photo mode', e.dofIn && e.lookIn && !x.dofIn && !x.lookIn, `in ${e.dofIn}/${e.lookIn}, after exit ${x.dofIn}/${x.lookIn}`],
+      ['the sim stays frozen while frames render', m.frames >= 10 && m.simDt === 0 && l.simDt === 0, `${m.frames} frames, simT +${m.simDt}`],
+      ['free camera moves (W + Shift) and rolls (Q)', m.camMove > 2 && Math.abs(m.roll) > 5, `moved ${m.camMove.toFixed(1)} m, roll ${m.roll} deg`],
+      ['E rolls in photo mode and does not grab', !m.held, String(m.held)],
+      ['camera range-limited to 40 m around Superman', m.hero <= 40.01 && r.range <= 40.01, `${m.hero.toFixed(1)} m, after a far jump ${r.range} m`],
+      ['T applies the newsprint look; pose, DOF and frame apply', l.look === 'newsprint' && l.uLook === 1 && l.pose === 'hips' && Math.abs(l.elbowZ - 1.45) < 0.01 && l.dof && l.blur > 1 && l.frame === 'planet', JSON.stringify(l)],
+      ['capture makes a PNG blob the size of the canvas', !!c && c.size > 10000 && c.w === c.cw && c.h === c.ch && c.type === 'image/png', c ? `${c.size} bytes ${c.w}x${c.h} (canvas ${c.cw}x${c.ch})` : 'null'],
+      ['the capture becomes the front-page lead photo', r.lead > 5000, r.lead + ' chars'],
+      ['O exits: HUD and gameplay camera back, pose restored', !x.active && !x.frozen && !x.hold && x.hud !== 'none' && x.panel && x.camD < 20 && x.elbowZ !== 1.45, JSON.stringify(x)],
+      ['the sim runs again after exit', x.simDt > 0.1 && r.after.simAdv > 0, `step +${x.simDt.toFixed(3)} s, total +${r.after.simAdv.toFixed(3)} s`],
+      ['pause page has a Photo mode button that enters it; Esc leaves', r.pauseBtn.btn && r.pauseBtn.active && !r.pauseBtn.paused && r.esc === false, JSON.stringify(r.pauseBtn) + ' esc->' + r.esc]
+    ];
+  }
+});
+
+// the living front page: a forced rescue and a set-piece success make the headline, the lead photo is the
+// auto-captured best moment, and a Metallo result still leads
+SCENARIOS.push({
+  name: 'frontpage',
+  page: async (p) => {
+    await p.evaluate(() => {
+      const g = __game; g.begin(); g.deferIncident(1e9);
+      g.P.flying = true; g.P.pos.set(-60, 40, 200); g.setYawPitch(-0.3, -0.1); g.step(20);
+      g.addSave(3, g.P.pos.clone(), 'Pulled three from a sinking car'); g.step(3);
+    });
+    await p.waitForTimeout(800);
+    const o = {};
+    o.afterRescue = await p.evaluate(() => { const ph = __game.photo; return { lead: ph.lead ? ph.lead.length : 0, info: ph.leadInfo }; });
+    await p.evaluate(() => {
+      const g = __game; g.setpieces.start('bus'); g.step(20);
+      if (g.currentInc) g.currentInc.medal = 'gold'; g.endIncident(true, 'Bus stopped short of the crosswalk'); g.step(3);
+    });
+    await p.waitForTimeout(1200);
+    o.page = await p.evaluate(() => {
+      const g = __game; g.setPaused(true);
+      const P = document.getElementById('paper'), img = P.querySelector('.fp-lead img');
+      return { h1: P.querySelector('h2').textContent, deck: P.querySelector('.deck').textContent, img: img ? img.getAttribute('src').slice(0, 22) : '', imgLen: img ? img.getAttribute('src').length : 0,
+        cap: (P.querySelector('.fp-lead figcaption') || {}).textContent || '', more: Array.from(P.querySelectorAll('.fp-more b')).map(b => b.textContent),
+        cols: !!P.querySelector('.cols'), unlocks: P.querySelectorAll('.unlocks li').length, info: g.photo.leadInfo,
+        events: g.events.filter(e => e.type === 'rescue' || e.type === 'incidentEnd' || e.type === 'medal').map(e => e.type + ':' + (e.kind || e.n)) };
+    });
+    o.metallo = await p.evaluate(() => {
+      const g = __game, st = g.metallo && g.metallo.state; if (!st) return null;
+      const prev = st.result; st.result = { win: true, medal: 'gold', time: 92, hurt: 0 };
+      const h = g.headline(); st.result = prev; g.setPaused(false); return h[0];
+    });
+    return o;
+  },
+  check: r => {
+    const pg = r.page;
+    return [
+      ['a forced rescue is auto-captured as the lead photo', r.afterRescue.lead > 5000, `${r.afterRescue.lead} chars, ${JSON.stringify(r.afterRescue.info)}`],
+      ['game.js logs rescue / incidentEnd / medal events', pg.events.includes('rescue:3') && pg.events.includes('incidentEnd:bus') && pg.events.includes('medal:bus'), pg.events.join(' ')],
+      ['the headline names the bus set piece', /bus|brakes/i.test(pg.h1 + ' ' + pg.deck) && /centennial|bus|riders/i.test(pg.deck), `${pg.h1} / ${pg.deck}`],
+      ['the lead photo upgrades to the set-piece moment', pg.img.startsWith('data:image/jpeg') && pg.imgLen > 5000 && /runaway bus/.test(pg.info && pg.info.label), `${pg.imgLen} chars, ${pg.cap}`],
+      ['the rescue makes "Also in this edition"', pg.more.some(t => /SAVES 3/.test(t)), pg.more.join(' | ')],
+      ['the stats, medals and unlocks lists stay', pg.cols && pg.unlocks > 0, `${pg.unlocks} unlocks`],
+      ['a Metallo result still leads the paper', r.metallo === null || /METALLO/.test(r.metallo), String(r.metallo)]
+    ];
+  }
+});
+
+// screenshots at --quality high: the photo-mode UI, a newsprint shot in the Daily Planet frame, the captured PNG
+// and the front page with its lead photo: OUT/photo/*.png
+SCENARIOS.push({
+  name: 'photo-shots', shotsOnly: true,
+  page: async (p) => {
+    const dir = path.join(OUT, 'photo'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [];
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    await p.evaluate(() => {
+      const g = __game; g.begin(); g.deferIncident(1e9);
+      g.P.flying = false; g.P.pos.set(40, 1.2, 222); g.P.vel.set(0, 0, 0); g.setYawPitch(Math.PI - 0.4, 0.02); g.step(60);
+    });
+    await p.waitForTimeout(600);
+    await p.keyboard.press('KeyO');
+    await p.evaluate(() => { const ph = __game.photo; ph.setPose('hips'); ph.set('turn', 150); ph.frameHero(4.6, 28, 0.25); ph.set('aperture', 0.55); ph.set('fov', 50); ph.state.row = 4; ph.set('vignette', 0.35); });
+    await p.waitForTimeout(1200);
+    await snap('photo-mode-ui.png');
+    await p.evaluate(() => { const ph = __game.photo; ph.setLook('newsprint'); ph.setFrame('planet'); ph.setPose('fly'); ph.set('turn', 90); ph.frameHero(5.2, 60, 0.6); ph.state.ui = false; ph.set('aperture', 0.4); });
+    await p.waitForTimeout(1200);
+    await snap('photo-newsprint-planet.png');
+    const png = await p.evaluate(async () => { const r = await __game.photo.capture({ download: false }); return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(r.blob); }); });
+    const capFile = path.join(dir, 'photo-capture.png'); fs.writeFileSync(capFile, Buffer.from(png.split(',')[1], 'base64')); shots.push(capFile);
+    await p.evaluate(() => { const ph = __game.photo; ph.setLook('comic'); ph.setFrame('none'); ph.setPose('kneel'); ph.set('turn', 160); ph.frameHero(4, 20, -0.2); ph.set('aperture', 0); });
+    await p.waitForTimeout(1000);
+    await snap('photo-comic-kneel.png');
+    await p.evaluate(() => { const ph = __game.photo; ph.setLook('golden'); ph.setPose('cape'); ph.set('turn', 120); ph.frameHero(4.8, 40, 0.3); ph.setFrame('print'); });
+    await p.waitForTimeout(1200);
+    await snap('photo-golden-cape.png');
+    // the front page: the photo-mode capture wins the lead; the headline comes from a bus save
+    await p.keyboard.press('KeyO');
+    await p.evaluate(() => { const g = __game; g.addSave(2, g.P.pos.clone(), 'Two kids pulled from the harbour'); g.setpieces.start('bus'); g.step(10); if (g.currentInc) g.currentInc.medal = 'gold'; g.endIncident(true, 'Bus stopped'); g.step(3); });
+    await p.waitForTimeout(1500);
+    await p.evaluate(() => { __game.setPaused(true); });
+    await p.waitForTimeout(600);
+    await snap('frontpage-lead.png');
+    return { shots };
+  },
+  check: r => [['photo screenshots written', r.shots.length === 6, r.shots.join(', ')]]
 });
 
 const RIGS = [

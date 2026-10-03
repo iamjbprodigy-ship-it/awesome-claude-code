@@ -42,6 +42,7 @@ Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, o
 | F | Switch between flying and walking |
 | P / N | Pause and read the Daily Planet |
 | M / Tab | City map: click to set a waypoint, scroll to zoom |
+| O | Photo mode (also from the pause page) |
 | K | Mute |
 | F8 | Start (or retry) the Metallo finale |
 
@@ -97,6 +98,16 @@ Gamepad: Back/View opens the map; the sticks fly and look; RT heat vision, LT fr
   - Hold-to-toggle for heat vision, freeze breath and the charge punch.
   - QTE assist: timing rings close 60% slower, and a burning airliner wing lasts 60% longer.
   - Reduced flashing.
+
+**Photo mode (`js/photo.js`):** press **O** in game, or **Photo mode** on the pause page (D-pad right in play, X on the pause page with a gamepad). The city freezes exactly as it does under the map, the HUD hides and a free camera takes over:
+- **Camera:** W A S D to move, Space / C up and down, the mouse to look (click the view to capture the mouse, or drag), Q / E to roll, Shift to go faster, and the wheel or [ ] for the field of view. It stays within 40 m of Superman; R re-frames him.
+- **Panel** (arrow keys, or click the arrows): film look, hero pose, frame, field of view, depth of field (a bokeh blur focused on Superman unless you set a distance), focus, exposure, contrast, saturation, vignette, grain and which way the hero faces. T, Y and B cycle the look, pose and frame; U hides the panel.
+- **Film looks:** Daily Planet newsprint (black-and-white halftone), golden hour, comic halftone.
+- **Poses:** as he was, hands on hips, flying fist forward, the hero landing, and cape billow. The cape keeps moving in the wind.
+- **Frames:** none, Jimmy's print, widescreen, and a Daily Planet front page with today's headline.
+- **Capture:** Enter saves `metropolis-YYYYMMDD-HHMMSS.png`, and the shot becomes the front-page photo. O or Esc leaves. On a gamepad: sticks to fly and look, LB/RB roll, LT/RT down/up, A capture, B exit, X look, Y pose, Back frame.
+
+**The front page tells the day:** the pause page leads with the biggest story of your session: the airliner or the bus, a tower collapse, the damage bill, a run of gold medals, help requests answered, or your biggest rescue. A Metallo result still leads. Its photo is captured automatically at your best moment (a set-piece save, a gold medal or a big rescue) and printed as newsprint, unless you took one in photo mode. The other stories run under "Also in this edition".
 
 **Set pieces** (after the first few minutes, now and then):
 - **Runaway bus:** a packed bus loses its brakes on Centennial St and runs for the waterfront crosswalk. Standing passengers are hurt above about 1 g, so get in front early (about 40 m of stopping room at 25 m/s), press **E** on the front bumper and **hold E** for a smooth 0.85 g stop. **W** pushes harder and **S** eases off; the meter shows the deceleration. Tap E to let go. Blocking it dead, grabbing it from the side or punching it hurts the passengers.
