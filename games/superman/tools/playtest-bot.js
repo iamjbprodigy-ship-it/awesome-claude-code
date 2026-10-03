@@ -1638,7 +1638,8 @@ SCENARIOS.push({
       const g = __game, CM = g.citymood, b = eval(busiest), zr = Math.round((b.z + 210) / 60) * 60 - 210;
       const s0 = CM.stats.lookUps, w0 = CM.stats.react.wave, c0 = CM.stats.carsSlowed; let maxPosed = 0;
       g.keys.clear(); g.P.flying = true;
-      for (let i = 0; i < 660; i++) { const t = Math.min(i, 480) / 60; g.P.pos.set(b.x - 60 + t * 15, 25, zr); g.P.vel.set(i < 480 ? 15 : 0, 0, 0); g.step(1); maxPosed = Math.max(maxPosed, CM.reactors()); }
+      // 4 s up the street to the busiest block, then a slow drift above it for 8 s while word spreads
+      for (let i = 0; i < 720; i++) { const t = i / 60, x = t < 4 ? b.x - 60 + t * 15 : b.x + (t - 4) * 1.5; g.P.pos.set(x, 25, zr); g.P.vel.set(t < 4 ? 15 : 1.5, 0, 0); g.step(1); maxPosed = Math.max(maxPosed, CM.reactors()); }
       return { reacted: CM.stats.lookUps - s0, waved: CM.stats.react.wave - w0, maxPosed, crowd: b.n, carsSlowed: CM.stats.carsSlowed - c0, kinds: CM.stats.react };
     }, CM_BUSIEST);
     // 2. the crowd follows Hope: 20 vs 90 (same camera, aerial)

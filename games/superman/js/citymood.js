@@ -39,7 +39,7 @@
     weights: [[0.6, 0.1, 0.3], [0.2, 0.5, 0.3], [0.1, 0.55, 0.35], [0.05, 0.6, 0.35]],
     look: {
       maxH: 40, radius: 60,          // a low pass: under 40 m above the street, people within 60 m
-      instant: 20,                   // m: right under him, people react at once...
+      instant: 30,                   // m: around his ground track, people react at once...
       ripple: 1.5,                   // ...beyond that the reaction spreads at walking speed (m/s)
       dur: [3.5, 6.5],               // s a reaction lasts
       cool: 16,                      // s before the same person reacts again
@@ -553,10 +553,14 @@
     const t = L2 > 0 ? clamp(((P.x - p0.x) * sx + (P.z - p0.z) * sz) / L2, 0, 1) : 0;
     const cx = p0.x + sx * t, cy = p0.y + sy * t, cz = p0.z + sz * t, dx = cx - P.x, dz = cz - P.z, d2 = dx * dx + dz * dz;
     if (d2 > Rr * Rr || cy < P.y - 1.15 || cy > P.y + 1.0) return false;
-    let nx, nz; const dl = Math.sqrt(d2);
-    if (dl > 0.05) { nx = dx / dl; nz = dz / dl; } else { const sl = Math.sqrt(L2) || 1; nx = -sx / sl; nz = -sz / sl; }
+    if (hd2(p0.x, p0.z, P.x, P.z) < Rr * Rr) return false;          // fired from inside his reach: nothing to block
+    // the normal at the point where the path enters his reach (the closest point of a crossing path is
+    // beside him, and its normal would be perpendicular to the shot)
+    const sl = Math.sqrt(L2) || 1, ux = sx / sl, uz = sz / sl, back = Math.sqrt(Math.max(0, Rr * Rr - d2));
+    let nx = dx - ux * back, nz = dz - uz * back; const nl = Math.sqrt(nx * nx + nz * nz);
+    if (nl > 1e-4) { nx /= nl; nz /= nl; } else { nx = -ux; nz = -uz; }
     const v = b.v, vn = v.x * nx + v.z * nz;
-    if (vn > 0) return false;                                       // already leaving him
+    if (vn >= 0) return false;                                      // leaving him
     v.x -= 2 * vn * nx; v.z -= 2 * vn * nz; v.multiplyScalar(0.45);
     v.x += R(-40, 40); v.z += R(-40, 40); v.y = Math.abs(v.y) * 0.5 + R(10, 60);
     b.p.set(P.x + nx * 1.05, cy, P.z + nz * 1.05); b.life = Math.min(b.life, 0.45); b.safe = true; b.reflected = true;
