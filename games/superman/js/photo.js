@@ -733,7 +733,7 @@
         else add(80, 'AIRLINER LOST OVER THE BAY', 'Metro Air 207 goes down despite a desperate rescue attempt; a stunned city asks how', 'airliner');
       } else if (e.kind === 'bus') {
         if (e.success) add(85 + gold, pick(['RUNAWAY BUS STOPPED COLD', 'BRAKES FAIL. SUPERMAN DOESN’T.', 'BUS HALTED FEET FROM THE CROSSWALK'], 2),
-          `${e.saved || 'Every'} riders ride out a brakeless plunge down Centennial St${hurt ? `; ${hurt} bruised` : ', not a scratch among them'}`, 'bus');
+          `${e.saved ? e.saved + ' riders ride' : 'Its riders ride'} out a brakeless plunge down Centennial St${hurt ? `; ${hurt} bruised` : ', not a scratch among them'}`, 'bus');
         else add(72, 'RUNAWAY BUS HITS WATERFRONT CROSSWALK', `${lost || 'Several'} lost as a brakeless bus beats Superman to the corner`, 'bus');
       } else if (e.kind === 'metallo') {
         add(e.success ? 99 : 90, e.success ? 'METALLO BROUGHT DOWN' : 'METALLO WALKS AWAY', e.success ? 'Kryptonite cyborg felled in the plaza; the heart is sealed in lead' : 'The Kryptonite-hearted cyborg escapes the plaza; police on alert', 'metallo');

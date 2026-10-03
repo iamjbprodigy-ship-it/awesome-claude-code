@@ -1450,11 +1450,13 @@ SCENARIOS.push({
       g.P.flying = false; g.P.pos.set(-150, 1.2, 152); g.P.vel.set(0, 0, 0); g.setYawPitch(-1.2, 0.06); g.step(40);
       window.__phFrames = 0; (function f() { window.__phFrames++; requestAnimationFrame(f); })();
     });
-    await p.waitForTimeout(300);
+    // headless SwiftShader renders a frame every few hundred ms: wait on real frames, not wall time
+    const frames = async (n) => { const f0 = await p.evaluate(() => window.__phFrames); await p.waitForFunction(t => window.__phFrames >= t, f0 + n, { timeout: 240000 }); };
+    await frames(3);
     const o = {};
     o.before = await p.evaluate(() => { const g = __game, c = g.camera.position; return { hud: getComputedStyle(document.getElementById('hud')).display, cam: [c.x, c.y, c.z], camD: c.distanceTo(g.P.pos) }; });
     await p.keyboard.press('KeyO');
-    await p.waitForTimeout(200);
+    await frames(2);
     o.enter = await p.evaluate(() => {
       const g = __game, ph = g.photo, c = g.camera.position;
       window.__ph0 = { simT: g.simT, frames: window.__phFrames, cam: c.clone() };
@@ -1463,8 +1465,8 @@ SCENARIOS.push({
         dofIn: g.composer.passes.includes(ph.passes.dof), lookIn: g.composer.passes.includes(ph.passes.look) };
     });
     // fly the free camera: W forward with Shift, Q roll, then try to leave the 40 m range
-    await p.keyboard.down('ShiftLeft'); await p.keyboard.down('KeyW'); await p.waitForTimeout(700); await p.keyboard.up('KeyW'); await p.keyboard.up('ShiftLeft');
-    await p.keyboard.down('KeyQ'); await p.waitForTimeout(350); await p.keyboard.up('KeyQ');
+    await p.keyboard.down('ShiftLeft'); await p.keyboard.down('KeyW'); await frames(6); await p.keyboard.up('KeyW'); await p.keyboard.up('ShiftLeft');
+    await p.keyboard.down('KeyQ'); await frames(6); await p.keyboard.up('KeyQ');
     await p.keyboard.press('KeyE'); // E rolls; it must not grab or reach the frozen game
     o.moved = await p.evaluate(() => {
       const g = __game, ph = g.photo, a = window.__ph0;
@@ -1473,12 +1475,12 @@ SCENARIOS.push({
       ph.state.cam.set(g.hero.g.position.x + 500, g.hero.g.position.y + 300, g.hero.g.position.z); // a jump far out of range
       return r;
     });
-    await p.waitForTimeout(150);
+    await frames(2);
     o.range = await p.evaluate(() => +__game.camera.position.distanceTo(__game.hero.g.position).toFixed(2));
     // filters and poses: T cycles the look (newsprint first), Y the pose, the DOF row turns the bokeh pass on
     await p.keyboard.press('KeyT');
     await p.evaluate(() => { const ph = __game.photo; ph.setPose('hips'); ph.set('aperture', 0.6); ph.setFrame('planet'); ph.frameHero(4.5, 30, 0.4); });
-    await p.waitForTimeout(400);
+    await frames(3);
     o.look = await p.evaluate(() => {
       const g = __game, ph = g.photo, h = g.hero;
       return { look: ph.look, uLook: ph.passes.look.uniforms.uLook.value, pose: ph.pose, elbowZ: +h.elbowL.rotation.z.toFixed(2), dof: ph.passes.dof.enabled, blur: +ph.passes.dof.uniforms.uMaxBlur.value.toFixed(1), frame: ph.frame, simDt: g.simT - window.__ph0.simT };
@@ -1514,7 +1516,7 @@ SCENARIOS.push({
     return [
       ['O enters photo mode: sim frozen, lens held, HUD hidden', e.has && e.active && e.frozen && e.hold && e.hud === 'none' && e.panel, JSON.stringify(e)],
       ['bokeh and film passes join the composer only in photo mode', e.dofIn && e.lookIn && !x.dofIn && !x.lookIn, `in ${e.dofIn}/${e.lookIn}, after exit ${x.dofIn}/${x.lookIn}`],
-      ['the sim stays frozen while frames render', m.frames >= 10 && m.simDt === 0 && l.simDt === 0, `${m.frames} frames, simT +${m.simDt}`],
+      ['the sim stays frozen while frames render', m.frames >= 12 && m.simDt === 0 && l.simDt === 0, `${m.frames} frames, simT +${m.simDt}`],
       ['free camera moves (W + Shift) and rolls (Q)', m.camMove > 2 && Math.abs(m.roll) > 5, `moved ${m.camMove.toFixed(1)} m, roll ${m.roll} deg`],
       ['E rolls in photo mode and does not grab', !m.held, String(m.held)],
       ['camera range-limited to 40 m around Superman', m.hero <= 40.01 && r.range <= 40.01, `${m.hero.toFixed(1)} m, after a far jump ${r.range} m`],
@@ -1538,14 +1540,15 @@ SCENARIOS.push({
       g.P.flying = true; g.P.pos.set(-60, 40, 200); g.setYawPitch(-0.3, -0.1); g.step(20);
       g.addSave(3, g.P.pos.clone(), 'Pulled three from a sinking car'); g.step(3);
     });
-    await p.waitForTimeout(800);
+    // the auto shot is taken on a rendered frame a beat later (slow under SwiftShader): wait for it
+    await p.waitForFunction(() => !!__game.photo.lead, null, { timeout: 240000 }).catch(() => {});
     const o = {};
     o.afterRescue = await p.evaluate(() => { const ph = __game.photo; return { lead: ph.lead ? ph.lead.length : 0, info: ph.leadInfo }; });
     await p.evaluate(() => {
       const g = __game; g.setpieces.start('bus'); g.step(20);
       if (g.currentInc) g.currentInc.medal = 'gold'; g.endIncident(true, 'Bus stopped short of the crosswalk'); g.step(3);
     });
-    await p.waitForTimeout(1200);
+    await p.waitForFunction(() => { const i = __game.photo.leadInfo; return i && /bus/.test(i.label); }, null, { timeout: 240000 }).catch(() => {});
     o.page = await p.evaluate(() => {
       const g = __game; g.setPaused(true);
       const P = document.getElementById('paper'), img = P.querySelector('.fp-lead img');
