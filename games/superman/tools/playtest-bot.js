@@ -1174,6 +1174,89 @@ SCENARIOS.push({
     ['front page leads with a Metallo headline', /METALLO/.test(r.headline || ''), r.headline]]
 });
 
+// adaptive score + sound feel (js/score.js, js/sfx-plus.js). The state machine is checked on its virtual
+// clock (SM_AUDIO.debug.virtual) so it is testable without a running AudioContext; the real graph is
+// checked separately and reports SKIP when headless Chromium has no running context.
+SCENARIOS.push({
+  name: 'audio',
+  page: async (p) => {
+    const out = await p.evaluate(() => {
+      const g = __game, A = window.SM_AUDIO, C = window.SM_COMMS, dt = 1 / 30;
+      if (!A) return { missing: true };
+      const o = { audio: !!(g.AU && g.AU.ctx), ctxState: g.AU && g.AU.ctx ? g.AU.ctx.state : 'none' };
+      g.begin(); A.debug.virtual = true; if (C) C.clear(); g.deferIncident(1e9);
+      const P = g.P, D = A.debug, seq = [];
+      const note = () => { const l = A.layer; if (seq[seq.length - 1] !== l) seq.push(l); };
+      const run = (n, fn) => { for (let i = 0; i < n; i++) { g.step(1, dt); note(); if (fn && fn()) return true; } return false; };
+      // 1. calm: standing on the street
+      P.flying = false; P.pos.set(-150, 1.2, 152); P.vel.set(0, 0, 0); g.setYawPitch(-1.2, 0); run(120);
+      o.calm = A.layer; o.calmLayers = A.layers.join(',');
+      // 2. flight, scaled by speed
+      P.flying = true; P.pos.set(0, 900, -2000); P.vel.set(0, 0, 0); g.setYawPitch(0, 0.05); g.keys.add('KeyW'); g.keys.add('ShiftLeft');
+      run(150); o.flight = A.layer; o.flightK = D.flightK; o.flightLayers = A.layers.join(','); o.speed = Math.round(P.vel.length());
+      g.keys.clear(); P.vel.set(0, 0, 0); P.pos.set(0, 300, 0); g.step(2);
+      // 3. emergency: a robbery
+      const s0 = D.step; g.startIncident('robbery'); let tE = -1;
+      run(60, () => { if (A.layer === 'emergency') { tE = D.step - s0; return true; } });
+      o.emergency = A.layer; o.emergSteps = tE; o.emergMotif = A.motif; run(20);
+      // 4. a rescue -> the rescue stinger and the triumph swell
+      const n0 = D.stingers.length; g.ledger.saves += 1; let tri = false;
+      run(40, () => { tri = tri || A.layer === 'triumph'; });
+      o.rescue = D.stingers.slice(n0).map(s => s.name); o.triumph = tri;
+      run(150); o.after = A.layer;
+      // 5. gold medal -> gold stinger; then the demo chapter title stinger
+      const n1 = D.stingers.length; if (g.currentInc) g.currentInc.medal = 'gold'; g.endIncident(true, 'audio test'); run(10);
+      o.medal = D.stingers.slice(n1).map(s => s.name);
+      const n2 = D.stingers.length;
+      if (g.demo) { g.demo.start(); g.demo.state.wait = 0; run(20); g.demo.stop(); if (g.currentInc) g.endIncident(true, 'audio test'); run(5); }
+      o.chapter = D.stingers.slice(n2).map(s => s.name + (s.arg !== null ? ':' + s.arg : ''));
+      // 6. Metallo: his own motif and the Kryptonite pulse
+      const k0 = D.inst.kryp || 0, n3 = D.stingers.length;
+      if (g.metallo) { g.metallo.start(); run(90); }
+      o.metLayer = A.layer; o.metMotif = A.motif; o.kryp = (D.inst.kryp || 0) - k0; o.metSting = D.stingers.slice(n3).map(s => s.name);
+      if (g.currentInc) g.endIncident(false, 'audio test'); run(30);
+      // 7. ducking: a comms call (-8 dB) and super hearing
+      let duckCall = null; const d0 = D.duckDb;
+      if (C) { C.clear(); C.say('lois', 'Lois here. The music should sit under my voice while I am talking to you.', { interrupt: true }); run(240, () => { if (C.speaking) { duckCall = D.duckDb; return true; } }); C.clear(); }
+      run(10); o.duckBefore = d0; o.duckCall = duckCall; o.duckAfter = D.duckDb;
+      g.keys.add('KeyH'); run(10); o.duckHear = D.duckDb; g.keys.clear(); run(10);
+      // 8. scheduler sanity and SFX feel bookkeeping
+      o.minLead = +D.minLead.toFixed(4); o.maxVoices = D.maxVoices; o.notes = D.notes; o.inst = D.inst; o.seq = seq;
+      const far = g.camera.position.clone(); far.x += 600; g.SFX.boom(far, 1); o.delay = D.sfx ? +D.sfx.lastDelay.toFixed(3) : -1;
+      o.dist = +g.camera.position.distanceTo(far).toFixed(1);
+      P.pos.set(0, 4, 0); g.step(2); const lo = Object.assign({}, D.sfx.beds); P.pos.set(0, 9000, 0); g.step(2); const hi = Object.assign({}, D.sfx.beds);
+      o.beds = { lo, hi }; o.err = D.err || (D.sfx && D.sfx.err) || null;
+      D.virtual = false; return o;
+    });
+    if (out.missing) return out;
+    // the real graph: give a running context a second and a half of wall time
+    await p.waitForTimeout(1500);
+    out.real = await p.evaluate(() => { const A = SM_AUDIO, D = A.debug, g = __game; return { state: g.AU && g.AU.ctx ? g.AU.ctx.state : 'none', real: D.real, built: D.built, voices: A.voices, minLead: +D.minLead.toFixed(4), music: !!g.music }; });
+    return out;
+  },
+  check: r => {
+    if (r.missing) return [['SM_AUDIO loaded', false, 'no window.SM_AUDIO']];
+    const realOn = r.real.state === 'running';
+    return [
+      ['calm on the street', r.calm === 'calm' && r.calmLayers === 'pad', `${r.calm} [${r.calmLayers}]`],
+      ['flight layer while flying, scaled by speed', r.flight === 'flight' && r.flightK > 0.3 && /motif/.test(r.flightLayers), `${r.flight} k=${r.flightK} ${r.speed} m/s [${r.flightLayers}]`],
+      ['emergency layer within a beat of the robbery', r.emergency === 'emergency' && r.emergSteps >= 0 && r.emergSteps <= 5, `${r.emergency} after ${r.emergSteps} steps, motif ${r.emergMotif}`],
+      ['rescue stinger and triumph swell', r.rescue.includes('rescue') && r.triumph, `${r.rescue.join(',')} triumph ${r.triumph}`],
+      ['layer order calm > flight > emergency > triumph', /calm.*flight.*emergency.*triumph/.test(r.seq.join(' ')), r.seq.join(' > ')],
+      ['medal stinger on a gold', r.medal.includes('gold'), r.medal.join(',')],
+      ['demo chapter title stinger', r.chapter.some(s => /^chapter:0/.test(s)), r.chapter.join(',')],
+      ['Metallo selects his motif and the Kryptonite pulse', r.metLayer === 'metallo' && r.metMotif === 'metallo' && r.kryp > 0 && r.metSting.includes('metallo'), `${r.metLayer} ${r.metMotif} kryp ${r.kryp} [${r.metSting}]`],
+      ['music ducks -8 dB under a comms call', r.duckCall !== null && Math.abs(r.duckCall + 8) <= 1 && r.duckAfter === 0, `${r.duckBefore} -> ${r.duckCall} -> ${r.duckAfter}`],
+      ['music ducks while super hearing is held', r.duckHear < 0, String(r.duckHear)],
+      ['no note scheduled in the past, voices <= 24', r.minLead >= 0 && r.maxVoices <= 24 && r.notes > 50, `minLead ${r.minLead}s, max ${r.maxVoices} voices, ${r.notes} notes`],
+      ['far boom delayed by distance / 343', Math.abs(r.delay - r.dist / 343) < 0.02, `${r.delay}s for ${r.dist} m`],
+      ['ambience beds: traffic low, thin air high', r.beds.lo.traffic > 0.05 && r.beds.lo.thin === 0 && r.beds.hi.thin > 0.02 && r.beds.hi.traffic === 0, JSON.stringify(r.beds)],
+      ['no score/sfx exceptions', !r.err, r.err || ''],
+      ['real audio graph runs (SKIP without a running AudioContext)', realOn ? r.real.real && r.real.built && r.real.minLead >= 0 : true, realOn ? `real ${r.real.real}, built ${r.real.built}, ${r.real.voices} voices` : `SKIP: AudioContext ${r.real.state}`]
+    ];
+  }
+});
+
 const RIGS = [
   ['title', null],
   ['aerial', `g.P.flying = true; g.P.pos.set(0, 260, 380); g.setYawPitch(0, -0.18);`],
