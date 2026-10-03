@@ -76,7 +76,7 @@ const SCENARIOS = [
     // a real emergency should put a pin on the minimap; M opens the city map, a click sets a waypoint
     page: async (p) => {
       await p.waitForFunction(() => window.__game && window.__game.titleReady, null, { timeout: LOAD_TIMEOUT });
-      await p.evaluate(() => { const g = __game; g.begin(); g.P.pos.set(0, 120, 300); g.startIncident('fire'); g.step(30); g.render(); });
+      await p.evaluate(() => { const g = __game; g.begin(); g.P.pos.set(0, 120, 300); for (const t of ['fire', 'fire', 'robbery', 'heli']) { if (g.currentInc) break; g.startIncident(t); } /* a fire can fail to find a building */ g.step(30); g.render(); });
       const pins = await p.evaluate(() => __game.mapPins().map(q => q[2]));
       const miniShown = await p.isVisible('#minimap');
       if (SHOTS) await p.screenshot({ path: path.join(OUT, 'map-minimap.png'), timeout: 300000 });
