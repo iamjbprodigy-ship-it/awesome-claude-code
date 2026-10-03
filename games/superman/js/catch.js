@@ -205,6 +205,11 @@
       // newly endangered people (thrown, knocked off a roof); trapped ones belong to their own fire's list
       for (const p of game.people) if (p.danger && !p.thug && p.mode !== 'gone' && p.mode !== 'trapped' && !tracked(p)) risk.push({ p, st: 'risk' });
     }
+    tally(inc);
+  }
+  // count who is safe, lost or still at risk; it runs once more as the emergency ends, because an
+  // emergency can end in the same frame its last person reaches safety (a helicopter coming to rest)
+  function tally(inc) {
     let total = 0, saved = 0, lost = 0, hurt = 0;
     for (const e of risk) {
       if (e.heli) {
@@ -225,6 +230,7 @@
     inc.atRisk = total; inc.safe = saved; inc.riskLeft = total - saved - lost; inc.riskLost = lost; inc.riskHurt = hurt;
   }
   function finishIncident(game, inc) {
+    tally(inc);
     const gold = game.ledger.medals.gold > gold0;
     if (gold && inc.atRisk > 0 && inc.safe === inc.atRisk && !inc.injuries) {
       inc.everyoneHome = true; st.everyoneHome = (st.everyoneHome || 0) + 1;
