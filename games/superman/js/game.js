@@ -2403,16 +2403,21 @@ function updateIncident(dt) {
 }
 // --- fire with trapped people
 function startFire() {
-  const cands = buildings.filter(b => b.ny >= 8);
-  const b = pick(cands); const y = Math.floor(b.ny * R(0.3, 0.65));
-  const side = Math.floor(R(0, 4));
-  const lit = [];
-  for (let k = 0; k < 4; k++) {
-    let x, z;
-    if (side < 2) { x = clamp(Math.floor(b.nx / 2) + k - 1, 1, b.nx - 2); z = side === 0 ? 0 : b.nz - 1; }
-    else { z = clamp(Math.floor(b.nz / 2) + k - 1, 1, b.nz - 2); x = side === 2 ? 0 : b.nx - 1; }
-    const g = cellIndex(b, x, clamp(y + (k === 3 ? 1 : 0), 0, b.ny - 2), z);
-    if (alive[g]) { igniteBlock(g, 0.55); lit.push(g); }
+  // a random building, side and floor can land on blocks that were already destroyed: keep trying
+  // (mostly-standing towers first) so a requested fire always starts
+  const cands = buildings.filter(b => b.ny >= 8), standing = cands.filter(b => (b.standing === undefined ? 1 : b.standing) > 0.6);
+  let b = null, y = 0, lit = [];
+  for (let tries = 0; tries < 16 && !lit.length; tries++) {
+    b = pick(tries < 10 && standing.length ? standing : cands); y = Math.floor(b.ny * R(0.3, 0.65));
+    const side = Math.floor(R(0, 4)), cells = [];
+    for (let k = 0; k < 4; k++) {
+      let x, z;
+      if (side < 2) { x = clamp(Math.floor(b.nx / 2) + k - 1, 1, b.nx - 2); z = side === 0 ? 0 : b.nz - 1; }
+      else { z = clamp(Math.floor(b.nz / 2) + k - 1, 1, b.nz - 2); x = side === 2 ? 0 : b.nx - 1; }
+      const g = cellIndex(b, x, clamp(y + (k === 3 ? 1 : 0), 0, b.ny - 2), z);
+      if (alive[g]) cells.push(g);
+    }
+    if (cells.length) { for (const g of cells) igniteBlock(g, 0.55); lit = cells; }
   }
   if (!lit.length) return null;
   const trapped = [];
