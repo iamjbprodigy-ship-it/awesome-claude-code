@@ -344,7 +344,7 @@
       if (!anyOn && !p.cmFlee && !p.cmRet) continue;
       // someone stopped to look up or cheer drops it and runs when the danger is on top of them
       if (p.mode === 'cheer' && anyOn && !p.msnRole && !p.thug && nearestDanger(p.pos.x, p.pos.z) >= 0 && ndD < 0) { p.mode = 'free'; p.cheerT = 0; p.cmR = null; }
-      if (p.mode !== 'free' || p.msnRole) { if (p.cmFlee || p.cmRet) { p.cmFlee = false; p.cmRet = false; } continue; }
+      if (p.mode !== 'free' || p.msnRole || p.spd < 0.5 || p.thug) { if (p.cmFlee || p.cmRet) { p.cmFlee = false; p.cmRet = false; } continue; }
       const k = anyOn ? nearestDanger(p.pos.x, p.pos.z) : -1;
       if (k >= 0 && ndD < 0) {
         const d = D[k];
@@ -406,6 +406,7 @@
       const p = pool[i];
       if (p.cmHidden) { if (p.mode !== 'gone') dropPool(p, i); else hid++; continue; }   // the slot was reused by another system
       if (p.mode === 'gone') { dropPool(p, i); continue; }                                  // lost, or carried away: let the slot go
+      if (!p.cmFrozen && (p.thug || p.mCrowd || p.cmWit || p.spd < 0.5)) { dropPool(p, i); continue; }   // reused as a robber, hostage or set-piece extra
       vis++;
     }
     const b = curBand(), Cc = CFG.crowd;

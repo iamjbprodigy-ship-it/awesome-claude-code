@@ -8,6 +8,7 @@
  *   (--only comms for the radio calls; comms-shots writes DIR/comms/*.png)
  *   (--only settings for the settings menu, key remapping and accessibility; settings-shots writes DIR/settings/*.png)
  *   (--only photo,frontpage for photo mode and the living front page; photo-shots writes DIR/photo/*.png)
+ *   (--only citymood for the city's reactions, mood, the shield and evacuation; citymood-shots writes DIR/citymood/*.png)
  *   Hang protection: --slow N scales every scenario's watchdog (default 8 min each), --max-minutes N caps the run,
  *   --timeout MS caps page loads; a hung scenario is a FAIL row, the browser is relaunched and the run goes on.
  *
