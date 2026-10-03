@@ -890,7 +890,7 @@ const METALLO_LIB = `const g = __game, M = g.metallo, P = g.P;
     g.camState.hold = true; g.camera.position.set(s.pos.x + Math.cos(a) * d, h, s.pos.z + Math.sin(a) * d);
     g.camera.lookAt(s.pos.x + (lx || 0), s.pos.y + ly, s.pos.z + (lz || 0)); g.camera.fov = fov || 50; g.camera.updateProjectionMatrix(); };
   const heartD = () => P.pos.distanceTo(S().pos.clone().setY(S().pos.y + 2.2));
-  const catchCar = () => { const c = S().flying[0]; if (!c) return false; P.pos.copy(c.pos); P.pos.x += 1.6; P.pos.y += 0.4; P.vel.copy(c.vel); M.aim('car');
+  const catchCar = (want) => { const c = want || S().flying[0]; if (!c) return false; P.pos.copy(c.pos); P.pos.x += 1.6; P.pos.y += 0.4; P.vel.copy(c.vel); M.aim('car');
     g.grabOrRelease(); const ok = P.hold === c; g.step(2); if (P.hold === c) { P.vel.set(0, 0, 0); g.grabOrRelease(); } place(30, 3); return ok; }; // set it down, back out of the aura
   const grabLead = () => { const L = S().lead; P.pos.copy(L.pos); P.pos.x += 1.5; P.pos.y += 1.2; P.vel.set(0, 0, 0); M.aim('lead'); g.grabOrRelease(); return P.hold === L; };`;
 SCENARIOS.push({
@@ -916,8 +916,11 @@ SCENARIOS.push({
     g.step(20); const hurt0 = I().hurt; out.caughtCar = catchCar(); M.calm(5); g.step(180); out.hurtAfterCatch = I().hurt - hurt0; out.caught = I().caught;
     M.calm(0); M.forceAttack('toss'); n = 0; while (!S().flying.length && n++ < 200) g.step(1); place(40, 30); M.calm(5); g.step(240); out.hurtUncaught = I().hurt - hurt0;
     // debris: once the armour is failing, every third throw is a paving slab torn out of the plaza; it is caught the same way
-    P.solar = 1; place(30, 3); S().phase = Math.max(S().phase, 4); M.calm(0); out.slabAtk = M.forceAttack('slab'); out.slabHeld = S().atk && S().atk.car ? S().atk.car.kind + (S().atk.car.mSlab ? ':slab' : '') : null; n = 0; while (!S().flying.length && n++ < 200) g.step(1);
-    out.slabKind = S().flying[0] ? S().flying[0].kind + (S().flying[0].mSlab ? ':slab' : '') : null; const hurt1 = I().hurt; out.slabCaught = catchCar(); M.calm(5); g.step(120); out.hurtSlab = I().hurt - hurt1;
+    P.solar = 1; place(30, 3); S().phase = Math.max(S().phase, 4); M.calm(0); out.slabAtk = M.forceAttack('slab'); const slab = S().atk && S().atk.car; out.slabHeld = slab ? slab.kind + (slab.mSlab ? ':slab' : '') : null; n = 0;
+    // follow the slab itself: the uncaught car from the step above can still be in flying[]
+    while (slab && !S().flying.includes(slab) && n++ < 200) g.step(1);
+    const thrown = slab && S().flying.includes(slab) ? slab : null;
+    out.slabKind = thrown ? thrown.kind + (thrown.mSlab ? ':slab' : '') : null; const hurt1 = I().hurt; out.slabCaught = catchCar(thrown); M.calm(5); g.step(120); out.hurtSlab = I().hurt - hurt1;
     // telegraphs: every attack has a telegraph >= 1.0 s earlier (10.6)
     const ev = M.events; out.badTele = ev.filter(e => e.type === 'attack').filter(a => !ev.some(t => t.type === 'telegraph' && t.kind === a.kind && t.t <= a.t - 0.999 && t.t > a.t - 3)).length;
     out.attacks = ev.filter(e => e.type === 'attack').length;
