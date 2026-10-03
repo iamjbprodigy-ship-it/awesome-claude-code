@@ -1702,6 +1702,7 @@ function addSave(n, pos, why) {
   let h = 2 * n;
   if (currentInc) { const got = currentInc.saveHope || 0; h = Math.max(0, Math.min(h, SAVE_HOPE_CAP - got)); currentInc.saveHope = got + h; }
   ledger.saves += n; hopeAdd(h); SFX.good();
+  emit('rescue', { n, why: why || '', inc: currentInc ? currentInc.type : '', x: pos ? +pos.x.toFixed(1) : 0, y: pos ? +pos.y.toFixed(1) : 0, z: pos ? +pos.z.toFixed(1) : 0 });
   if (pos) celebrate(pos, 45);
   toast((why || 'Saved') + (n > 1 ? ` ×${n}` : ''), 'good');
   checkUnlocks();
@@ -1875,6 +1876,7 @@ function structuralCheck(b) {
     toast(fell > 120 ? `${b.name}: the tower is coming down!` : `${b.name}: floors collapsing`, 'alert');
     SFX.crumble(T1, 2); shakeAt(Math.min(0.7, 0.15 + fell / 200), T1, 400);
     scare(T1, 90, 10); hopeHit(Math.min(8, fell / 40));
+    try { emit('collapse', { name: b.name, fell, x: Math.round(T1.x), z: Math.round(T1.z) }); } catch (_) { /* the event log is not built yet at boot */ }
     if (fell > 30) { // a billowing dust cloud rolls out through the streets
       const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, n = Math.min(260, 60 + fell / 3);
       for (let k = 0; k < n; k++) {
@@ -2366,13 +2368,15 @@ function startIncident(forced) {
 function endIncident(success, msg) {
   const inc = currentInc; if (!inc) return; currentInc = null; nextIncT = R(35, 50);
   if (inc.cleanup) inc.cleanup();
-  if (!success) { ledger.streak = 0; hopeHit(5 + 3 * (inc.lost || 0)); toast(msg || 'Too late.', 'alert'); return; }
+  const endEv = { kind: inc.type, where: inc.where || '', lost: inc.lost || 0, injuries: inc.injuries || 0, damage: Math.round(inc.damage || 0), saved: ledger.saves - (inc.saved0 || 0), msg: msg || '' };
+  if (!success) { ledger.streak = 0; hopeHit(5 + 3 * (inc.lost || 0)); toast(msg || 'Too late.', 'alert'); emit('incidentEnd', Object.assign(endEv, { success: false, medal: '' })); return; }
   ledger.resolved++;
   // gold means clean first; speed is a loose gate
   const lost = inc.lost || 0, fast = inc.age < inc.limit * 0.6;
   const medal = inc.medal || (lost === 0 && inc.injuries === 0 && !inc.miss && inc.damage <= 7.5e5 && fast ? 'gold'
     : lost === 0 && inc.injuries <= 1 && inc.damage <= 3e6 ? 'silver' : 'bronze');
   inc.medal = medal; ledger.medals[medal]++;
+  emit('incidentEnd', Object.assign(endEv, { success: true, medal })); emit('medal', { medal, kind: inc.type });
   ledger.streak++; ledger.best = Math.max(ledger.best, ledger.streak);
   hopeAdd(medal === 'gold' ? 10 : medal === 'silver' ? 5 : 1);
   toast(`${msg || 'Emergency handled'} — ${medal.toUpperCase()}${ledger.streak > 1 ? ` · streak ×${ledger.streak}` : ''}`, 'good');
@@ -2607,6 +2611,8 @@ function apprehend(p, how) {
 // ============================================================ input
 const keys = new Set();
 let mouseL = false, mouseR = false, started = false, paused = false;
+// photo mode (js/photo.js) freezes the sim like the map does, and owns the camera, keys and pad while on
+const FREEZE = { on: false };
 const pad = { lx: 0, ly: 0, rx: 0, ry: 0, prev: [] };
 addEventListener('keydown', e => {
   if (['Space', 'Tab', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
@@ -2638,7 +2644,7 @@ addEventListener('mousemove', e => {
   const ms = 0.0021 * camState.sens; // js/settings.js: mouse sensitivity and invert Y
   yaw -= e.movementX * ms; pitch = clamp(pitch - e.movementY * ms * (camState.invY ? -1 : 1), -1.45, 1.45);
 });
-document.addEventListener('pointerlockchange', () => { if (started && document.pointerLockElement !== canvas && !paused && !MAP.open && !document.getElementById('bench-results')) setPaused(true); });
+document.addEventListener('pointerlockchange', () => { if (started && document.pointerLockElement !== canvas && !paused && !MAP.open && !FREEZE.on && !document.getElementById('bench-results')) setPaused(true); });
 function onKey(code) {
   if (!started) { if ((code === 'Enter' || code === 'Space' || code === 'NumpadEnter') && titleReady) begin(); return; }
   if (code === 'KeyP') { setPaused(!paused); return; }
@@ -2681,7 +2687,8 @@ function pollPad() {
   const edge = i => b(i) && !pad.prev[i];
   // js/settings.js owns the pad while its menu is open (and on the title, where it drives the menu)
   if (window.SM_SETTINGS && SM_SETTINGS.padOwned && SM_SETTINGS.padOwned()) { pad.lx = pad.ly = pad.rx = pad.ry = 0; pad.heat = pad.freeze = pad.up = pad.down = pad.boost = false; for (let i = 0; i < gp.buttons.length; i++) pad.prev[i] = b(i); return; }
-  if (!started) { if ((edge(0) || edge(9)) && titleReady) begin(); }
+  if (FREEZE.on) { /* photo mode reads the pad itself */ }
+  else if (!started) { if ((edge(0) || edge(9)) && titleReady) begin(); }
   else {
     if (edge(9)) setPaused(!paused);
     if (edge(8)) setMapOpen(!MAP.open);
@@ -4009,7 +4016,9 @@ function renderFrontPage() {
     </div>
     <ul class="unlocks">${rows}</ul>
     <p class="hint">Click or press P to get back out there.</p>`;
+  for (const f of FRONT_HOOKS) { try { f($('paper'), L); } catch (e) { console.warn('front page hook', e); } } // js/photo.js: lead photo, more stories
 }
+const FRONT_HOOKS = [];
 
 // ============================================================ maps, waypoints and beacon beams
 // Minimap (rotates with the camera, zooms with speed), full city map (M / Tab, click to set a waypoint),
@@ -4360,7 +4369,7 @@ function frame(now) {
     }
   }
   pollPad();
-  if (!paused && !MAP.open && dt > 0) update(dt);
+  if (!paused && !MAP.open && !FREEZE.on && dt > 0) update(dt);
   if (started || MAP.open) updateMaps(dt);
   renderer.info.reset();
   composer.render();
@@ -4430,6 +4439,8 @@ window.__game = { liveCap: LIVE_CAP, quality: QUALITY, gpu: GPU_NAME, bench, ren
   endIncident, aimDir: (o) => aimDir(o), registerIncident(type, def) { INC_REG[type] = def; }, setpieces: window.SM_SETPIECES || null, get nextIncT() { return nextIncT; }, deferIncident(s) { nextIncT = Math.max(nextIncT, s); } };
 // power hooks + helpers for js/metallo.js
 Object.assign(window.__game, { setPaused, renderFrontPage, headline, headlineHooks: HEADLINE_HOOKS });
+// photo mode + the living front page (js/photo.js)
+Object.assign(window.__game, { freeze: FREEZE, frontPageHooks: FRONT_HOOKS, hero, updateCape: (dt, t) => updateCape(dt, t), money: v => money(v), UNLOCKS, unlocked });
 Object.defineProperty(window.__game, 'paused', { get() { return paused; }, configurable: true }); // a live getter (Object.assign would copy the value once)
 Object.assign(window.__game, { metallo: window.SM_METALLO || null, hooks: HOOKS, kryptoniteNear, ring, makeBody, removeBody, spawnDebris, T_SLAB });
 // a live getter (Object.assign would copy the value once, and the city probe re-bakes and disposes it)

@@ -1249,7 +1249,7 @@
 
   // ================================================================== input
   function keyAllowed() {
-    const g = G(); if (!g || !g.started || (g.MAP && g.MAP.open)) return false;
+    const g = G(); if (!g || !g.started || (g.MAP && g.MAP.open) || (g.freeze && g.freeze.on)) return false; // photo mode freezes the sim
     const pz = document.getElementById('paused'); return !pz || pz.hidden;
   }
   function handleKey(code, down) {

@@ -659,7 +659,7 @@
 
   // ================================================================== input
   function keyAllowed() {
-    const g = G(); if (!g || !g.started || (g.MAP && g.MAP.open)) return false;
+    const g = G(); if (!g || !g.started || (g.MAP && g.MAP.open) || (g.freeze && g.freeze.on)) return false; // photo mode freezes the sim
     const pz = document.getElementById('paused'); return !pz || pz.hidden;
   }
   function attachedAny() { return (bus && bus.attached) || (plane && plane.attached); }
@@ -670,6 +670,7 @@
   function handleKey(code, down) {
     if (code !== 'KeyE') return false;
     const g = G();
+    if (down && g && g.freeze && g.freeze.on) { ignoreUp = true; return false; } // photo mode: E rolls the camera, and its tap must not let go
     if (!down) {
       held.KeyE = false;
       if (ignoreUp) { ignoreUp = false; return attachedAny() ? true : false; }
