@@ -616,6 +616,8 @@ body.photo-on #fps, body.photo-on #fx-hit, body.photo-on .bark { display: none !
 .ph-saved { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); padding: 8px 14px; border-radius: 4px; background: var(--panel); border: 1px solid var(--edge); border-left: 3px solid var(--ok); font-size: 14px; letter-spacing: 0.04em; opacity: 0; }
 .ph-saved.on { animation: ph-saved 2.6s ease-out; }
 @keyframes ph-saved { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+body .ph-pausebar { right: auto; left: 20px; }
+.ph-pausebar kbd { font: 700 11px var(--f-num); color: var(--text); }
 #pause-photo { padding: 10px 18px; border-radius: 4px; cursor: pointer; font: 700 15px var(--f-ui); letter-spacing: 0.16em; text-transform: uppercase; color: #fff; background: rgba(8, 12, 28, 0.7); border: 1px solid rgba(255, 255, 255, 0.22); }
 #pause-photo:hover, #pause-photo:focus-visible { background: rgba(226, 48, 42, 0.85); border-color: var(--sun); outline: none; }
 .paper .fp-lead { margin: 0 0 12px; }
@@ -10736,9 +10738,9 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
       '    float tl = lum(texture2D(tDiffuse, vUv + vec2(-e.x, e.y)).rgb), tr = lum(texture2D(tDiffuse, vUv + e).rgb);',
       '    float bl = lum(texture2D(tDiffuse, vUv - e).rgb), br = lum(texture2D(tDiffuse, vUv + vec2(e.x, -e.y)).rgb);',
       '    float edge = smoothstep(0.1, 0.3, length(vec2(tr + br - tl - bl, tl + tr - bl - br)) / (0.25 + lum(col)));',
-      '    vec3 q = floor(clamp(col, 0.0, 1.0) * 4.0 + 0.5) / 4.0;',
+      '    vec3 q = floor(clamp(col, 0.0, 1.0) * 4.0 + 0.5) / 4.0; q = clamp(mix(vec3(lum(q)), q, 1.45) * 0.92, 0.0, 1.0);',
       '    float l = lum(col), d = dots(px, cell * 1.4, 0.26, clamp(1.0 - l * 1.5, 0.0, 1.0) * 0.55);',
-      '    col = mix(q * 1.12 + 0.03, q * 0.5, d);',
+      '    col = mix(q, q * 0.45, d);',
       '    col = mix(col, vec3(0.04, 0.03, 0.06), edge);',
       '  }',
       '  vec2 cc = vUv - 0.5; col *= 1.0 - uVig * dot(cc, cc) * 2.2;',
@@ -11230,9 +11232,14 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
   }
   // a 45-degree halftone on newsprint, as the press would run it
   function newsprint(src) {
-    const w = src.width, h = src.height, sx = src.getContext('2d');
-    let px; try { px = sx.getImageData(0, 0, w, h).data; } catch (_) { return src.toDataURL('image/jpeg', 0.85); }
-    const L = new Float32Array(w * h);
+    const w = src.width, h = src.height;
+    const cell = Math.max(3, Math.round(w / 150)), c = Math.SQRT1_2, ext = Math.ceil((w + h) / cell) + 2;
+    // sample an averaged image (two samples per cell), so fine detail or an already-screened shot cannot moire
+    const sw = Math.max(2, Math.round(w * 2 / cell)), sh = Math.max(2, Math.round(h * 2 / cell));
+    const avg = document.createElement('canvas'); avg.width = sw; avg.height = sh;
+    const ax = avg.getContext('2d'); ax.imageSmoothingEnabled = true; ax.imageSmoothingQuality = 'high'; ax.drawImage(src, 0, 0, sw, sh);
+    let px; try { px = ax.getImageData(0, 0, sw, sh).data; } catch (_) { return src.toDataURL('image/jpeg', 0.85); }
+    const L = new Float32Array(sw * sh);
     for (let i = 0, j = 0; i < L.length; i++, j += 4) {
       const l = (px[j] * 0.299 + px[j + 1] * 0.587 + px[j + 2] * 0.114) / 255;
       L[i] = Math.max(0, Math.min(1, (l - 0.5) * 1.4 + 0.54));
@@ -11241,12 +11248,11 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
     const x = out.getContext('2d');
     x.fillStyle = '#ebe5d6'; x.fillRect(0, 0, w, h);
     x.fillStyle = '#161618'; x.beginPath();
-    const cell = Math.max(3, Math.round(w / 150)), c = Math.SQRT1_2, ext = Math.ceil((w + h) / cell) + 2;
     for (let a = -ext; a <= ext; a++) for (let b = 0; b <= ext * 1.5; b++) {
       const cx = (a * c + b * c) * cell, cy = (-a * c + b * c) * cell;
       if (cx < -cell || cy < -cell || cx > w + cell || cy > h + cell) continue;
-      const ix = Math.max(0, Math.min(w - 1, cx | 0)), iy = Math.max(0, Math.min(h - 1, cy | 0));
-      const r = Math.sqrt(1 - L[iy * w + ix]) * cell * 0.7;
+      const ix = Math.max(0, Math.min(sw - 1, (cx * sw / w) | 0)), iy = Math.max(0, Math.min(sh - 1, (cy * sh / h) | 0));
+      const r = Math.sqrt(1 - L[iy * sw + ix]) * cell * 0.7;
       if (r < 0.25) continue;
       x.moveTo(cx + r, cy); x.arc(cx, cy, r, 0, 6.2832);
     }
@@ -11389,11 +11395,10 @@ SmSurf smSurface(vec3 p, float part, float side, float mask, float aa) {
   function pauseButton() {
     if (document.getElementById('pause-photo')) return;
     const pz = document.getElementById('paused'); if (!pz) return;
-    let bar = pz.querySelector('.sms-pausebar');
+    const bar = document.createElement('div'); bar.className = 'sms-pausebar ph-pausebar'; pz.appendChild(bar); bar.addEventListener('click', e => e.stopPropagation());
     const btn = document.createElement('button'); btn.type = 'button'; btn.id = 'pause-photo'; btn.textContent = 'Photo mode';
     const hint = document.createElement('span'); hint.className = 'ph-hint'; hint.innerHTML = '<kbd>O</kbd> or <kbd>X</kbd>';
-    if (!bar) { bar = document.createElement('div'); bar.className = 'sms-pausebar ph-pausebar'; pz.appendChild(bar); bar.addEventListener('click', e => e.stopPropagation()); }
-    bar.insertBefore(hint, bar.firstChild); bar.insertBefore(btn, bar.firstChild);
+    bar.appendChild(btn); bar.appendChild(hint);
     btn.addEventListener('click', e => { e.stopPropagation(); enter(); });
   }
 

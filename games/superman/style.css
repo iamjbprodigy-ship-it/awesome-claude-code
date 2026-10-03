@@ -609,6 +609,8 @@ body.photo-on #fps, body.photo-on #fx-hit, body.photo-on .bark { display: none !
 .ph-saved { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); padding: 8px 14px; border-radius: 4px; background: var(--panel); border: 1px solid var(--edge); border-left: 3px solid var(--ok); font-size: 14px; letter-spacing: 0.04em; opacity: 0; }
 .ph-saved.on { animation: ph-saved 2.6s ease-out; }
 @keyframes ph-saved { 0%, 75% { opacity: 1; } 100% { opacity: 0; } }
+body .ph-pausebar { right: auto; left: 20px; }
+.ph-pausebar kbd { font: 700 11px var(--f-num); color: var(--text); }
 #pause-photo { padding: 10px 18px; border-radius: 4px; cursor: pointer; font: 700 15px var(--f-ui); letter-spacing: 0.16em; text-transform: uppercase; color: #fff; background: rgba(8, 12, 28, 0.7); border: 1px solid rgba(255, 255, 255, 0.22); }
 #pause-photo:hover, #pause-photo:focus-visible { background: rgba(226, 48, 42, 0.85); border-color: var(--sun); outline: none; }
 .paper .fp-lead { margin: 0 0 12px; }
