@@ -2302,9 +2302,10 @@ const bulletLines = new THREE.LineSegments(bulletGeo, new THREE.LineBasicMateria
 bulletLines.frustumCulled = false; scene.add(bulletLines);
 function fireBullet(from, to, spread) {
   if (bullets.length >= 240) return;
-  const d = T1.copy(to).sub(from).normalize();
+  from = from.clone(); // callers pass the T1 scratch: copy it before T1 becomes the direction (bullets used to spawn at the origin with a velocity aliased to T1)
+  const d = new V3().copy(to).sub(from).normalize();
   d.x += R(-spread, spread); d.y += R(-spread, spread); d.z += R(-spread, spread); d.normalize();
-  const b = { p: from.clone(), v: d.multiplyScalar(380), life: 1.6 }; bullets.push(b);
+  const b = { p: from, v: d.multiplyScalar(380), life: 1.6 }; bullets.push(b);
   for (const h of HOOKS.shot) h(b, from, to); // js/citymood.js: tags shots aimed at a bystander
   FX.flash(from.x, from.y, from.z); SFX.shot(from);
 }
