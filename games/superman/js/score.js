@@ -180,7 +180,7 @@
     const now = clockNow(), lead = t - now;
     if (lead < DBG.minLead) DBG.minLead = lead;
     const dur = steps * STEP;
-    if (!claim(t, dur + (inst === 'timp' ? 1.2 : inst === 'cymbal' ? 1.4 : 0.4), now)) return;
+    if (!claim(t, dur + (inst === 'timp' ? 0.6 : inst === 'cymbal' ? 0.8 : 0.35), now)) return;
     DBG.notes++; DBG.inst[inst] = (DBG.inst[inst] || 0) + 1;
     if (!ST.real) return;
     const AU = au(); if (!AU || AU.muted || !A.ctx) return;
