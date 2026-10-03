@@ -1581,7 +1581,7 @@ SCENARIOS.push({
 // screenshots at --quality high: the photo-mode UI, a newsprint shot in the Daily Planet frame, the captured PNG
 // and the front page with its lead photo: OUT/photo/*.png
 SCENARIOS.push({
-  name: 'photo-shots', shotsOnly: true,
+  name: 'photo-shots', shotsOnly: true, minutes: 20,
   page: async (p) => {
     const dir = path.join(OUT, 'photo'); fs.mkdirSync(dir, { recursive: true });
     const shots = [];
@@ -1589,29 +1589,31 @@ SCENARIOS.push({
     await p.evaluate(() => {
       const g = __game; g.begin(); g.deferIncident(1e9);
       g.P.flying = false; g.P.pos.set(40, 1.2, 222); g.P.vel.set(0, 0, 0); g.setYawPitch(Math.PI - 0.4, 0.02); g.step(60);
+      window.__phFrames = 0; (function f() { window.__phFrames++; requestAnimationFrame(f); })();
     });
-    await p.waitForTimeout(600);
+    const frames = async (n) => { const f0 = await p.evaluate(() => window.__phFrames); await p.waitForFunction(t => window.__phFrames >= t, f0 + n, { timeout: 300000 }); };
+    await frames(3);
     await p.keyboard.press('KeyO');
     await p.evaluate(() => { const ph = __game.photo; ph.setPose('hips'); ph.set('turn', 150); ph.frameHero(4.6, 28, 0.25); ph.set('aperture', 0.55); ph.set('fov', 50); ph.state.row = 4; ph.set('vignette', 0.35); });
-    await p.waitForTimeout(1200);
+    await frames(3);
     await snap('photo-mode-ui.png');
     await p.evaluate(() => { const ph = __game.photo; ph.setLook('newsprint'); ph.setFrame('planet'); ph.setPose('fly'); ph.set('turn', 90); ph.frameHero(5.2, 60, 0.6); ph.state.ui = false; ph.set('aperture', 0.4); });
-    await p.waitForTimeout(1200);
+    await frames(3);
     await snap('photo-newsprint-planet.png');
     const png = await p.evaluate(async () => { const r = await __game.photo.capture({ download: false }); return await new Promise(res => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.readAsDataURL(r.blob); }); });
     const capFile = path.join(dir, 'photo-capture.png'); fs.writeFileSync(capFile, Buffer.from(png.split(',')[1], 'base64')); shots.push(capFile);
     await p.evaluate(() => { const ph = __game.photo; ph.setLook('comic'); ph.setFrame('none'); ph.setPose('kneel'); ph.set('turn', 160); ph.frameHero(4, 20, -0.2); ph.set('aperture', 0); });
-    await p.waitForTimeout(1000);
+    await frames(3);
     await snap('photo-comic-kneel.png');
     await p.evaluate(() => { const ph = __game.photo; ph.setLook('golden'); ph.setPose('cape'); ph.set('turn', 120); ph.frameHero(4.8, 40, 0.3); ph.setFrame('print'); });
-    await p.waitForTimeout(1200);
+    await frames(3);
     await snap('photo-golden-cape.png');
     // the front page: the photo-mode capture wins the lead; the headline comes from a bus save
     await p.keyboard.press('KeyO');
     await p.evaluate(() => { const g = __game; g.addSave(2, g.P.pos.clone(), 'Two kids pulled from the harbour'); g.setpieces.start('bus'); g.step(10); if (g.currentInc) g.currentInc.medal = 'gold'; g.endIncident(true, 'Bus stopped'); g.step(3); });
-    await p.waitForTimeout(1500);
+    await frames(3);
     await p.evaluate(() => { __game.setPaused(true); });
-    await p.waitForTimeout(600);
+    await frames(3);
     await snap('frontpage-lead.png');
     return { shots };
   },
