@@ -43,6 +43,7 @@ Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, o
 | P / N | Pause and read the Daily Planet |
 | M / Tab | City map: click to set a waypoint, scroll to zoom |
 | O | Photo mode (also from the pause page) |
+| T | Wave to the crowd (D-pad left on a gamepad) |
 | K | Mute |
 | F8 | Start (or retry) the Metallo finale |
 
@@ -106,6 +107,17 @@ Gamepad: Back/View opens the map; the sticks fly and look; RT heat vision, LT fr
 - **Poses:** as he was, hands on hips, flying fist forward, the hero landing, and cape billow. The cape keeps moving in the wind.
 - **Frames:** none, Jimmy's print, widescreen, and a Daily Planet front page with today's headline.
 - **Capture:** Enter saves `metropolis-YYYYMMDD-HHMMSS.png`, and the shot becomes the front-page photo. O or Esc leaves. On a gamepad: sticks to fly and look, LB/RB roll, LT/RT down/up, A capture, B exit, X look, Y pose, Back frame.
+
+**A city that reacts (`js/citymood.js`):**
+- **Look, up in the sky:** fly low over a street (under 40 m) and the people within 60 m stop, tilt their heads to follow you, point, wave or raise a phone. People right under you react at once; the rest catch on as the reaction spreads outward at walking pace. Traffic slows. Arriving at an emergency turns the crowd around you the same way.
+- **Wave back:** press **T** (remappable in Settings) and you raise a hand. The people near you cheer back: +1 Hope, at most +3 a minute.
+- **The city's mood follows Hope:**
+  - **Below 30:** half the street stays indoors. People back away from you, and some run from a low pass. Police tape cordons the block around damage and emergencies, and officers ask you to stand back. Muggings and purse snatchings come more often.
+  - **30–55:** normal.
+  - **55 and above:** more people come out, a third of them kids. They wave more and photograph more, and drivers give you a friendly toot.
+  - **80 and above:** the whole street cheers when you land, and "Metropolis ♥ Superman" banners unroll from the rooftops.
+- **Be the shield:** robbers sometimes turn their guns on a cowering witness ("Nobody move!"). Step into the line of fire and the bullets spark and ricochet off you. A ricochet never hits a bystander. Each shielded shot is worth +1 Hope, up to +3 per robbery.
+- **Panic and evacuation:** fires, collapses, the meteor, the falling chopper, Metallo and the set pieces send people running along the sidewalks, away from the danger. A few close to it freeze in shock (they cower and count as at risk), so carry them out. Afterwards everyone calms down and walks back. Cars within 90 m pull over to the curb and wait until it's over.
 
 **The front page tells the day:** the pause page leads with the biggest story of your session: the airliner or the bus, a tower collapse, the damage bill, a run of gold medals, help requests answered, or your biggest rescue. A Metallo result still leads. Its photo is captured automatically at your best moment (a set-piece save, a gold medal or a big rescue) and printed as newsprint, unless you took one in photo mode. The other stories run under "Also in this edition".
 

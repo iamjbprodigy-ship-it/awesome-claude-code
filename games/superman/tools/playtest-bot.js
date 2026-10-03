@@ -8,6 +8,7 @@
  *   (--only comms for the radio calls; comms-shots writes DIR/comms/*.png)
  *   (--only settings for the settings menu, key remapping and accessibility; settings-shots writes DIR/settings/*.png)
  *   (--only photo,frontpage for photo mode and the living front page; photo-shots writes DIR/photo/*.png)
+ *   (--only citymood for the city's reactions, mood, the shield and evacuation; citymood-shots writes DIR/citymood/*.png)
  *   Hang protection: --slow N scales every scenario's watchdog (default 8 min each), --max-minutes N caps the run,
  *   --timeout MS caps page loads; a hung scenario is a FAIL row, the browser is relaunched and the run goes on.
  *
@@ -1618,6 +1619,127 @@ SCENARIOS.push({
     return { shots };
   },
   check: r => [['photo screenshots written', r.shots.length === 6, r.shots.join(', ')]]
+});
+
+// ---------------------------------------------------------------- a city that reacts (js/citymood.js)
+// a low pass makes people look up / point / wave, the crowd grows with Hope (banners at 80+, inside the draw-call
+// budget), a forced fire empties the street and pulls cars over, the shield takes a burst meant for a witness,
+// and T (wave) gets cheers with Hope capped at +3 a minute. Each step is its own evaluate (SwiftShader yields).
+const CM_BUSIEST = `(() => { const g = __game; const peds = g.people.filter(q => q.mode === 'free' && !q.thug && Math.abs(q.pos.x) < 150 && Math.abs(q.pos.z) < 150);
+  let best = peds[0], bn = -1; for (const a of peds) { let n = 0; for (const b of peds) if ((a.pos.x - b.pos.x) ** 2 + (a.pos.z - b.pos.z) ** 2 < 1600) n++; if (n > bn) { bn = n; best = a; } }
+  return { x: best.pos.x, z: best.pos.z, n: bn }; })()`;
+SCENARIOS.push({
+  name: 'citymood', minutes: 16, quality: 'high',
+  page: async (p) => {
+    const out = {};
+    await p.evaluate(() => { const g = __game; g.begin(); g.deferIncident(1e6); g.ledger.hope = 60; g.step(60); });
+    // 1. a low fly-over (25 m, 15 m/s) along the street through the busiest block, then a hover
+    out.pass = await p.evaluate((busiest) => {
+      const g = __game, CM = g.citymood, b = eval(busiest), zr = Math.round((b.z + 210) / 60) * 60 - 210;
+      const s0 = CM.stats.lookUps, w0 = CM.stats.react.wave, c0 = CM.stats.carsSlowed; let maxPosed = 0;
+      g.keys.clear(); g.P.flying = true;
+      // 4 s up the street to the busiest block, then a slow drift above it for 8 s while word spreads
+      for (let i = 0; i < 720; i++) { const t = i / 60, x = t < 4 ? b.x - 60 + t * 15 : b.x + (t - 4) * 1.5; g.P.pos.set(x, 25, zr); g.P.vel.set(t < 4 ? 15 : 1.5, 0, 0); g.step(1); maxPosed = Math.max(maxPosed, CM.reactors()); }
+      return { reacted: CM.stats.lookUps - s0, waved: CM.stats.react.wave - w0, maxPosed, crowd: b.n, carsSlowed: CM.stats.carsSlowed - c0, kinds: CM.stats.react };
+    }, CM_BUSIEST);
+    // 2. the crowd follows Hope: 20 vs 90 (same camera, aerial)
+    out.vis = await p.evaluate(() => {
+      const g = __game, CM = g.citymood, vis = () => g.people.filter(q => q.mode !== 'gone' && !q.thug).length;
+      g.P.flying = true; g.P.pos.set(0, 300, 0); g.P.vel.set(0, 0, 0); g.setYawPitch(0, -0.3);
+      g.ledger.hope = 20; g.step(60 * 15); const v20 = vis(), band20 = CM.band(), tape20 = CM.tape();
+      g.ledger.hope = 90; g.step(60 * 15);
+      return { v20, v90: vis(), band20, band90: CM.band(), banners: CM.banners(), extras: CM.stats.extras, tape20 };
+    });
+    // 3. draw calls at high Hope with a banner in view
+    out.calls = await p.evaluate(() => {
+      const g = __game, CM = g.citymood, b = CM.banners().first, info = g.renderer.info; info.autoReset = false;
+      g.P.flying = true; g.P.pos.set(b.x + b.nx * 40, b.top + 4, b.z + b.nz * 40); g.P.vel.set(0, 0, 0); g.setYawPitch(Math.atan2(b.nx, b.nz), -0.08); g.step(40);
+      info.reset(); g.composer.render(); const r = { calls: info.render.calls, tris: info.render.triangles, banners: CM.banners() }; info.autoReset = true; return r;
+    });
+    // 4. a forced fire: people run along the sidewalks, cars pull over; when it's over they calm down
+    out.fire = await p.evaluate(() => {
+      const g = __game, CM = g.citymood; g.ledger.hope = 50; g.P.pos.set(0, 200, 330); g.step(60 * 4);
+      g.startIncident('fire'); const m = g.currentInc.marker();
+      const near = g.people.filter(q => q.mode === 'free' && !q.thug && (q.pos.x - m.x) ** 2 + (q.pos.z - m.z) ** 2 < 90 * 90);
+      const mean = () => { let s = 0, n = 0; for (const q of near) { if (q.mode === 'gone') continue; s += Math.hypot(q.pos.x - m.x, q.pos.z - m.z); n++; } return n ? s / n : 0; };
+      const f0 = CM.stats.fled, d0 = mean(); g.step(300); const d1 = mean();
+      const r = { n: near.length, d0: +d0.toFixed(1), d1: +d1.toFixed(1), fled: CM.stats.fled - f0, frozen: CM.frozen().length, pulled: CM.pulledOver(), dangers: CM.dangers() };
+      g.endIncident(true, 'Fire out (bot)'); g.step(60 * 12);
+      r.after = { calmed: CM.stats.calmed, frozen: CM.frozen().length, pulled: CM.pulledOver(), dangers: CM.dangers().length };
+      return r;
+    });
+    // 5. be the shield: stand between a robber and the witness he turns his gun on
+    out.shield = await p.evaluate(() => {
+      const g = __game, CM = g.citymood; g.ledger.hope = 50;
+      g.startIncident('robbery'); g.step(12); const inc = g.currentInc, W = CM.witnesses();
+      if (!inc || !W.length) return { err: 'no robbery / witnesses' };
+      const thug = inc.crew[0], dist = w => Math.hypot(w.pos.x - thug.pos.x, w.pos.z - thug.pos.z), wit = W.reduce((a, b) => dist(a) < dist(b) ? a : b);
+      for (const t of inc.crew) { t.aimT = 99; t.tele = 0; t.burst = 0; }
+      const inj0 = g.ledger.injuries, s0 = CM.stats.shielded, c0 = CM.stats.civShots, d0 = CM.stats.deflected;
+      const hold = () => { g.P.flying = true; g.P.pos.set(thug.pos.x * 0.45 + wit.pos.x * 0.55, 1.35, thug.pos.z * 0.45 + wit.pos.z * 0.55); g.P.vel.set(0, 0, 0); };
+      CM.forceCivAim(1); thug.tele = 0.3;
+      for (let i = 0; i < 150; i++) { hold(); g.step(1); for (const t of inc.crew) if (t !== thug) t.aimT = 99; }
+      return { civShots: CM.stats.civShots - c0, shielded: CM.stats.shielded - s0, deflected: CM.stats.deflected - d0, witHurt: W.some(w => w.injured), injuries: g.ledger.injuries - inj0, gap: +dist(wit).toFixed(1) };
+    });
+    // 6. wave back (the real key path: T through the settings remap layer): cheers, Hope +1 each, capped at +3 a minute
+    out.wave = await p.evaluate((busiest) => {
+      const g = __game, CM = g.citymood; if (g.currentInc) g.endIncident(true, 'Robbery stopped (bot)'); g.step(60);
+      g.ledger.hope = 60; g.step(30); const b = eval(busiest);
+      g.P.flying = true; g.P.pos.set(b.x, 12, b.z); g.P.vel.set(0, 0, 0); g.step(10);
+      const h0 = g.ledger.hope, c0 = CM.stats.waveCheers, w0 = CM.stats.waves, g0 = CM.stats.waveHope; let waving = false;
+      for (let k = 0; k < 6; k++) {
+        dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyT', key: 't', bubbles: true })); dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyT', key: 't', bubbles: true }));
+        g.step(2); waving = waving || CM.waving; g.P.pos.set(b.x, 12, b.z); g.P.vel.set(0, 0, 0); g.step(118);
+      }
+      return { cheers: CM.stats.waveCheers - c0, waves: CM.stats.waves - w0, grants: CM.stats.waveHope - g0, hope: +(g.ledger.hope - h0).toFixed(2), waving };
+    }, CM_BUSIEST);
+    return out;
+  },
+  check: r => [
+    ['low fly-over: 5+ people look up, point or wave', r.pass.reacted >= 5, `${r.pass.reacted} reacted (${r.pass.waved} waved, ${r.pass.maxPosed} posed at once, ${r.pass.crowd} in the busiest block), ${r.pass.carsSlowed} cars slowed, ${JSON.stringify(r.pass.kinds)}`],
+    ['visible pedestrians rise with Hope (90 vs 20)', r.vis.v90 > r.vis.v20 * 1.4, `${r.vis.v20} at Hope 20 -> ${r.vis.v90} at Hope 90 (${r.vis.extras} extras), bands ${r.vis.band20}/${r.vis.band90}`],
+    ['rooftop banners unroll at Hope 90', r.vis.banners.visible && r.vis.banners.s >= 1 && r.vis.banners.count >= 10, JSON.stringify(r.vis.banners)],
+    ['draw calls within budget (400) with banners in view', r.calls.calls <= 400, `${r.calls.calls} calls, ${(r.calls.tris / 1e6).toFixed(2)}M tris`],
+    ['forced fire: mean distance from it rises over 5 s', r.fire.n >= 3 && r.fire.d1 > r.fire.d0 + 2, `${r.fire.n} people: ${r.fire.d0} m -> ${r.fire.d1} m, ${r.fire.fled} fled, ${r.fire.frozen} frozen in shock`],
+    ['cars pull over for the emergency, then drive on', r.fire.pulled > 0 && r.fire.after.pulled === 0, `${r.fire.pulled} pulled over -> ${r.fire.after.pulled}`],
+    ['after the fire: nobody left frozen, danger cleared', r.fire.after.frozen === 0 && r.fire.after.dangers === 0, JSON.stringify(r.fire.after)],
+    ['shield: a burst at a witness ricochets off him', !r.shield.err && r.shield.shielded >= 1, r.shield.err || `${r.shield.civShots} shots at the witness, ${r.shield.shielded} shielded, ${r.shield.deflected} deflected`],
+    ['shield: no bystander hit', !r.shield.err && !r.shield.witHurt && r.shield.injuries <= 0, r.shield.err || `witness hurt ${r.shield.witHurt}, injuries +${r.shield.injuries}`],
+    ['wave back (T): cheers, Hope +1 each, capped at +3 a minute', r.wave.waving && r.wave.cheers > 0 && r.wave.grants >= 1 && r.wave.grants <= 3 && r.wave.hope <= 3.01, JSON.stringify(r.wave)]
+  ]
+});
+// screenshots at --quality high: a crowd waving up at a low pass, and high-Hope streets with banners: OUT/citymood/*.png
+SCENARIOS.push({
+  name: 'citymood-shots', shotsOnly: true, minutes: 16, quality: SCEN_QUALITY === 'low' ? 'high' : SCEN_QUALITY,
+  page: async (p) => {
+    const dir = path.join(OUT, 'citymood'); fs.mkdirSync(dir, { recursive: true });
+    const shots = [];
+    const snap = async (name) => { const f = path.join(dir, name); await p.screenshot({ path: f, timeout: 300000 }); shots.push(f); };
+    await p.evaluate(() => { const g = __game; g.begin(); g.deferIncident(1e9); g.ledger.hope = 92; g.step(60 * 6);
+      window.__cmFrames = 0; (function f() { window.__cmFrames++; requestAnimationFrame(f); })(); });
+    const frames = async (n) => { const f0 = await p.evaluate(() => window.__cmFrames); await p.waitForFunction(t => window.__cmFrames >= t, f0 + n, { timeout: 300000 }); };
+    // 1. a low pass over a crowd on the sidewalk: bring ~22 people to one block face, then hover 9 m over the kerb
+    const at = await p.evaluate(() => {
+      const g = __game, CM = g.citymood, x0 = -120, z0 = -77;   // the sidewalk along the south face of a mid-town block (lot -140..-100 x -80..-40)
+      const ppl = g.people.filter(q => q.mode === 'free' && !q.thug && !q.msnRole && q.spd >= 0.5).slice(0, 22);
+      ppl.forEach((q, i) => { q.pos.set(x0 + (i % 11) * 1.6 - 8 + Math.random() * 0.6, 0.9, z0 - 0.6 - Math.floor(i / 11) * 1.3 - Math.random() * 0.4); q.fleeT = 0; q.cmCool = 0; });
+      g.P.flying = true; g.P.pos.set(x0 - 1, 9, z0 - 11); g.P.vel.set(0.5, 0, 0); g.setYawPitch(Math.PI, -0.38); g.step(70);
+      return { reactors: CM.reactors(), kinds: CM.stats.react };
+    });
+    await frames(3);
+    await snap('citymood-wave-low-pass.png');
+    // 2. Hope 92: banners out on the towers, a fuller street
+    const ban = await p.evaluate(() => {
+      const g = __game, CM = g.citymood, b = CM.banners().first;
+      g.P.flying = true; g.P.pos.set(b.x + b.nx * 26 - b.nz * 9, b.top - 13, b.z + b.nz * 26 + b.nx * 9); g.P.vel.set(0, 0, 0);
+      g.setYawPitch(Math.atan2(b.nx * 26 - b.nz * 9, b.nz * 26 + b.nx * 9), 0.42); g.step(30);
+      return CM.banners();
+    });
+    await frames(3);
+    await snap('citymood-banners-high-hope.png');
+    return { shots, at, ban };
+  },
+  check: r => [['citymood screenshots written', r.shots.length === 2, r.shots.join(', ') + ' ' + JSON.stringify(r.at)]]
 });
 
 const RIGS = [

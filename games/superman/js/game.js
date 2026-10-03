@@ -2302,15 +2302,19 @@ const bulletLines = new THREE.LineSegments(bulletGeo, new THREE.LineBasicMateria
 bulletLines.frustumCulled = false; scene.add(bulletLines);
 function fireBullet(from, to, spread) {
   if (bullets.length >= 240) return;
-  const d = T1.copy(to).sub(from).normalize();
+  from = from.clone(); // callers pass the T1 scratch: copy it before T1 becomes the direction (bullets used to spawn at the origin with a velocity aliased to T1)
+  const d = new V3().copy(to).sub(from).normalize();
   d.x += R(-spread, spread); d.y += R(-spread, spread); d.z += R(-spread, spread); d.normalize();
-  bullets.push({ p: from.clone(), v: d.multiplyScalar(380), life: 1.6 });
+  const b = { p: from, v: d.multiplyScalar(380), life: 1.6 }; bullets.push(b);
+  for (const h of HOOKS.shot) h(b, from, to); // js/citymood.js: tags shots aimed at a bystander
   FX.flash(from.x, from.y, from.z); SFX.shot(from);
 }
 function updateBullets(dt) {
   for (let i = bullets.length - 1; i >= 0; i--) {
     const b = bullets[i]; const p0 = T1.copy(b.p);
     b.p.addScaledVector(b.v, dt); b.life -= dt;
+    let shield = false; for (const h of HOOKS.bullet) if (h(b, p0, dt)) shield = true; // js/citymood.js: the bodyblock took it
+    if (shield) continue;
     let dead = b.life <= 0;
     // hit Superman? (closest point on segment)
     const seg = T2.copy(b.p).sub(p0), L2 = seg.lengthSq();
@@ -2322,7 +2326,7 @@ function updateBullets(dt) {
       for (let k = 0; k < 8; k++) FX.spark(cp.x, cp.y, cp.z, n.x * 8 + R(-5, 5), n.y * 8 + R(-5, 5), n.z * 8 + R(-5, 5));
       SFX.ping(cp); P.hitT = 0.12; ledger.deflected++;
     }
-    if (!dead) for (const p of people) {
+    if (!dead && !b.safe) for (const p of people) { // b.safe: ricocheted off a shielding Superman (js/citymood.js)
       if (p.thug || (p.mode !== 'free' && p.mode !== 'cheer' && p.mode !== 'phys' && p.mode !== 'down')) continue;
       const t2 = L2 > 0 ? clamp(T4.copy(p.pos).sub(p0).dot(seg) / L2, 0, 1) : 0;
       if (T4.copy(p0).addScaledVector(seg, t2).distanceToSquared(p.pos) < 0.3) { injurePerson(p); if (currentInc && b.reflected) currentInc.miss = true; dead = true; break; }
@@ -2349,7 +2353,7 @@ const INC_TYPES = ['heli', 'meteor', 'fire', 'robbery'];
 const INC_REG = window.SM_INCIDENTS = window.SM_INCIDENTS || {};
 // power hooks for modules (js/metallo.js): kryp(pos) -> extra exposure 0..1; punch(o, d, power) / grab() return true to consume
 // the input; clap(o, d, reach, k), heat(o, d, hit, dt, power), freeze(o, d, range, cos, dt)
-const HOOKS = { kryp: [], punch: [], grab: [], clap: [], heat: [], freeze: [] };
+const HOOKS = { kryp: [], punch: [], grab: [], clap: [], heat: [], freeze: [], aim: [], shot: [], bullet: [] }; // aim/shot/bullet: js/citymood.js (the shield)
 function startIncident(forced) {
   if (currentInc) endIncident(false, 'Emergency abandoned.');
   let type = forced ? String(forced).replace('kryptonite', 'meteor') : INC_TYPES[incCount % INC_TYPES.length]; incCount++;
@@ -2591,7 +2595,7 @@ function updateThug(p, dt) {
   p.face = Math.atan2(P.pos.z - p.pos.z, P.pos.x - p.pos.x);
   if (p.burst > 0) {
     p.burstT -= dt;
-    if (p.burstT <= 0) { p.burst--; p.burstT = 0.09; fireBullet(T1.copy(p.pos).setY(p.pos.y + 0.4), T2.copy(P.pos), d < 60 ? 0.02 : 0.05); }
+    if (p.burstT <= 0) { p.burst--; p.burstT = 0.09; T2.copy(P.pos); for (const h of HOOKS.aim) h(p, T2); fireBullet(T1.copy(p.pos).setY(p.pos.y + 0.4), T2, d < 60 ? 0.02 : 0.05); } // aim hook: js/citymood.js
     return;
   }
   if (p.tele > 0) {

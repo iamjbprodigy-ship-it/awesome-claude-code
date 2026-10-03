@@ -57,7 +57,8 @@
     ['paper', 'Daily Planet', 'KeyN', ['KeyN', null], 'Interface'],
     ['mute', 'Mute', 'KeyK', ['KeyK', null], 'Interface'],
     ['fps', 'Frame-rate meter', 'Backquote', ['Backquote', 'F3'], 'Interface'],
-    ['metallo', 'Metallo finale', 'F8', ['F8', null], 'Interface']
+    ['metallo', 'Metallo finale', 'F8', ['F8', null], 'Interface'],
+    ['wave', 'Wave to the crowd', 'KeyT', ['KeyT', null], 'Interface']   // js/citymood.js
   ].map(a => ({ id: a[0], label: a[1], code: a[2], def: a[3], group: a[4] }));
   const ACT = {}; for (const a of ACTIONS) ACT[a.id] = a;
   const ACT_DESC = {
@@ -67,6 +68,7 @@
     freeze: 'Hold for freeze breath. Accessibility can make it a toggle.',
     hear: 'Tap to toggle super hearing, or hold to listen.', map: 'Open the city map. Click to set a waypoint.',
     fps: 'Show or hide the frame-rate meter.', metallo: 'Start, or retry, the Metallo finale.',
+    wave: 'Wave to the people below. Nearby citizens cheer back (+1 Hope, at most +3 a minute).',
     pow1: 'Every power at level 1: about Mach 1.', pow2: 'Every power at level 2: about Mach 3.', pow3: 'Every power at full strength: Mach 10+.'
   };
 
