@@ -1324,7 +1324,10 @@
     get clock() { return clock; },
     setSpawnTimer(s) { spawnT = s; },
     kids() { return kids.length; },
-    runners() { return runners.length; }
+    runners() { return runners.length; },
+    // js/citymood.js: a line from a given person, and an unforced request (no-op while one is open)
+    say(who, cat, opts) { return bark(who, cat, opts); },
+    spawnAmbient(type) { return spawn(type, false); }
   };
   window.SM_MISSIONS = API;
 
