@@ -497,7 +497,7 @@
           for (let i = 0; i < 2; i++) g.FX.fire(T3.x, T3.y + 0.5, T3.z, 0.8 * grow * pl.fire + 0.3);
           if (pl.age > 12) { hpWorld('wingRoot', T4); g.FX.fire(T4.x, T4.y + 0.4, T4.z, 0.6 * pl.fire); }
         }
-        if (pl.age >= C.wingFailT && pl.fire > 0) breakWing(g);
+        if (pl.age >= C.wingFailT * (window.SM_SETTINGS && SM_SETTINGS.get('qteAssist') ? 1.6 : 1) && pl.fire > 0) breakWing(g); // QTE assist (js/settings.js): 60% longer to put the fire out
       }
       pl.smokeT -= dt;
       if (pl.smokeT <= 0) { pl.smokeT = 0.04; hpWorld(pl.wing ? 'engine' : 'wingRoot', T3); g.FX.smoke(T3.x, T3.y, T3.z, pl.fire > 0 ? 1.4 : 0.8, pl.fire > 0 ? 0.04 : 0.12); }
@@ -637,7 +637,7 @@
     } else if (plane && inc && inc === plane.inc && !plane.ended) {
       UI.card.hidden = false; UI.meter.hidden = UI.scale.hidden = true;
       setText(UI.who, 'w', 'Falling airliner · ' + CFG.plane.pax + ' aboard');
-      setText(UI.p, 'p', plane.fire > 0 ? `Engine fire! Freeze it (Q) · wing fails in ${Math.max(0, CFG.plane.wingFailT - plane.age).toFixed(0)} s` :
+      setText(UI.p, 'p', plane.fire > 0 ? `Engine fire! Freeze it (Q) · wing fails in ${Math.max(0, CFG.plane.wingFailT * (window.SM_SETTINGS && SM_SETTINGS.get('qteAssist') ? 1.6 : 1) - plane.age).toFixed(0)} s` :
         plane.attached ? `Holding ${HP_NAME[plane.attached]}: nose up to bleed speed, level the wings, touch the water gently` : 'Grab a push point (E): nose, wingtips or tail');
       UI.t -= dt;
       if (UI.t <= 0) {

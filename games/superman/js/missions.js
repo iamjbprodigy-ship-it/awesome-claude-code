@@ -942,7 +942,7 @@
   };
   function near3(a, b, r) { return a.distanceToSquared(b) < r * r; }
   function ringAt(m) {
-    const per = m.type === 'crime' ? m.cfg.ring : m.cfg.ring;
+    const per = m.cfg.ring * (window.SM_SETTINGS && SM_SETTINGS.get('qteAssist') ? 1.6 : 1); // QTE assist (js/settings.js): a slower ring, so the window lasts 60% longer
     if (m.type === 'crime') return clamp(1 - m.ringT / per, 0, 1);
     return 1 - (m.ringT % per) / per;      // the ledge ring repeats
   }

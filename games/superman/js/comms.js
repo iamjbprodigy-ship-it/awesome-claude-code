@@ -575,12 +575,14 @@
 
   // ================================================================== radio audio (WebAudio on __game.AU)
   let bus = null, driveCurve = null, warned = false;
+  // master x radio volume from js/settings.js (1 without it)
+  const radioK = () => { const S = window.SM_SETTINGS; return S && S.vol ? S.vol('radio') : 1; };
   function audioReady() {
     const g = G(), AU = g && g.AU;
     if (!AU || !AU.ctx || !AU.noise) return null;
     if (!bus || bus.context !== AU.ctx) {
       const c = AU.ctx;
-      bus = c.createGain(); bus.gain.value = AU.muted ? 0 : CFG.vol;
+      bus = c.createGain(); bus.gain.value = AU.muted ? 0 : CFG.vol * radioK();
       // straight to the output: the radio is in his ear, so super hearing's city muffle doesn't touch it
       bus.connect(c.destination);
       if (!driveCurve) {
@@ -708,7 +710,7 @@
       const ss = window.speechSynthesis; if (!ss || typeof SpeechSynthesisUtterance === 'undefined') return;
       const u = new SpeechSynthesisUtterance(call.text);
       u.pitch = Math.max(0.1, Math.min(2, call.spk.pitch / 170)); u.rate = call.spk.rate / 6.8;
-      const g = G(); u.volume = g && g.AU && g.AU.muted ? 0 : 1;
+      const g = G(); u.volume = g && g.AU && g.AU.muted ? 0 : radioK();
       ss.cancel(); ss.speak(u);
     } catch (_) { /* optional accessibility path */ }
   }
@@ -1064,7 +1066,7 @@
       pump(g);
       updateCard(dt);
       // mute (K) and the radio bus
-      if (bus && g.AU) { const v = g.AU.muted ? 0 : CFG.vol; if (bus.gain.value !== v) bus.gain.value = v; }
+      if (bus && g.AU) { const v = g.AU.muted ? 0 : CFG.vol * radioK(); if (bus.gain.value !== v) bus.gain.value = v; }
     } catch (e) { if (!errOnce) { errOnce = true; console.warn('[comms]', e); } }
   }
 

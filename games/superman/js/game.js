@@ -278,7 +278,8 @@ const FX = {
   vapor(x, y, z, vx, vy, vz) { SMK.emit(x, y, z, vx, vy, vz, 0.25, 1.4, 2.8, 1.1, 1.1, 1.15, 0.5, 1, 1, 1, 0, 2); },
   plasma(x, y, z, vx, vy, vz) { ADD.emit(x, y, z, vx, vy, vz, R(0.15, 0.35), 1.8, 0.4, 6, 2.4, 0.8, 0.9, 4, 0.5, 0.1, 0, 1); },
   beam(x, y, z) { ADD.emit(x, y, z, R(-4, 4), R(1, 6), R(-4, 4), R(0.2, 0.5), 0.9, 0.2, 8, 2.5, 0.6, 1, 4, 0.6, 0.1, 0.3, 0.5); },
-  flash(x, y, z) { ADD.emit(x, y, z, 0, 0, 0, 0.12, 0.9, 0.5, 12, 12, 12, 1, 6, 6, 6, 0, 0); },
+  flashK: 1, // js/settings.js "reduced flashing" damps camera and muzzle flashes, hit flashes and flash lights
+  flash(x, y, z) { const k = FX.flashK; ADD.emit(x, y, z, 0, 0, 0, 0.12, 0.9, 0.5, 12 * k, 12 * k, 12 * k, 1, 6 * k, 6 * k, 6 * k, 0, 0); },
   sparkle(x, y, z) { ADD.emit(x, y, z, R(-1, 1), R(1, 3), R(-1, 1), R(0.6, 1.2), 0.4, 0.1, 4, 3.2, 1.2, 1, 2, 1.5, 0.4, -0.05, 0.5); },
   paper(x, y, z, vx, vy, vz) { SMK.emit(x, y, z, vx, vy, vz, R(2, 4), 0.32, 0.26, 0.95, 0.93, 0.86, 0.95, 0.9, 0.88, 0.8, 0.12, 1.1); },
   kryp(x, y, z) { ADD.emit(x + R(-2, 2), y + R(-2, 2), z + R(-2, 2), R(-2, 2), R(-2, 2), R(-2, 2), R(0.4, 0.9), 1.8, 0.4, 0.6, 5, 1, 0.9, 0.2, 2, 0.4, 0, 0.6); }
@@ -291,6 +292,7 @@ function initAudio() {
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
   const c = new AC(); AU.ctx = c;
   const comp = c.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 4;
+  AU.comp = comp; // js/settings.js inserts its master / sfx / music buses around it
   AU.master = c.createGain(); AU.master.gain.value = 0.75;
   // the world bus runs through a duck (low-pass + gain) so super hearing can muffle the city;
   // heard voices go to their own bus that bypasses it
@@ -1084,7 +1086,7 @@ const flashes = [];
 for (let i = 0; i < 3; i++) { const l = new THREE.PointLight(lin(0xffa050), 0, 120, 2); scene.add(l); flashes.push({ l, t: 0, p: 0 }); }
 function flashLight(pos, power, dist) {
   const f = flashes.reduce((a, b) => (a.l.intensity < b.l.intensity ? a : b));
-  f.l.position.copy(pos); f.p = power; f.l.distance = dist; f.l.intensity = power;
+  power *= 0.4 + 0.6 * FX.flashK; f.l.position.copy(pos); f.p = power; f.l.distance = dist; f.l.intensity = power;
 }
 
 // ============================================================ bodies
@@ -2633,7 +2635,8 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 addEventListener('mousemove', e => {
   if (!started || paused) return;
   if (document.pointerLockElement !== canvas && !(e.buttons & 1)) return;
-  yaw -= e.movementX * 0.0021; pitch = clamp(pitch - e.movementY * 0.0021, -1.45, 1.45);
+  const ms = 0.0021 * camState.sens; // js/settings.js: mouse sensitivity and invert Y
+  yaw -= e.movementX * ms; pitch = clamp(pitch - e.movementY * ms * (camState.invY ? -1 : 1), -1.45, 1.45);
 });
 document.addEventListener('pointerlockchange', () => { if (started && document.pointerLockElement !== canvas && !paused && !MAP.open && !document.getElementById('bench-results')) setPaused(true); });
 function onKey(code) {
@@ -2676,6 +2679,8 @@ function pollPad() {
   pad.lx = dz(gp.axes[0] || 0); pad.ly = dz(gp.axes[1] || 0); pad.rx = dz(gp.axes[2] || 0); pad.ry = dz(gp.axes[3] || 0);
   const b = i => gp.buttons[i] && gp.buttons[i].pressed;
   const edge = i => b(i) && !pad.prev[i];
+  // js/settings.js owns the pad while its menu is open (and on the title, where it drives the menu)
+  if (window.SM_SETTINGS && SM_SETTINGS.padOwned && SM_SETTINGS.padOwned()) { pad.lx = pad.ly = pad.rx = pad.ry = 0; pad.heat = pad.freeze = pad.up = pad.down = pad.boost = false; for (let i = 0; i < gp.buttons.length; i++) pad.prev[i] = b(i); return; }
   if (!started) { if ((edge(0) || edge(9)) && titleReady) begin(); }
   else {
     if (edge(9)) setPaused(!paused);
@@ -3007,7 +3012,9 @@ const FEEL = window.SM_FEEL;
 const camState = {
   off: new V3(0, 2, 8), fov: 70, roll: 0, init: false,
   rel: new V3(), relV: new V3(), lastVel: new V3(), dist: { x: 6.8, v: 0 }, up: { x: 1.5, v: 0 }, side: { x: 0.95, v: 0 },
-  la: new V3(), laV: new V3(), boostT: 0, fovKick: { x: 0, v: 0 }, heroFrac: 0, heroH: 1.95, maxDist: 0, minDist: 0, hold: false
+  la: new V3(), laV: new V3(), boostT: 0, fovKick: { x: 0, v: 0 }, heroFrac: 0, heroH: 1.95, maxDist: 0, minDist: 0, hold: false,
+  // player settings (js/settings.js): FOV offset (deg), distance scale, mouse sensitivity, invert Y, speed-effect strength
+  fovOff: 0, distK: 1, sens: 1, invY: false, speedFx: 1
 };
 // add screen-shake trauma (0..1); shakeAt falls off with distance from the camera
 function addShake(a) { FEEL.add(a); }
@@ -3019,7 +3026,7 @@ function fovKick(deg) { camState.fovKick.v += deg * 2 * Math.LN2 / 0.12 * Math.E
 // test-hook contract (dream-features §2): an append-only event log
 const events = [];
 function emit(type, data) { const e = Object.assign({ t: +simT.toFixed(3), type }, data); events.push(e); if (events.length > 4000) events.splice(0, 1000); return e; }
-function flashHit(a) { const el = $('fx-hit'); el.style.opacity = a; setTimeout(() => { el.style.opacity = 0; }, 120); }
+function flashHit(a) { const el = $('fx-hit'); el.style.opacity = a * FX.flashK; setTimeout(() => { el.style.opacity = 0; }, 120); }
 let smashedThisStep = false, lastSmashFx = 0;
 function playerCollide(prevSpeed) {
   const p = P.pos;
@@ -3226,7 +3233,7 @@ function updatePlayer(dt) {
   const my = (spaceDown ? 1 : 0) - (keys.has('KeyC') || pad.down ? 1 : 0);
   if (keys.has('ArrowLeft')) yaw += dt * 2; if (keys.has('ArrowRight')) yaw -= dt * 2;
   if (keys.has('ArrowUp')) pitch = clamp(pitch + dt * 1.5, -1.45, 1.45); if (keys.has('ArrowDown')) pitch = clamp(pitch - dt * 1.5, -1.45, 1.45);
-  if (pad.on) { yaw -= pad.rx * dt * 2.6; pitch = clamp(pitch - pad.ry * dt * 2, -1.45, 1.45); }
+  if (pad.on) { yaw -= pad.rx * dt * 2.6; pitch = clamp(pitch - pad.ry * dt * 2 * (camState.invY ? -1 : 1), -1.45, 1.45); }
   const boost = keys.has('ShiftLeft') || keys.has('ShiftRight') || pad.boost;
   const alt = P.pos.y, rho = airRho(alt);
   P.kryp = kryptoniteNear();
@@ -3639,7 +3646,7 @@ function updateCamera(dt) {
   const fstep = 40 * dt;
   C.fov += clamp((fovT - C.fov) * (1 - Math.exp(-4 * dt)), -fstep, fstep);
   FEEL.spring(C.fovKick, 0, 0.12, dt);
-  const fov = clamp(C.fov + C.fovKick.x, 30, 110), tanH = Math.tan(fov * Math.PI / 360);
+  const fov = clamp(C.fov + C.fovKick.x + C.fovOff, 30, 120), tanH = Math.tan(fov * Math.PI / 360);
   // ---- distance per mode, then springs so walk / run / fly / hover blend instead of snapping
   // flight keeps pulling back past Mach 1 (log scale) so Mach 3 and Mach 10 read differently
   let dist = combat ? 5.2 : walking ? 8.4 + Math.min(4, sp * 0.05) * (1 - run * 0.6) + run * 1.5 : 6.8 + Math.min(9, sp * 0.025) + Math.min(6, Math.log2(1 + sp / 400) * 2);
@@ -3647,7 +3654,7 @@ function updateCamera(dt) {
   // walking frames him low and off-centre, like a third-person street camera; flight keeps him central;
   // the sprint camera drops low behind him so the street rushes past
   const modeHalf = combat ? 0.2 : 0.18;
-  FEEL.spring(C.dist, dist, modeHalf, dt);
+  FEEL.spring(C.dist, dist * C.distK, modeHalf, dt);
   FEEL.spring(C.up, combat ? 1.1 : walking ? 2.4 - run * 1.3 : 1.5, modeHalf, dt);
   FEEL.spring(C.side, combat ? 1.2 : walking ? 0.85 : 0.95, modeHalf, dt);
   const want = CAM_WANT.copy(fwd).multiplyScalar(-C.dist.x).addScaledVector(UP, C.up.x).addScaledVector(right, C.side.x);
@@ -3655,7 +3662,7 @@ function updateCamera(dt) {
   // speed, so Mach 10 no longer shrinks him to a speck; the near limit only engages at speed
   // his on-screen height shrinks from 1.95 m standing to ~0.9 m seen from behind in a full flight stretch
   const heroH = lerp(HERO_H, HERO_H_FLY, P.flying ? clamp((sp - 12) / 25, 0, 1) : 0); C.heroH = heroH;
-  C.maxDist = heroH / (2 * tanH * FRAC_MIN); C.minDist = heroH / (2 * tanH * FRAC_MAX);
+  C.maxDist = heroH / (2 * tanH * FRAC_MIN) * C.distK; C.minDist = heroH / (2 * tanH * FRAC_MAX) * C.distK;
   if (P.flying && !P.hold) {
     const L = want.length(), lo = C.minDist * clamp((sp - 75) / 75, 0, 1);
     if (L > C.maxDist) want.multiplyScalar(C.maxDist / L); else if (L < lo) want.multiplyScalar(lo / L);
@@ -3702,7 +3709,7 @@ const splMat = new THREE.LineBasicMaterial({ color: new THREE.Color(1.6, 1.7, 1.
 const speedLines = new THREE.LineSegments(splGeo, splMat); speedLines.frustumCulled = false; speedLines.visible = false; scene.add(speedLines);
 function updateSpeedLines(dt, sp, mach, run) {
   const amt = Math.max(run * 0.8, clamp((mach - 0.8) / 2.5, 0, 1));
-  splMat.opacity = lerp(splMat.opacity, amt * 0.35, 1 - Math.exp(-5 * dt));
+  splMat.opacity = lerp(splMat.opacity, amt * 0.35 * camState.speedFx, 1 - Math.exp(-5 * dt));
   speedLines.visible = splMat.opacity > 0.01; if (!speedLines.visible || sp < 1) return;
   const vd = T1.copy(P.vel).divideScalar(sp), a1 = T2.set(0, 1, 0).cross(vd); if (a1.lengthSq() < 1e-3) a1.set(1, 0, 0); a1.normalize();
   const a2 = T3.copy(vd).cross(a1), c = camera.position, len = Math.min(26, 2 + sp * 0.012), flow = Math.min(sp, 900) * 0.25;
