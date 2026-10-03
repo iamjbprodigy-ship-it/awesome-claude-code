@@ -1720,10 +1720,10 @@ SCENARIOS.push({
     const frames = async (n) => { const f0 = await p.evaluate(() => window.__cmFrames); await p.waitForFunction(t => window.__cmFrames >= t, f0 + n, { timeout: 300000 }); };
     // 1. a low pass over a crowd on the sidewalk: bring ~22 people to one block face, then hover 9 m over the kerb
     const at = await p.evaluate(() => {
-      const g = __game, CM = g.citymood, x0 = -150 + 20, z0 = -90 - 0.6;   // the south sidewalk of a mid-town block, by the avenue
+      const g = __game, CM = g.citymood, x0 = -120, z0 = -77;   // the sidewalk along the south face of a mid-town block (lot -140..-100 x -80..-40)
       const ppl = g.people.filter(q => q.mode === 'free' && !q.thug && !q.msnRole && q.spd >= 0.5).slice(0, 22);
-      ppl.forEach((q, i) => { q.pos.set(x0 + (i % 11) * 1.6 - 8 + Math.random() * 0.6, 0.9, z0 - 1.2 - Math.floor(i / 11) * 1.4 - Math.random() * 0.5); q.fleeT = 0; q.cmCool = 0; });
-      g.P.flying = true; g.P.pos.set(x0 + 2, 9, z0 + 7); g.P.vel.set(0.5, 0, 0); g.setYawPitch(Math.PI, -0.62); g.step(70);
+      ppl.forEach((q, i) => { q.pos.set(x0 + (i % 11) * 1.6 - 8 + Math.random() * 0.6, 0.9, z0 - 0.6 - Math.floor(i / 11) * 1.3 - Math.random() * 0.4); q.fleeT = 0; q.cmCool = 0; });
+      g.P.flying = true; g.P.pos.set(x0 - 1, 9, z0 - 11); g.P.vel.set(0.5, 0, 0); g.setYawPitch(Math.PI, -0.38); g.step(70);
       return { reactors: CM.reactors(), kinds: CM.stats.react };
     });
     await frames(3);
@@ -1731,8 +1731,8 @@ SCENARIOS.push({
     // 2. Hope 92: banners out on the towers, a fuller street
     const ban = await p.evaluate(() => {
       const g = __game, CM = g.citymood, b = CM.banners().first;
-      g.P.flying = true; g.P.pos.set(b.x + b.nx * 38 - b.nz * 14, b.top - 6, b.z + b.nz * 38 + b.nx * 14); g.P.vel.set(0, 0, 0);
-      g.setYawPitch(Math.atan2(b.nx * 38 - b.nz * 14, b.nz * 38 + b.nx * 14), 0.12); g.step(30);
+      g.P.flying = true; g.P.pos.set(b.x + b.nx * 26 - b.nz * 9, b.top - 13, b.z + b.nz * 26 + b.nx * 9); g.P.vel.set(0, 0, 0);
+      g.setYawPitch(Math.atan2(b.nx * 26 - b.nz * 9, b.nz * 26 + b.nx * 9), 0.42); g.step(30);
       return CM.banners();
     });
     await frames(3);
