@@ -60,6 +60,14 @@
     get clock() { return clockNow(); }, get step() { return ST.step; }, get target() { return ST.target; },
     get pending() { return ST.pending; }, get flightK() { return +ST.flightK.toFixed(3); }, get tension() { return ST.tension; },
     get real() { return ST.real; }, get voices() { return voices(clockNow()); },
+    // output meter (real graph only): peak and RMS of the music bus after ducking and volume
+    meter() {
+      if (!A.ctx || !A.vol) return null;
+      if (!A.an) { A.an = A.ctx.createAnalyser(); A.an.fftSize = 2048; A.vol.connect(A.an); A.buf = new Float32Array(2048); }
+      A.an.getFloatTimeDomainData(A.buf); let pk = 0, ss = 0, nan = false;
+      for (let i = 0; i < A.buf.length; i++) { const v = A.buf[i]; if (v !== v) nan = true; const a = Math.abs(v); if (a > pk) pk = a; ss += v * v; }
+      return { peak: +pk.toFixed(4), rms: +Math.sqrt(ss / A.buf.length).toFixed(4), nan };
+    },
     reset() { this.log.length = 0; this.stingers.length = 0; this.transitions.length = 0; this.notes = 0; this.inst = {}; this.dropped = 0; this.minLead = Infinity; this.maxVoices = 0; }
   };
 
@@ -219,7 +227,7 @@
     const mel = (list, inst, v, tr) => { for (const n of list) if (n[0] === (pos & 63)) play(inst, t, n[1] + (tr || 0), n[2], v); };
     if (L === 'calm') {
       const ch = CH.calm[bar];
-      if (st === 0) { for (let i = 1; i < 4; i++) play('strings', t, ch[i], 16, 0.55); play('strings', t, ch[0] + 12, 16, 0.5); }
+      if (st === 0) { for (let i = 1; i < 4; i++) play('strings', t, ch[i], 16, 0.55); }
       if (st === 0 && (bar & 1) === 0) play('choir', t, ch[3] + 12, 30, 0.35);
       if (!quiet && !phraseB) mel(CALM_LINE, 'strings', 0.4);
     } else if (L === 'flight') {
@@ -320,6 +328,7 @@
         DBG.transitions.push({ from: ST.layer, to: ST.pending, step: s, t: G() ? +G().simT.toFixed(2) : 0 });
         if (DBG.transitions.length > 200) DBG.transitions.shift();
         ST.layer = ST.pending; ST.pending = null; ST.phrase0 = s;
+        if (urgent) ST.triumphUntil = -1; // a new threat cuts a victory swell short
         DBG.motif = ST.layer === 'metallo' ? 'metallo' : ST.layer === 'emergency' ? 'hero-minor' : 'hero';
         if (ST.layer === 'metallo' && G()) stinger('metallo');
       }
@@ -426,7 +435,7 @@
   }
 
   // the 25 ms timer keeps the music going between frames (and while paused)
-  setInterval(() => { if (ST.real) { try { pump(); } catch (e) { /* keep the timer alive */ } } }, TICK_MS);
+  setInterval(() => { if (ST.real || realOK()) { try { pump(); } catch (e) { /* keep the timer alive */ } } }, TICK_MS);
   // resume on any gesture (the game resumes on keydown; clicks and pads count too)
   const resume = () => { const AU = au(); if (AU && AU.ctx && AU.ctx.state === 'suspended') AU.ctx.resume().catch(() => {}); };
   window.addEventListener('pointerdown', resume, true);

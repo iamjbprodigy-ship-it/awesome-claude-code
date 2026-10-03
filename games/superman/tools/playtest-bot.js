@@ -1230,8 +1230,11 @@ SCENARIOS.push({
     });
     if (out.missing) return out;
     // the real graph: give a running context a second and a half of wall time
-    await p.waitForTimeout(1500);
-    out.real = await p.evaluate(() => { const A = SM_AUDIO, D = A.debug, g = __game; return { state: g.AU && g.AU.ctx ? g.AU.ctx.state : 'none', real: D.real, built: D.built, voices: A.voices, minLead: +D.minLead.toFixed(4), music: !!g.music }; });
+    await p.evaluate(() => { const g = __game; g.P.flying = true; g.P.pos.set(0, 600, -1500); g.setYawPitch(0, 0.05); g.keys.add('KeyW'); g.keys.add('ShiftLeft'); SM_AUDIO.debug.meter(); });
+    let peak = 0, rms = 0, nan = false;
+    for (let i = 0; i < 12; i++) { await p.waitForTimeout(250); const m = await p.evaluate(() => SM_AUDIO.debug.meter()); if (m) { peak = Math.max(peak, m.peak); rms = Math.max(rms, m.rms); nan = nan || m.nan; } }
+    out.meter = { peak, rms, nan };
+    out.real = await p.evaluate(() => { const A = SM_AUDIO, D = A.debug, g = __game; g.keys.clear(); return { dropped: D.dropped, layer: A.layer, state: g.AU && g.AU.ctx ? g.AU.ctx.state : 'none', real: D.real, built: D.built, voices: A.voices, minLead: +D.minLead.toFixed(4), music: !!g.music }; });
     return out;
   },
   check: r => {
@@ -1252,7 +1255,8 @@ SCENARIOS.push({
       ['far boom delayed by distance / 343', Math.abs(r.delay - r.dist / 343) < 0.02, `${r.delay}s for ${r.dist} m`],
       ['ambience beds: traffic low, thin air high', r.beds.lo.traffic > 0.05 && r.beds.lo.thin === 0 && r.beds.hi.thin > 0.02 && r.beds.hi.traffic === 0, JSON.stringify(r.beds)],
       ['no score/sfx exceptions', !r.err, r.err || ''],
-      ['real audio graph runs (SKIP without a running AudioContext)', realOn ? r.real.real && r.real.built && r.real.minLead >= 0 : true, realOn ? `real ${r.real.real}, built ${r.real.built}, ${r.real.voices} voices` : `SKIP: AudioContext ${r.real.state}`]
+      ['real audio graph runs (SKIP without a running AudioContext)', realOn ? r.real.real && r.real.built && r.real.minLead >= 0 : true, realOn ? `real ${r.real.real}, built ${r.real.built}, ${r.real.voices} voices, ${r.real.dropped} dropped` : `SKIP: AudioContext ${r.real.state}`],
+      ['real music is audible and does not clip (SKIP without audio)', realOn ? r.meter.peak > 0.005 && r.meter.peak < 1 && !r.meter.nan : true, realOn ? `${r.real.layer}: peak ${r.meter.peak}, rms ${r.meter.rms}` : 'SKIP']
     ];
   }
 });

@@ -72,6 +72,14 @@ Add `?ss=2` to force 2× supersampling, `?ao=0` to turn ambient occlusion off, o
 
 Medals depend on bystanders unhurt, property damage and time. If your solar charge runs out, the Kryptonite floors you, too many people get hurt or 180 s pass, he escapes, and F8 retries.
 
+**Music and sound (`js/score.js`, `js/sfx-plus.js`):** an original, live-synthesized score (brass, strings, timpani and choir, all WebAudio) follows what you are doing:
+- It plays calm strings in the city, gains an ostinato and the brass motif as you fly faster, turns to D minor with driving 16ths during an emergency, and swells in triumph on a rescue or a medal.
+- Metallo has his own dark motif: low brass on a tritone, with a dissonant Kryptonite pulse that grows as it weakens you.
+- Short stingers play on takeoff, the sonic boom, rescues, gold, silver and bronze medals, failures and each demo chapter title.
+- The music ducks under radio calls and super hearing.
+- Impacts have a transient, body and tail. Distant booms arrive late, at the speed of sound. Fast fly-bys Doppler past you, and the ambience shifts from street traffic to wind to thin high air as you climb.
+- K mutes everything. Scripts can call `SM_AUDIO.setMusic(v)` and `SM_AUDIO.setSfx(v)` (0–1).
+
 **Map:** the minimap (bottom right) turns with you and zooms out as you speed up. Alerts appear as pins, with arrows on the rim when they're off-screen, and a tall coloured light beam rises from each one in the city: gold for emergencies, green for Kryptonite, red for the injured, blue for your waypoint.
 
 **The catch (`js/catch.js`):** to save someone who is falling, match their speed. If the speed difference when you grab them is over 12 m/s, they are hurt; over about 15 m/s, they are badly hurt. Helicopter and car occupants can take up to 18 m/s. While you carry someone, more than 6 g for a quarter of a second also hurts them, and that counts boosts, hard turns and walls. If you let go of the controls while carrying someone, you brake gently at no more than 4 g. Get within 2 m of a faller at a matched speed and you catch them automatically and gently. You can also press E. A g-arc around the crosshair shows the g on the person you're carrying: green under 3 g, amber from 3 to 6 g, red above 6 g. Within 30 m of a faller, a "match speed" bar compares your speed difference with the safe limit. During an emergency, a line under the timer reads "Saved X / Y at risk". Saving everyone unhurt with a gold medal earns "Everyone home". Saves earn at most +10 Hope per emergency.
